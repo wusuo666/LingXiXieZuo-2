@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>灵犀协作侧边栏</title>
+</head>
+<body>
+    <div class="tab-container">
+        <div class="tab-header">
+            <button class="tab-button active" data-tab="workspace">Workspace</button>
+            <button class="tab-button" data-tab="history">History</button>
+            <button class="tab-button" data-tab="canvas">Canvas</button>
+        </div>
+        <div class="tab-content">
+            <div class="tab-pane active" id="workspace">
+                <div class="chat-pane live-share-style">
+                    <div class="chat-messages">
+                        <div class="chat-row left">
+                            <div class="chat-avatar-group">
+                                <div class="avatar">A</div>
+                                <div class="sender">协作助手</div>
+                            </div>
+                            <div class="chat-bubble-group">
+                                <div class="chat-bubble left">你好，这里是灵犀协作！<span class="chat-time">10:01</span></div>
+                            </div>
+                        </div>
+                        <div class="chat-row right">
+                            <div class="chat-avatar-group">
+                                <div class="avatar">我</div>
+                                <div class="sender">我</div>
+                            </div>
+                            <div class="chat-bubble-group">
+                                <div class="chat-bubble right">你好！请问有什么可以帮忙的吗？<span class="chat-time">10:02</span></div>
+                            </div>
+                        </div>
+                        <div class="chat-row left">
+                            <div class="chat-avatar-group">
+                                <div class="avatar">A</div>
+                                <div class="sender">协作助手</div>
+                            </div>
+                            <div class="chat-bubble-group">
+                                <div class="chat-bubble left">你可以试试剪贴板历史功能。<span class="chat-time">10:03</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-bar">
+                        <input type="text" id="chat-input" class="chat-input" placeholder="输入消息..." />
+                        <button id="chat-send" class="chat-send">发送</button>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane" id="history">
+                <div class="history-container">
+                    <h3 class="history-title">剪贴板历史</h3>
+                    <div id="clip-history-list" class="clip-history-list"></div>
+                    <div id="clip-preview" class="clip-preview">
+                        <div class="preview-placeholder">点击记录查看详细内容</div>
+                        <div class="preview-content"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="tab-pane" id="canvas">
+                <div class="canvas-pane live-share-style">
+                    <div class="canvas-container">
+                        <div class="canvas-info">
+                            <h3>协同画布</h3>
+                            <p>创建和管理可共享的流程图、架构图等</p>
+                        </div>
+                        <div class="canvas-tools">
+                            <button id="canvas-action-btn" class="canvas-button">
+                                <span class="button-icon">+</span>
+                                新建画布
+                            </button>
+                        </div>
+                        <div class="canvas-list-container">
+                            <h4 class="canvas-list-title">最近画布</h4>
+                            <div class="canvas-list">
+                                <div class="canvas-list-empty">暂无最近画布，点击"新建画布"创建</div>
+                                <!-- 画布项目将在这里动态添加 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <style>
+        .tab-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100%;
+            font-family: "Segoe UI", Arial, sans-serif;
+            background: #1e1e1e;
+        }
+        .tab-header {
+            display: flex;
+            border-bottom: 1px solid #333;
+            width: 100%;
+            background: #232323;
+        }
+        .tab-button {
+            flex: 1 1 0;
+            padding: 10px 0;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            outline: none;
+            font-size: 15px;
+            color: #bbb;
+            transition: background 0.2s, color 0.2s, border-bottom 0.2s;
+        }
+        .tab-button.active {
+            border-bottom: 2.5px solid #3794ff;
+            color: #fff;
+            background: #232323;
+            font-weight: bold;
+        }
+        .tab-button:not(.active):hover {
+            background: #252526;
+            color: #fff;
+        }
+        .tab-content {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .tab-pane {
+            flex: 1 1 auto;
+            display: none;
+            padding: 0;
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .tab-pane.active {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .clip-history-list {
+            margin-top: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .clip-history-item {
+            background: #232323;
+            border-radius: 4px;
+            padding: 8px 12px;
+            color: #bbb;
+            cursor: pointer;
+            font-size: 14px;
+            border: 1px solid transparent;
+            transition: background 0.15s, border 0.15s;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .clip-history-item .clip-type {
+            font-size: 16px;
+            width: 22px;
+            text-align: center;
+        }
+        .clip-history-item .clip-content {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .clip-history-item .clip-time {
+            font-size: 12px;
+            color: #888;
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+        .clip-history-item:hover, .clip-history-item.selected {
+            background: #2a2d2e;
+            border: 1px solid #3794ff;
+            color: #fff;
+        }
+        .clip-preview {
+            margin-top: 14px;
+            background: #232323;
+            border-radius: 4px;
+            padding: 12px;
+            color: #fff;
+            min-height: 40px;
+            font-size: 15px;
+            border: 1px solid #333;
+            word-break: break-all;
+            display: none;
+        }
+        .clip-preview.active {
+            display: block;
+        }
+        .chat-pane {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .chat-container {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding: 12px 0 0 0;
+            overflow-y: auto;
+        }
+        .chat-input-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 8px;
+            background: #1e1e1e;
+            border-top: 1px solid #333;
+            flex-shrink: 0;
+            position: sticky;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            width: calc(100% - 16px);
+        }
+        .chat-input {
+            flex: 1;
+            min-width: 0;
+            background: #232323;
+            color: #fff;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 15px;
+            outline: none;
+            transition: border 0.2s;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .chat-input:focus {
+            border: 1.5px solid #3794ff;
+        }
+        .chat-send {
+            background: linear-gradient(135deg, #3794ff 60%, #4ec9b0 100%);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 15px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .chat-send:hover {
+            background: #2176c7;
+        }
+        .live-share-style {
+            background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);
+            border-radius: 0;
+            box-shadow: none;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .chat-messages {
+            flex: 1 1 auto;
+            overflow-y: auto;
+            padding: 18px 8px 0 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            min-height: 0;
+        }
+        .chat-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+        }
+        .chat-row.left {
+            flex-direction: row;
+            justify-content: flex-start;
+        }
+        .chat-row.right {
+            flex-direction: row-reverse;
+            justify-content: flex-end;
+        }
+        .chat-avatar-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 48px;
+            margin-bottom: 2px;
+        }
+        .avatar {
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
+            min-height: 36px;
+            max-width: 36px;
+            max-height: 36px;
+            background: linear-gradient(135deg, #3794ff 60%, #4ec9b0 100%);
+            color: #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+            box-shadow: 0 1px 6px #0002;
+            margin-bottom: 2px;
+        }
+        .sender {
+            color: #bbb;
+            font-size: 13px;
+            font-weight: 500;
+            margin-top: 2px;
+            text-align: center;
+            letter-spacing: 0.5px;
+            max-width: 48px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .chat-bubble-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-start;
+        }
+        .chat-row.right .chat-bubble-group {
+            align-items: flex-end;
+        }
+        .chat-bubble {
+            position: relative;
+            max-width: 70vw;
+            background: #232323;
+            color: #fff;
+            padding: 12px 18px 10px 18px;
+            border-radius: 18px 18px 18px 6px;
+            font-size: 15px;
+            line-height: 1.7;
+            box-shadow: 0 2px 8px #0002;
+            word-break: break-word;
+            margin-bottom: 2px;
+        }
+        .chat-bubble.left {
+            border-bottom-left-radius: 6px;
+            background: #232323;
+        }
+        .chat-bubble.right {
+            border-bottom-right-radius: 6px;
+            background: linear-gradient(135deg, #3794ff 60%, #4ec9b0 100%);
+            color: #fff;
+        }
+        .chat-time {
+            position: absolute;
+            right: 12px;
+            bottom: 4px;
+            font-size: 12px;
+            color: #aaa;
+            opacity: 0.8;
+        }
+        /* 画布标签页样式 */
+        .canvas-pane {
+            background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);
+            border-radius: 0;
+            box-shadow: none;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .canvas-container {
+            flex: 1 1 auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            min-height: 0;
+        }
+        .canvas-info {
+            margin-bottom: 20px;
+        }
+        .canvas-info h3 {
+            color: #fff;
+            font-size: 18px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        .canvas-info p {
+            color: #bbb;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .canvas-tools {
+            margin: 10px 0 25px 0;
+            display: flex;
+            justify-content: flex-start;
+        }
+        .canvas-button {
+            background: linear-gradient(135deg, #3794ff 60%, #4ec9b0 100%);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-size: 15px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s, transform 0.1s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .button-icon {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .canvas-button:hover {
+            background: #2176c7;
+            transform: translateY(-1px);
+        }
+        .canvas-button:active {
+            transform: scale(0.98) translateY(0);
+        }
+        .canvas-list-container {
+            margin-top: 20px;
+        }
+        .canvas-list-title {
+            color: #ddd;
+            font-size: 16px;
+            margin-bottom: 12px;
+            font-weight: 500;
+            border-bottom: 1px solid #333;
+            padding-bottom: 8px;
+        }
+        .canvas-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .canvas-list-empty {
+            color: #888;
+            font-style: italic;
+            padding: 20px 0;
+            text-align: center;
+        }
+        .canvas-item {
+            background: #232323;
+            border-radius: 8px;
+            padding: 12px 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .canvas-item:hover {
+            background: #2a2d2e;
+            border-color: #3794ff;
+        }
+        .canvas-item-icon {
+            font-size: 22px;
+            color: #4ec9b0;
+        }
+        .canvas-item-content {
+            flex: 1;
+            min-width: 0;
+        }
+        .canvas-item-title {
+            color: #fff;
+            font-size: 14.5px;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .canvas-item-path {
+            color: #888;
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* History 标签页样式 */
+        .history-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 12px;
+            background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);
+        }
+        
+        .history-title {
+            color: #fff;
+            font-size: 18px;
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+        
+        .clip-history-list {
+            flex: 0 0 auto;
+            margin: 0 0 12px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 50%;
+            min-height: 150px;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        
+        .clip-history-item {
+            background: #232323;
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: #ddd;
+            cursor: pointer;
+            font-size: 14px;
+            border: 1px solid transparent;
+            transition: background 0.15s, border 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .clip-history-item:hover, .clip-history-item.selected {
+            background: #2a2d2e;
+            border: 1px solid #3794ff;
+            color: #fff;
+        }
+        
+        .clip-type {
+            font-size: 16px;
+            width: 22px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        
+        .clip-content {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            line-height: 1.4;
+        }
+        
+        .clip-time {
+            font-size: 12px;
+            color: #888;
+            margin-left: 8px;
+            flex-shrink: 0;
+        }
+        
+        .clip-preview {
+            margin-top: 12px;
+            flex: 1;
+            background: #232323;
+            border-radius: 8px;
+            padding: 12px;
+            color: #fff;
+            font-size: 14px;
+            border: 1px solid #333;
+            word-break: break-all;
+            overflow-y: auto;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .preview-placeholder {
+            color: #888;
+            font-style: italic;
+            padding: 20px 0;
+            text-align: center;
+            align-self: center;
+        }
+        
+        .preview-content {
+            display: none;
+            white-space: pre-wrap;
+            line-height: 1.5;
+        }
+        
+        .preview-content.active {
+            display: block;
+        }
+    </style>
+    
+    <script>
+        // 标签切换逻辑
+        document.querySelectorAll('.tab-button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const tabId = this.dataset.tab;
+                
+                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+                document.getElementById(tabId).classList.add('active');
+                
+                // 通知主进程标签切换
+                if (vscode) {
+                    vscode.postMessage({
+                        command: 'switchTab',
+                        tabId: tabId
+                    });
+                }
+                
+                // 如果切换到 history 标签，主动请求最新历史记录
+                if (tabId === 'history' && vscode) {
+                    vscode.postMessage({ type: 'getClipboardHistory' });
+                }
+            });
+        });
+
+        // 与VS Code主进程通信API
+        const vscode = window.acquireVsCodeApi ? window.acquireVsCodeApi() : null;
+
+        // 新建画布按钮点击处理
+        document.getElementById('canvas-action-btn').addEventListener('click', function() {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'createCanvas'
+                });
+            }
+        });
+
+        // 剪贴板历史记录模拟数据（回退用）
+        let historyData = [
+            { id: 1, content: 'function foo() { return 42; }', type: 'code', time: '2024-05-01 10:00' },
+            { id: 2, content: 'Hello, world!', type: 'text', time: '2024-05-01 09:58' },
+            { id: 3, content: 'let x = 123;', type: 'code', time: '2024-05-01 09:55' },
+            { id: 4, content: '一段中文内容', type: 'text', time: '2024-05-01 09:50' }
+        ];
+
+        // 监听主进程消息，接收clipboardHistory
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.type === 'clipboardHistory') {
+                console.log('收到剪贴板历史数据:', message.data);
+                historyData = message.data || [];
+                renderHistoryList(historyData);
+            }
+        });
+
+        const listEl = document.getElementById('clip-history-list');
+        const previewEl = document.getElementById('clip-preview');
+        const previewContentEl = previewEl.querySelector('.preview-content');
+        const previewPlaceholderEl = previewEl.querySelector('.preview-placeholder');
+
+        function getTypeIcon(type) {
+            switch(type) {
+                case 'code': return '📝';
+                case 'text': return '📄';
+                case 'image': return '🖼️';
+                default: return '❓';
+            }
+        }
+
+        function renderHistoryList(history) {
+            listEl.innerHTML = '';
+            
+            if (!history || history.length === 0) {
+                listEl.innerHTML = '<div class="empty-history">暂无历史记录</div>';
+                previewContentEl.textContent = '';
+                previewContentEl.classList.remove('active');
+                previewPlaceholderEl.style.display = 'block';
+                return;
+            }
+            
+            history.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'clip-history-item';
+                div.title = item.content;
+                div.innerHTML = `
+                    <span class="clip-type">${getTypeIcon(item.type)}</span>
+                    <span class="clip-content">${item.content.length > 30 ? item.content.slice(0, 30) + '...' : item.content}</span>
+                    <span class="clip-time">${item.time || ''}</span>
+                `;
+                div.onclick = function() {
+                    document.querySelectorAll('.clip-history-item').forEach(i => i.classList.remove('selected'));
+                    div.classList.add('selected');
+                    
+                    previewContentEl.textContent = item.content;
+                    previewContentEl.classList.add('active');
+                    previewPlaceholderEl.style.display = 'none';
+                };
+                listEl.appendChild(div);
+            });
+        }
+
+        renderHistoryList(historyData);
+
+        // 页面加载后请求主进程发送clipboardHistory
+        if (vscode) {
+            vscode.postMessage({ type: 'getClipboardHistory' });
+        }
+        
+        // Canvas标签页功能
+        let canvasListData = [];
+        
+        // 监听主进程消息，处理画布列表
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.type === 'canvasList') {
+                console.log('收到画布列表数据:', message.data);
+                canvasListData = message.data || [];
+                renderCanvasList(canvasListData);
+            }
+        });
+        
+        const canvasListEl = document.querySelector('.canvas-list');
+        
+        function renderCanvasList(canvasList) {
+            canvasListEl.innerHTML = '';
+            
+            if (!canvasList || canvasList.length === 0) {
+                canvasListEl.innerHTML = '<div class="canvas-list-empty">暂无画布文件，点击"新建画布"创建</div>';
+                return;
+            }
+            
+            canvasList.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'canvas-item';
+                div.title = item.fullPath || item.path;
+                div.innerHTML = `
+                    <div class="canvas-item-icon">📊</div>
+                    <div class="canvas-item-content">
+                        <div class="canvas-item-title">${item.name}</div>
+                        <div class="canvas-item-path">${item.path}</div>
+                    </div>
+                `;
+                div.onclick = function() {
+                    if (vscode) {
+                        vscode.postMessage({
+                            command: 'openCanvas',
+                            path: item.fullPath
+                        });
+                    }
+                };
+                canvasListEl.appendChild(div);
+            });
+        }
+        
+        // 打开"Canvas"标签时，请求画布列表数据
+        document.querySelector('.tab-button[data-tab="canvas"]').addEventListener('click', function() {
+            if (vscode) {
+                vscode.postMessage({ type: 'getCanvasList' });
+            }
+        });
+    </script>
+</body>
+</html>

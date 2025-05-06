@@ -14,7 +14,10 @@
     "onCommand:lingxixiezuo.testCopyText",
     "onCommand:lingxixiezuo.testCopyCode",
     "onCommand:lingxixiezuo.testRead",
-    "onCommand:lingxixiezuo.showHistory"
+    "onCommand:lingxixiezuo.showHistory",
+    "onCommand:lingxixiezuo.pasteSmart",
+    "onCommand:lingxixiezuo.createDrawio",
+    "onView:lingxixiezuoView"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -37,6 +40,16 @@
       {
         "command": "lingxixiezuo.showHistory",
         "title": "灵犀协作: 查看剪贴板历史",
+        "category": "灵犀协作"
+      },
+      {
+        "command": "lingxixiezuo.pasteSmart",
+        "title": "灵犀协作: 智能粘贴",
+        "category": "灵犀协作"
+      },
+      {
+        "command": "lingxixiezuo.createDrawio",
+        "title": "灵犀协作: 创建Draw.io文件",
         "category": "灵犀协作"
       }
     ],
@@ -62,6 +75,11 @@
         "command": "lingxixiezuo.showHistory",
         "key": "ctrl+shift+h",
         "mac": "cmd+shift+h"
+      },
+      {
+        "command": "lingxixiezuo.pasteSmart",
+        "key": "ctrl+alt+v",
+        "mac": "cmd+alt+v"
       }
     ],
     "menus": {
@@ -79,6 +97,29 @@
         {
           "command": "lingxixiezuo.showHistory",
           "group": "clipboard"
+        },
+        {
+          "command": "lingxixiezuo.pasteSmart",
+          "when": "editorTextFocus",
+          "group": "clipboard@2" 
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "lingxixiezuo-sidebar",
+          "title": "灵犀协作",
+          "icon": "$(organization)"
+        }
+      ]
+    },
+    "views": {
+      "lingxixiezuo-sidebar": [
+        {
+          "type": "webview",
+          "id": "lingxixiezuoView",
+          "name": "灵犀协作面板"
         }
       ]
     }

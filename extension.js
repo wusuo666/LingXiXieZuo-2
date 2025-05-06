@@ -1,30 +1,24 @@
 const vscode = require('vscode');
-const { v4: uuidv4 } = require('uuid');
-
-// 剪贴板历史记录
-let clipboardHistory = [];
-
-// 最大历史记录数量
-const MAX_HISTORY_SIZE = 50;
+const { copyToClipboard, getClipboardHistory, readFromClipboard, filterClipboardHistoryByContext } = require('./clipboard');
+const LingxiSidebarProvider = require('./sidebar/sidebarViewProvider');
+const fs = require('fs');
+const { exec } = require('child_process');
+const path = require('path');
+const { createAndOpenDrawio } = require('./createDrawio');
 
 /**
- * 添加内容到剪贴板历史
- * @param {string} content 内容
- * @param {string} type 类型 ('text' | 'code')
+ * 创建并打开Draw.io文件
+ * 创建一个新的.drawio文件并使用关联程序打开
+ * @param {string} [filePath] 可选的文件路径，如果不提供则在临时目录创建
+ * @returns {Promise<void>}
  */
-function addToHistory(content, type) {
-    const entry = {
-        id: uuidv4(),
-        content,
-        type,
-        timestamp: new Date().toISOString()
-    };
-    
-    clipboardHistory.unshift(entry);
-    
-    // 保持历史记录在最大数量以内
-    if (clipboardHistory.length > MAX_HISTORY_SIZE) {
-        clipboardHistory = clipboardHistory.slice(0, MAX_HISTORY_SIZE);
+async function createAndOpenDrawioCommand(filePath) {
+    try {
+        const createdFilePath = await createAndOpenDrawio(filePath);
+        vscode.window.showInformationMessage(`成功创建并打开Draw.io文件: ${createdFilePath}`);
+    } catch (error) {
+        console.error('创建或打开Draw.io文件失败:', error);
+        vscode.window.showErrorMessage(`创建或打开Draw.io文件失败: ${error.message}`);
     }
 }
 
@@ -48,9 +42,10 @@ function activate(context) {
             const text = editor.document.getText(selection);
             
             if (text) {
-                await vscode.env.clipboard.writeText(text);
-                addToHistory(text, 'text');
+                await copyToClipboard(text, 'text');
                 vscode.window.showInformationMessage('文本已复制到剪贴板');
+                // 通知侧边栏更新剪贴板历史
+                sidebarProvider.sendClipboardHistory();
             }
         }
     });
@@ -64,9 +59,10 @@ function activate(context) {
             const code = editor.document.getText(selection);
             
             if (code) {
-                await vscode.env.clipboard.writeText(code);
-                addToHistory(code, 'code');
+                await copyToClipboard(code, 'code');
                 vscode.window.showInformationMessage('代码已复制到剪贴板');
+                // 通知侧边栏更新剪贴板历史
+                sidebarProvider.sendClipboardHistory();
             }
         }
     });
@@ -74,40 +70,125 @@ function activate(context) {
     // 注册读取剪贴板命令
     console.log('注册命令: lingxixiezuo.testRead');
     let readClipboardDisposable = vscode.commands.registerCommand('lingxixiezuo.testRead', async () => {
-        const text = await vscode.env.clipboard.readText();
-        vscode.window.showInformationMessage(`剪贴板内容: ${text}`);
+        try {
+            const text = await readFromClipboard('text'); // 使用 'text' 或 'freeText' 上下文
+            vscode.window.showInformationMessage(`剪贴板内容: ${text}`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`读取剪贴板失败: ${error.message}`);
+        }
     });
 
     // 注册显示历史记录命令
     console.log('注册命令: lingxixiezuo.showHistory');
     let showHistoryDisposable = vscode.commands.registerCommand('lingxixiezuo.showHistory', async () => {
-        if (clipboardHistory.length === 0) {
+        const fullHistory = getClipboardHistory();
+        if (fullHistory.length === 0) {
             vscode.window.showInformationMessage('剪贴板历史记录为空');
             return;
         }
 
-        const items = clipboardHistory.map(entry => ({
-            label: `${entry.type === 'code' ? '📝 代码' : '📄 文本'} - ${new Date(entry.timestamp).toLocaleString()}`,
-            description: entry.content.length > 50 ? entry.content.substring(0, 50) + '...' : entry.content,
+        // 获取当前编辑器上下文
+        let currentContext = 'freeText'; // 默认上下文
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+            // 简单判断：如果是常见代码文件类型，则认为是代码上下文
+            const languageId = editor.document.languageId;
+            // 可以根据需要扩展更多语言 ID
+            const codeLanguages = ['javascript', 'typescript', 'python', 'java', 'csharp', 'cpp', 'html', 'css', 'json', 'markdown']; 
+            if (codeLanguages.includes(languageId)) {
+                currentContext = 'code';
+            } else {
+                currentContext = 'text';
+            }
+        }
+
+        // 根据上下文过滤历史记录
+        const filteredHistory = filterClipboardHistoryByContext(currentContext, fullHistory);
+
+        if (filteredHistory.length === 0) {
+            vscode.window.showInformationMessage(`在当前 '${currentContext}' 上下文中无适用的历史记录`);
+            return;
+        }
+
+        // 格式化过滤后的历史记录用于 QuickPick
+        const items = filteredHistory.map(entry => ({
+            label: `${entry.type === 'code' ? '📝 代码' : (entry.type === 'text' ? '📄 文本' : '❓ 其他')} - ${new Date(entry.timestamp).toLocaleString()}`,
+            description: typeof entry.content === 'string' && entry.content.length > 50 ? entry.content.substring(0, 50) + '...' : (typeof entry.content === 'string' ? entry.content : '[非文本内容]'),
             entry
         }));
 
         const selected = await vscode.window.showQuickPick(items, {
-            placeHolder: '选择要复制的历史记录'
+            placeHolder: `选择要复制的历史记录 (当前上下文: ${currentContext})`
         });
 
         if (selected) {
-            await vscode.env.clipboard.writeText(selected.entry.content);
+            // 将选中条目的原始文本内容写入系统剪贴板
+            const contentToPaste = typeof selected.entry.content === 'string' ? selected.entry.content : JSON.stringify(selected.entry.content);
+            await vscode.env.clipboard.writeText(contentToPaste);
             vscode.window.showInformationMessage('已复制到剪贴板');
         }
     });
 
-    // 将所有命令添加到订阅列表
+    // 注册智能粘贴命令
+    console.log('注册命令: lingxixiezuo.pasteSmart');
+    let pasteSmartDisposable = vscode.commands.registerCommand('lingxixiezuo.pasteSmart', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showInformationMessage('没有活动的编辑器');
+            return;
+        }
+
+        // 获取当前编辑器上下文
+        let currentContext = 'freeText'; // 默认上下文
+        const languageId = editor.document.languageId;
+        const codeLanguages = ['javascript', 'typescript', 'python', 'java', 'csharp', 'cpp', 'html', 'css', 'json', 'markdown'];
+        if (codeLanguages.includes(languageId)) {
+            currentContext = 'code';
+        } else {
+            currentContext = 'text';
+        }
+
+        try {
+            // 从剪贴板读取内容，根据上下文
+            const contentToPaste = await readFromClipboard(currentContext);
+
+            // 插入内容到编辑器
+            editor.edit(editBuilder => {
+                // 如果有选区，则替换选区内容
+                if (!editor.selection.isEmpty) {
+                    editBuilder.replace(editor.selection, String(contentToPaste));
+                } else {
+                    // 否则在光标位置插入
+                    editBuilder.insert(editor.selection.active, String(contentToPaste));
+                }
+            });
+            vscode.window.showInformationMessage(`已从剪贴板粘贴 (${currentContext} 上下文)`);
+        } catch (error) {
+            // 从插件剪贴板读取失败，显示错误信息
+            console.error('从插件剪贴板读取失败:', error);
+            // 修改错误提示，告知用户剪贴板记录为空或无适用内容，并以模态弹窗显示
+            vscode.window.showErrorMessage('当前剪贴板记录为空或无适用内容', { modal: true });
+        }
+    });
+
+    // 注册灵犀协作侧边栏视图
+    const sidebarProvider = new LingxiSidebarProvider(context);
+    
+    // 确保使用正确的视图ID注册WebviewViewProvider
+    const viewProvider = vscode.window.registerWebviewViewProvider('lingxixiezuoView', sidebarProvider);
+    
+    // 注册创建并打开Drawio命令
+    console.log('注册命令: lingxixiezuo.createDrawio');
+    let createDrawioDisposable = vscode.commands.registerCommand('lingxixiezuo.createDrawio', createAndOpenDrawioCommand);
+
     context.subscriptions.push(
         copyTextDisposable,
         copyCodeDisposable,
         readClipboardDisposable,
-        showHistoryDisposable
+        showHistoryDisposable,
+        pasteSmartDisposable,
+        viewProvider,
+        createDrawioDisposable
     );
     
     console.log('所有命令注册完成');

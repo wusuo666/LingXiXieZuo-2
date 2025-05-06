@@ -76,48 +76,30 @@ async function copyToClipboard(content, type, metadata = {}) {
  * @param {'node'|'text'|'line'|'code'|'image'|'freeText'} context - 操作上下文
  * @returns {Promise<any>} 剪贴板内容
  */
+/**
+ * 从插件的剪贴板历史记录中读取内容
+ * @param {'node'|'text'|'line'|'code'|'image'|'freeText'} context - 操作上下文
+ * @returns {Promise<any>} 剪贴板内容
+ * @throws {Error} 如果历史记录中没有找到匹配的内容
+ */
 async function readFromClipboard(context) {
     try {
-        // 获取剪贴板文本内容
-        const clipboardText = await vscode.env.clipboard.readText();
+        // 查找历史记录中与上下文类型匹配的最新条目
+        const latestItem = clipboardHistory.find(item => item.type === context);
 
-        // 尝试解析最近的历史记录
-        const latestItem = clipboardHistory[0];
-
-        if (latestItem && latestItem.type === context) {
-            // 如果最近的历史记录类型匹配，直接返回对应内容
+        if (latestItem) {
+            // 如果找到匹配的历史记录，返回其内容
             return latestItem.content;
-        }
-
-        // 根据上下文处理内容
-        switch (context) {
-            case 'text':
-            case 'freeText':
-                return clipboardText;
-            case 'code':
-                // 对于代码，保留格式返回
-                return clipboardText;
-            case 'node':
-            case 'line':
-                // 尝试解析JSON数据
-                try {
-                    return JSON.parse(clipboardText);
-                } catch {
-                    throw new Error('剪贴板内容不是有效的结构化数据');
-                }
-            case 'image':
-                // 验证是否为Base64图片数据
-                if (clipboardText.startsWith('data:image')) {
-                    return clipboardText;
-                }
-                throw new Error('剪贴板内容不是有效的图片数据');
-            default:
-                throw new Error(`不支持的上下文类型: ${context}`);
+        } else {
+            // 如果历史记录中没有找到匹配的内容，抛出错误
+            throw new Error(`剪贴板历史记录中没有找到类型为 '${context}' 的内容`);
         }
     } catch (error) {
-        console.error('从剪贴板读取失败:', error);
-        vscode.window.showErrorMessage(`读取失败: ${error.message}`);
-        throw error;
+        // 记录错误并向用户显示更友好的消息
+        console.error('从剪贴板历史记录读取失败:', error);
+        // 不再显示通用错误，让调用者处理特定错误
+        // vscode.window.showErrorMessage(`读取失败: ${error.message}`); 
+        throw error; // 重新抛出错误，以便调用者可以捕获它
     }
 }
 
@@ -144,11 +126,88 @@ function updateConfig(newConfig) {
     Object.assign(defaultConfig, newConfig);
 }
 
+/**
+ * 根据上下文过滤剪贴板历史记录
+ * @param {'node'|'text'|'line'|'code'|'image'|'freeText'|undefined} context - 当前操作上下文，undefined 表示无特定上下文
+ * @param {Array} history - 剪贴板历史记录列表
+ * @returns {Array} 过滤后的 ClipboardItem 数组
+ */
+function filterClipboardHistoryByContext(context, history) {
+    try {
+        if (!Array.isArray(history)) {
+            throw new Error('历史记录必须是一个数组');
+        }
+
+        // 如果没有提供上下文，或者上下文是 'freeText' 或 'text'，则返回所有文本类内容
+        if (!context || context === 'freeText' || context === 'text') {
+            return history.filter(item => ['text', 'code', 'freeText'].includes(item.type));
+        }
+
+        // 如果上下文是 'code'，允许粘贴 'code' 和 'text' 类型
+        if (context === 'code') {
+            return history.filter(item => ['code', 'text', 'freeText'].includes(item.type));
+        }
+
+        // 对于 'node', 'line', 'image' 等特定类型，只返回完全匹配的类型
+        return history.filter(item => item.type === context);
+
+    } catch (error) {
+        console.error('过滤剪贴板历史记录失败:', error);
+        // 在实际应用中，可能不需要向用户显示错误消息，只需记录日志
+        // vscode.window.showErrorMessage(`过滤历史记录失败: ${error.message}`);
+        return []; // 返回空数组表示过滤失败或无匹配项
+    }
+}
+
 // 导出模块
 module.exports = {
     copyToClipboard,
     readFromClipboard,
     getClipboardHistory,
     clearClipboardHistory,
-    updateConfig
+    updateConfig,
+    filterClipboardHistoryByContext
 }; 
+
+// --- 示例调用 ---
+/*
+async function exampleUsage() {
+    // 示例：复制文本
+    await handleCopyShortcut('这是一段示例文本', 'text');
+    console.log('文本已复制');
+
+    // 示例：复制节点数据
+    const nodeData = { id: 'node1', label: '示例节点' };
+    await handleCopyShortcut(nodeData, 'node', { source: 'myApp' });
+    console.log('节点数据已复制');
+
+    // 示例：获取历史记录并过滤
+    const fullHistory = getClipboardHistory();
+    console.log('完整历史记录:', fullHistory);
+    const textHistory = filterClipboardHistoryByContext('text', fullHistory);
+    console.log('文本历史记录:', textHistory);
+    const nodeHistory = filterClipboardHistoryByContext('node', fullHistory);
+    console.log('节点历史记录:', nodeHistory);
+
+    // 示例：粘贴文本
+    console.log('尝试粘贴文本...');
+    const pastedText = await handlePasteShortcut('text');
+    if (pastedText !== undefined) {
+        console.log('粘贴的文本:', pastedText);
+    }
+
+    // 示例：粘贴节点数据
+    console.log('尝试粘贴节点数据...');
+    const pastedNode = await handlePasteShortcut('node');
+    if (pastedNode !== undefined) {
+        console.log('粘贴的节点数据:', pastedNode);
+    }
+
+    // 示例：清空历史记录
+    // clearClipboardHistory();
+    // console.log('历史记录已清空');
+}
+
+// 调用示例函数 (仅用于演示，实际扩展中不需要)
+// exampleUsage();
+*/

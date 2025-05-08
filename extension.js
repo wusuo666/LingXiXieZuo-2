@@ -4,6 +4,7 @@ const LingxiSidebarProvider = require('./sidebar/sidebarViewProvider');
 const fs = require('fs');
 const { exec } = require('child_process');
 const path = require('path');
+<<<<<<< HEAD
 const { createAndOpenDrawio } = require('./createDrawio');
 const agentApi = require('./agent/agentApi');
 const { startChatServer, stopChatServer, setSidebarProvider } = require('./chatroom/startServer');
@@ -23,6 +24,10 @@ async function createAndOpenDrawioCommand(filePath) {
         vscode.window.showErrorMessage(`创建或打开Draw.io文件失败: ${error.message}`);
     }
 }
+=======
+const agentApi = require('./agent/agentApi');
+const { startChatServer, stopChatServer, setSidebarProvider } = require('./chatroom/startServer');
+>>>>>>> 136f446 (完善了画布的功能)
 
 /**
  * 激活插件时的回调函数
@@ -195,10 +200,77 @@ async function activate(context) {
     
     // 确保使用正确的视图ID注册WebviewViewProvider
     const viewProvider = vscode.window.registerWebviewViewProvider('lingxixiezuoView', sidebarProvider);
+
+    // 注册启动聊天室服务器命令
+    console.log('注册命令: lingxixiezuo.startChatServer');
+    let startChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.startChatServer', startChatServer);
     
-    // 注册创建并打开Drawio命令
-    console.log('注册命令: lingxixiezuo.createDrawio');
-    let createDrawioDisposable = vscode.commands.registerCommand('lingxixiezuo.createDrawio', createAndOpenDrawioCommand);
+    // 注册停止聊天室服务器命令
+    console.log('注册命令: lingxixiezuo.stopChatServer');
+    let stopChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.stopChatServer', stopChatServer);
+
+    // 注册创建Excalidraw画布的命令
+    context.subscriptions.push(
+        vscode.commands.registerCommand('lingxixiezuo.createExcalidraw', async () => {
+            try {
+                // 获取当前工作区路径
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                if (!workspaceFolders) {
+                    throw new Error('请先打开一个工作区');
+                }
+                const workspacePath = workspaceFolders[0].uri.fsPath;
+
+                // 创建新的Excalidraw文件
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const fileName = `画布_${timestamp}.excalidraw`;
+                const filePath = path.join(workspacePath, fileName);
+
+                // 创建基本的Excalidraw文件内容
+                const initialContent = {
+                    type: "excalidraw",
+                    version: 2,
+                    source: "vscode-lingxi",
+                    elements: [],
+                    appState: {
+                        viewBackgroundColor: "#ffffff",
+                        currentItemStrokeWidth: 1,
+                        currentItemFontFamily: 1
+                    },
+                    settings: {
+                        theme: "light",
+                        gridSize: 20
+                    }
+                };
+
+                // 写入文件
+                await vscode.workspace.fs.writeFile(
+                    vscode.Uri.file(filePath),
+                    Buffer.from(JSON.stringify(initialContent, null, 2), 'utf8')
+                );
+
+                // 显示成功消息
+                vscode.window.showInformationMessage('Excalidraw画布创建成功');
+
+                // 询问用户是否要打开画布
+                const openOptions = [
+                    { label: '是', description: '打开Excalidraw画布' },
+                    { label: '否', description: '稍后手动打开' }
+                ];
+
+                const selected = await vscode.window.showQuickPick(openOptions, {
+                    placeHolder: '是否立即打开画布？'
+                });
+
+                if (selected && selected.label === '是') {
+                    // 使用vscode.open命令打开文件
+                    const uri = vscode.Uri.file(filePath);
+                    await vscode.commands.executeCommand('vscode.open', uri);
+                }
+            } catch (error) {
+                vscode.window.showErrorMessage(`创建Excalidraw画布失败: ${error.message}`);
+            }
+        })
+    );
 
     // 注册启动聊天室服务器命令
     console.log('注册命令: lingxixiezuo.startChatServer');
@@ -215,7 +287,10 @@ async function activate(context) {
         showHistoryDisposable,
         pasteSmartDisposable,
         viewProvider,
+<<<<<<< HEAD
         createDrawioDisposable,
+=======
+>>>>>>> 136f446 (完善了画布的功能)
         startChatServerDisposable,
         stopChatServerDisposable
     );

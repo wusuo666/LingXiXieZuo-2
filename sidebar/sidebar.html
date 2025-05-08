@@ -1411,6 +1411,8 @@
 
         window.addEventListener('message', event => {
             const message = event.data;
+            console.log('收到消息:', message); // 添加日志
+            
             if (message.type === 'clipboardHistory') {
                 historyData = message.data || [];
                 renderHistoryList(historyData);
@@ -1500,6 +1502,17 @@
                         vscode.postMessage({
                             command: 'openCanvas',
                             path: item.fullPath
+                        });
+                    }
+                };
+                // 添加右键菜单
+                div.oncontextmenu = function(e) {
+                    e.preventDefault();
+                    if (vscode) {
+                        vscode.postMessage({
+                            command: 'showCanvasContextMenu',
+                            path: item.fullPath,
+                            name: item.name
                         });
                     }
                 };
@@ -1862,6 +1875,16 @@
                 // 添加助手响应到聊天界面
                 const messagesContainer = document.querySelector('.chat-messages');
                 
+<<<<<<< HEAD
+=======
+                let messageContent = message.content;
+                
+                // 如果是画布消息,添加预览按钮
+                if (message.canvasData) {
+                    messageContent += `<button class="preview-canvas-btn" data-canvas='${JSON.stringify(message.canvasData)}'>预览画布</button>`;
+                }
+                
+>>>>>>> 136f446 (完善了画布的功能)
                 const botMessageHtml = `
                     <div class="chat-row left">
                         <div class="chat-avatar-group">
@@ -1869,7 +1892,11 @@
                             <div class="sender">${message.sender}</div>
                         </div>
                         <div class="chat-bubble-group">
+<<<<<<< HEAD
                             <div class="chat-bubble left">${message.content}</div>
+=======
+                            <div class="chat-bubble left">${messageContent}</div>
+>>>>>>> 136f446 (完善了画布的功能)
                             <div class="chat-time">${message.time}</div>
                         </div>
                     </div>
@@ -1877,6 +1904,24 @@
                 
                 messagesContainer.insertAdjacentHTML('beforeend', botMessageHtml);
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
+<<<<<<< HEAD
+=======
+                
+                // 为新添加的预览按钮绑定事件
+                const previewBtn = messagesContainer.querySelector('.preview-canvas-btn:last-child');
+                if (previewBtn) {
+                    previewBtn.addEventListener('click', function() {
+                        const canvasData = JSON.parse(this.dataset.canvas);
+                        if (vscode) {
+                            vscode.postMessage({
+                                command: 'previewCanvas',
+                                fileName: canvasData.fileName,
+                                content: canvasData.content
+                            });
+                        }
+                    });
+                }
+>>>>>>> 136f446 (完善了画布的功能)
             } 
             // Agent响应
             else if (message.command === 'agentResponse') {
@@ -1943,6 +1988,30 @@
                 document.getElementById('agent-send').click();
             }
         });
+<<<<<<< HEAD
+=======
+
+        // 添加预览按钮样式
+        const style = document.createElement('style');
+        style.textContent = `
+            .preview-canvas-btn {
+                background: #3794ff;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 8px;
+                margin-left: 8px;
+                cursor: pointer;
+                font-size: 12px;
+                transition: background 0.2s;
+            }
+            
+            .preview-canvas-btn:hover {
+                background: #2176c7;
+            }
+        `;
+        document.head.appendChild(style);
+>>>>>>> 136f446 (完善了画布的功能)
     </script>
 </body>
 </html>

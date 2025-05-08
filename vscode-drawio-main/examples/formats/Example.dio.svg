@@ -1,0 +1,70 @@
+<svg host="65bd71144e" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="359px" height="311px" viewBox="-0.5 -0.5 359 311" content="&lt;mxfile scale=&quot;1&quot; border=&quot;10&quot; disableSvgWarning=&quot;true&quot;&gt;&lt;diagram id=&quot;ayf96gaC2YPj7m7-Xzu7&quot; name=&quot;Page-1&quot;&gt;3VdNj5swEP0tPeS6AgwsvW6S3VZqq0o5tHt0YAC3DoMck4/++hoYYljYKKumirS5hHmecTxv5o3JjM03hyfFy/wrJiBnnpMcZmwx8zzXCQLzVSPHDvE+tkimREKYBVbiD3SOhFYige3AUSNKLcohGGNRQKwHGFcK90O3FOXwV0uewQhYxVyO0R8i0XmLRt69xT+ByPLul92Q8tvwzpm22OY8wX0LNcmx5YzNFaJunzaHOciavY6XloHHV1ZPB1NQ6EsCQjqGPna5QWJSJROVzjHDgsulRR8UVkUC9QaOsazPF8TSgK4Bf4HWR6obrzQaKNcbSatwEPpnHX4XkPXcW1kcaOfGOJIxTqxjECsV09kZ9QJXGZCX30J1Vr0wIuMJcANaHY2DAsm12A0LzKlPspOfpdI8EJvTzN6/d2aDWzFLZ9lxWdGmn7fGXii+vxPYyB5N7OOoAJbempF9LjSsSt6kuDeTakhlKqSco0TVxLKEQ5TGBt9qhb+htxLGEazTc0TuQGk4nCWpW2U04WgyknqdvZ0ybpd/3pswofPvtHbD9Z10rD/uWJddu2Up9DsKcxJbRedFFQN/uEV7KIp6UaHTMS4qmj/SwrO5GD0TF0qT9cNamaesfrLyEFvSyIfrKiSAKPGnFBJ5axaG11GIP6TWDacU4vwfhUS3FIjbk4cVy7RADL3qeAqqjV5UbdqwxnqTsIKxsK6uq0srEoza/xte0v1V0dwR12z/NIohnrwg1lHgB2fpvbz9PXbD/nfHN+9YEVKat3AYUmXecst6HYpkpbmGMXtO85liL01p5QrsRcFwLkdj8tgEd+zt3BnTvsS3c93+F2LLvw==&lt;/diagram&gt;&lt;/mxfile&gt;">
+    <defs/>
+    <g>
+        <path d="M 161.5 70 L 161.5 110 L 70 110 L 70 143.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/>
+        <path d="M 70 148.88 L 66.5 141.88 L 70 143.63 L 73.5 141.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/>
+        <path d="M 161.5 70 L 161.5 110 L 260 110 L 260 143.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/>
+        <path d="M 260 148.88 L 256.5 141.88 L 260 143.63 L 263.5 141.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/>
+        <rect x="100" y="10" width="123" height="60" rx="9" ry="9" fill="#dae8fc" stroke="#6c8ebf" pointer-events="all"/>
+        <g transform="translate(-0.5 -0.5)">
+            <switch>
+                <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 121px; height: 1px; padding-top: 40px; margin-left: 101px;">
+                        <div style="box-sizing: border-box; font-size: 0; text-align: center; ">
+                            <div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">
+                                Is Draw.io cool?
+                            </div>
+                        </div>
+                    </div>
+                </foreignObject>
+                <text x="162" y="44" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">
+                    Is Draw.io cool?
+                </text>
+            </switch>
+        </g>
+        <path d="M 70 210 L 70 263.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/>
+        <path d="M 70 268.88 L 66.5 261.88 L 70 263.63 L 73.5 261.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/>
+        <rect x="10" y="150" width="120" height="60" rx="9" ry="9" fill="#d5e8d4" stroke="#82b366" pointer-events="all"/>
+        <g transform="translate(-0.5 -0.5)">
+            <switch>
+                <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 118px; height: 1px; padding-top: 180px; margin-left: 11px;">
+                        <div style="box-sizing: border-box; font-size: 0; text-align: center; ">
+                            <div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">
+                                Yes,
+                                <br/>
+                                Draw.io is cool!
+                            </div>
+                        </div>
+                    </div>
+                </foreignObject>
+                <text x="70" y="184" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">
+                    Yes,...
+                </text>
+            </switch>
+        </g>
+        <path d="M 320 180 L 340 180 L 340 40 L 229.37 40" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/>
+        <path d="M 224.12 40 L 231.12 36.5 L 229.37 40 L 231.12 43.5 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/>
+        <rect x="200" y="150" width="120" height="60" rx="9" ry="9" fill="#f8cecc" stroke="#b85450" pointer-events="all"/>
+        <g transform="translate(-0.5 -0.5)">
+            <switch>
+                <foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility">
+                    <div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 118px; height: 1px; padding-top: 180px; margin-left: 201px;">
+                        <div style="box-sizing: border-box; font-size: 0; text-align: center; ">
+                            <div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">
+                                No,
+                                <br/>
+                                Draw.io is uncool
+                            </div>
+                        </div>
+                    </div>
+                </foreignObject>
+                <text x="260" y="184" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">
+                    No,...
+                </text>
+            </switch>
+        </g>
+        <ellipse cx="70" cy="285" rx="11" ry="11" fill="#000000" stroke="#ff0000" pointer-events="all"/>
+        <ellipse cx="70" cy="285" rx="15" ry="15" fill="none" stroke="#ff0000" pointer-events="all"/>
+    </g>
+</svg>

@@ -1,0 +1,16 @@
+{
+	"files.exclude": {
+		"out": false
+	},
+	"search.exclude": {
+		"out": true
+	},
+	"editor.formatOnSave": true,
+	"typescript.tsc.autoDetect": "off",
+	"workbench.editorAssociations": {
+		"*.drawio": "default",
+		"*.dio": "default",
+		"*.svg": "default"
+	},
+	"typescript.tsdk": "node_modules\\typescript\\lib"
+}

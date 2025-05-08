@@ -1,0 +1,5 @@
+class Baz {
+    BazBar() {
+        
+    }
+}

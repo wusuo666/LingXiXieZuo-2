@@ -4,6 +4,13 @@ const path = require('path');
 const { getClipboardHistory } = require('../clipboard');
 const agentApi = require('../agent/agentApi');
 const { connectToServer, sendMessage, disconnectFromServer, isConnected } = require('../chatroom/client');
+<<<<<<< HEAD
+=======
+const WebSocket = require('ws');
+const { DOMParser, XMLSerializer } = require('xmldom');
+const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
+>>>>>>> 136f446 (完善了画布的功能)
 
 /**
  * 灵犀协作侧边栏视图提供者
@@ -20,6 +27,464 @@ class LingxiSidebarProvider {
         this._chatClient = null;
         this._userName = `User_${Date.now().toString().slice(-4)}`;
         this._roomId = 'default';
+<<<<<<< HEAD
+=======
+        
+        // 设置WebSocket消息处理
+        this.setupWebSocketHandlers();
+    }
+
+    /**
+     * 设置WebSocket消息处理器
+     */
+    setupWebSocketHandlers() {
+        if (this._chatClient) {
+            // 添加重连机制
+            this._chatClient.onclose = () => {
+                console.log('WebSocket连接已关闭，尝试重连...');
+                setTimeout(() => {
+                    if (this._chatClient.readyState === WebSocket.CLOSED) {
+                        this.reconnectWebSocket();
+                    }
+                }, 3000);
+            };
+
+            this._chatClient.onerror = (error) => {
+                console.error('WebSocket错误:', error);
+                vscode.window.showErrorMessage('WebSocket连接出错，正在尝试重连...');
+            };
+
+            this._chatClient.onmessage = async (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    console.log('收到WebSocket消息:', message);
+                    
+                    if (message.type === 'canvas') {
+                        console.log('处理画布消息:', message);
+                        if (message.action === 'list' && message.canvasList) {
+                            console.log('收到画布列表:', message.canvasList);
+                            await this.handleCanvasList(message.canvasList);
+                        } else {
+                            await this.handleCanvasMessage(message);
+                        }
+                    } else if (message.type === 'message' && message.canvasData) {
+                        if (this._webviewView) {
+                            this._webviewView.webview.postMessage({
+                                command: 'chatResponse',
+                                sender: message.sender.name,
+                                content: message.content,
+                                time: new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
+                                canvasData: message.canvasData
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error('处理WebSocket消息时出错:', error);
+                    vscode.window.showErrorMessage(`处理消息失败: ${error.message}`);
+                }
+            };
+        }
+    }
+
+    /**
+     * 重新连接WebSocket
+     */
+    async reconnectWebSocket() {
+        try {
+            console.log('尝试重新连接WebSocket...');
+            if (this._chatClient) {
+                this._chatClient.close();
+            }
+            
+            // 重新连接
+            this._chatClient = connectToServer(
+                3000,
+                this._roomId,
+                `vscode_${Date.now()}`,
+                this._userName
+            );
+            
+            // 重新设置消息处理器
+            this.setupWebSocketHandlers();
+            
+            vscode.window.showInformationMessage('WebSocket已重新连接');
+        } catch (error) {
+            console.error('重新连接WebSocket失败:', error);
+            vscode.window.showErrorMessage(`重新连接失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 处理画布相关消息
+     * @param {Object} message 消息数据
+     */
+    async handleCanvasMessage(message) {
+        console.log('处理画布消息:', message);
+        
+        try {
+            switch (message.action) {
+                case 'getAll':
+                    if (!message.canvasList || message.canvasList.length === 0) {
+                        vscode.window.showInformationMessage('当前没有可用的画布');
+                        return;
+                    }
+                    await this.saveAllCanvas(message.canvasList);
+                    break;
+                case 'update':
+                    vscode.window.showInformationMessage(`画布 ${message.fileName} 已被其他用户更新`);
+                    break;
+                case 'error':
+                    vscode.window.showErrorMessage(message.message || '拉取画布失败');
+                    break;
+            }
+        } catch (error) {
+            console.error('处理画布消息时出错:', error);
+            vscode.window.showErrorMessage(`处理画布消息失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 保存所有画布到本地
+     * @param {Array} canvasList 画布列表
+     */
+    async saveAllCanvas(canvasList) {
+        try {
+            console.log('开始保存画布:', canvasList);
+            
+            // 获取工作区根目录
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) {
+                throw new Error('未打开工作区');
+            }
+            const workspaceRoot = workspaceFolders[0].uri.fsPath;
+
+            // 保存每个画布
+            for (const canvas of canvasList) {
+                try {
+                    // 获取最新版本
+                    const latestVersion = canvas.versions[canvas.versions.length - 1];
+                    if (!latestVersion) continue;
+
+                    // 构建文件路径
+                    const filePath = path.join(workspaceRoot, canvas.fileName);
+                    
+                    // 保存文件
+                    await vscode.workspace.fs.writeFile(
+                        vscode.Uri.file(filePath),
+                        Buffer.from(latestVersion.content, 'utf8')
+                    );
+                    
+                    console.log(`已保存画布: ${canvas.fileName}`);
+
+                    // 自动打开保存的画布
+                    const uri = vscode.Uri.file(filePath);
+                    await vscode.commands.executeCommand('vscode.open', uri);
+                } catch (error) {
+                    console.error(`保存画布 ${canvas.fileName} 失败:`, error);
+                }
+            }
+
+            vscode.window.showInformationMessage(`已保存并打开 ${canvasList.length} 个画布`);
+        } catch (error) {
+            console.error('保存画布失败:', error);
+            vscode.window.showErrorMessage(`保存画布失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 处理画布版本历史
+     * @param {Object} message 版本历史消息
+     */
+    async handleCanvasVersions(message) {
+        console.log('处理画布版本历史:', message); // 添加日志
+        
+        try {
+            if (!message.versions || !Array.isArray(message.versions) || message.versions.length === 0) {
+                vscode.window.showInformationMessage(`画布 ${message.fileName} 没有可用的版本历史`);
+                return;
+            }
+
+            // 显示版本选择列表
+            const versionItems = message.versions.map((version, index) => ({
+                label: `版本 ${index + 1}`,
+                description: `由用户 ${version.userId || '未知用户'} 在 ${new Date(version.timestamp).toLocaleString()} 提交`,
+                detail: `文件: ${message.fileName}`,
+                version: version
+            }));
+
+            // 设置超时时间
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('选择版本超时')), 30000);
+            });
+
+            // 显示版本选择列表，带超时处理
+            const selected = await Promise.race([
+                vscode.window.showQuickPick(versionItems, {
+                    placeHolder: '选择要合并的版本',
+                    ignoreFocusOut: true
+                }),
+                timeoutPromise
+            ]);
+
+            if (!selected) {
+                vscode.window.showInformationMessage('未选择版本或选择超时');
+                return;
+            }
+
+            console.log('选中版本:', selected.version); // 添加日志
+            
+            // 预览选中的版本
+            await this.previewCanvas(message.fileName, selected.version.content);
+            
+            // 询问是否合并
+            const mergeOptions = [
+                { label: '是', description: '合并此版本到当前画布' },
+                { label: '否', description: '取消合并' }
+            ];
+
+            const merge = await Promise.race([
+                vscode.window.showQuickPick(mergeOptions, {
+                    placeHolder: '是否合并此版本？',
+                    ignoreFocusOut: true
+                }),
+                timeoutPromise
+            ]);
+
+            if (merge && merge.label === '是') {
+                await this.mergeCanvasVersions(message.filePath, message.currentContent, selected.version.content);
+            } else {
+                vscode.window.showInformationMessage('已取消合并');
+            }
+        } catch (error) {
+            console.error('处理版本历史时出错:', error);
+            if (error.message === '选择版本超时') {
+                vscode.window.showErrorMessage('选择版本超时，请重试');
+            } else {
+                vscode.window.showErrorMessage(`处理版本历史失败: ${error.message}`);
+            }
+        }
+    }
+
+    /**
+     * 预览画布内容
+     * @param {string} fileName 画布文件名
+     * @param {string} content 画布内容
+     */
+    async previewCanvas(fileName, content) {
+        try {
+            console.log('预览画布:', fileName);
+            
+            if (!content) {
+                throw new Error('画布内容为空');
+            }
+
+            // 创建临时文件
+            const tempDir = path.join(this._context.globalStoragePath, 'temp');
+            if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true });
+            }
+            
+            const tempFile = path.join(tempDir, `preview_${fileName}`);
+            await vscode.workspace.fs.writeFile(
+                vscode.Uri.file(tempFile),
+                Buffer.from(content, 'utf8')
+            );
+
+            // 先以文本形式预览
+            const doc = await vscode.workspace.openTextDocument(tempFile);
+            await vscode.window.showTextDocument(doc, {
+                preview: true,
+                viewColumn: vscode.ViewColumn.Beside
+            });
+
+            // 询问是否用Excalidraw打开
+            const openWithExcalidraw = await vscode.window.showQuickPick([
+                { label: '是', description: '使用Excalidraw打开此文件' },
+                { label: '否', description: '保持文本预览' }
+            ], {
+                placeHolder: '是否使用Excalidraw打开此文件？'
+            });
+
+            if (openWithExcalidraw && openWithExcalidraw.label === '是') {
+                // 使用Excalidraw打开文件
+                await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(tempFile));
+            }
+            
+            // 延长临时文件保存时间到30分钟
+            setTimeout(async () => {
+                try {
+                    await vscode.workspace.fs.delete(vscode.Uri.file(tempFile));
+                } catch (error) {
+                    console.error('删除临时预览文件失败:', error);
+                }
+            }, 30 * 60 * 1000); // 30分钟
+        } catch (error) {
+            console.error('预览画布失败:', error);
+            vscode.window.showErrorMessage(`预览画布失败: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
+     * 提交画布到协作服务器
+     * @param {string} path 画布文件路径
+     * @param {string} name 画布文件名
+     */
+    async submitCanvas(path, name) {
+        try {
+            // 读取画布文件内容
+            const content = await vscode.workspace.fs.readFile(vscode.Uri.file(path));
+            const contentStr = Buffer.from(content).toString('utf8');
+
+            // 生成唯一ID
+            const canvasId = `canvas_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+            // 发送到WebSocket服务器
+            if (this._chatClient && this._chatClient.readyState === WebSocket.OPEN) {
+                // 获取当前WebSocket连接的URL
+                const wsUrl = this._chatClient.url;
+                // 从WebSocket URL中提取主机地址
+                const host = wsUrl.replace('ws://', '').replace('wss://', '').split('/')[0];
+                
+                const message = {
+                    type: 'canvas',
+                    action: 'submit',
+                    fileName: name,
+                    filePath: path,
+                    content: contentStr,
+                    canvasId: canvasId,
+                    timestamp: Date.now()
+                };
+                this._chatClient.send(JSON.stringify(message));
+
+                // 创建画布链接，使用当前连接的主机地址
+                const canvasLink = `http://${host}/canvas/${canvasId}`;
+                
+                // 发送链接到聊天室
+                const linkMessage = {
+                    type: 'message',
+                    content: `我提交了一个新的画布 "${name}"，可以通过以下链接访问：${canvasLink}`,
+                    timestamp: Date.now()
+                };
+                this._chatClient.send(JSON.stringify(linkMessage));
+
+                vscode.window.showInformationMessage(`画布 ${name} 已提交，链接已发送到聊天室`);
+                
+                // 预览提交的画布
+                await this.previewCanvas(name, contentStr);
+            } else {
+                vscode.window.showErrorMessage('未连接到协作服务器，请先连接');
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`提交画布失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 从协作服务器拉取画布
+     * @param {string} path 当前画布文件路径
+     * @param {string} name 当前画布文件名
+     */
+    async pullCanvas(path, name) {
+        try {
+            // 获取工作区根目录
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) {
+                throw new Error('未打开工作区');
+            }
+            const workspaceRoot = workspaceFolders[0].uri;
+
+            // 提示用户输入画布链接
+            const canvasUrl = await vscode.window.showInputBox({
+                prompt: '请输入画布链接（例如：http://10.21.206.55:3000/canvas/canvas_1746716514361_9ofni5v55）',
+                placeHolder: '画布链接',
+                validateInput: (value) => {
+                    if (!value) return '请输入画布链接';
+                    if (!value.startsWith('http://') && !value.startsWith('https://')) {
+                        return '请输入正确的链接格式（以http://或https://开头）';
+                    }
+                    if (!value.includes('/canvas/')) {
+                        return '请输入正确的画布链接（包含/canvas/路径）';
+                    }
+                    return null;
+                }
+            });
+
+            if (!canvasUrl) {
+                vscode.window.showInformationMessage('已取消拉取操作');
+                return;
+            }
+
+            // 显示正在拉取的提示
+            const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);
+            statusBarItem.text = "$(sync~spin) 正在拉取画布...";
+            statusBarItem.show();
+
+            try {
+                // 从URL中提取文件名
+                const urlParts = canvasUrl.split('/');
+                const canvasId = urlParts[urlParts.length - 1];
+                const fileName = `${canvasId}.excalidraw`;
+
+                // 下载画布
+                const response = await fetch(canvasUrl);
+                if (!response.ok) {
+                    throw new Error('下载画布失败');
+                }
+
+                const downloadedContent = await response.text();
+                let downloadedJson;
+                try {
+                    downloadedJson = JSON.parse(downloadedContent);
+                } catch (error) {
+                    console.error('解析画布内容失败:', error);
+                    throw new Error('画布内容格式错误');
+                }
+
+                // 读取当前文件内容
+                const currentContent = await vscode.workspace.fs.readFile(vscode.Uri.file(path));
+                let currentJson;
+                try {
+                    currentJson = JSON.parse(Buffer.from(currentContent).toString('utf8'));
+                } catch (error) {
+                    console.error('解析当前文件内容失败:', error);
+                    throw new Error('当前文件内容格式错误');
+                }
+
+                // 合并elements数组，只保留id不同的元素
+                const mergedElements = [...currentJson.elements];
+                const existingIds = new Set(currentJson.elements.map(e => e.id));
+                
+                downloadedJson.elements.forEach(element => {
+                    if (!existingIds.has(element.id)) {
+                        mergedElements.push(element);
+                    }
+                });
+
+                // 更新elements数组
+                currentJson.elements = mergedElements;
+
+                // 保存合并后的内容
+                await vscode.workspace.fs.writeFile(
+                    vscode.Uri.file(path),
+                    Buffer.from(JSON.stringify(currentJson, null, 2), 'utf8')
+                );
+
+                // 打开合并后的文件
+                const uri = vscode.Uri.file(path);
+                await vscode.commands.executeCommand('vscode.open', uri);
+                vscode.window.showInformationMessage(`画布已合并并打开`);
+
+            } finally {
+                // 隐藏状态栏提示
+                statusBarItem.dispose();
+            }
+
+        } catch (error) {
+            console.error('拉取画布失败:', error);
+            vscode.window.showErrorMessage(`拉取画布失败: ${error.message}`);
+        }
+>>>>>>> 136f446 (完善了画布的功能)
     }
 
     /**
@@ -55,10 +520,10 @@ class LingxiSidebarProvider {
         }
         
         try {
-            // 搜索工作区中的.drawio文件
-            const drawioFiles = await vscode.workspace.findFiles('**/*.drawio', '**/node_modules/**');
+            // 搜索工作区中的.excalidraw文件
+            const excalidrawFiles = await vscode.workspace.findFiles('**/*.excalidraw', '**/node_modules/**');
             
-            for (const fileUri of drawioFiles) {
+            for (const fileUri of excalidrawFiles) {
                 try {
                     const fileStat = await vscode.workspace.fs.stat(fileUri);
                     const fileName = path.basename(fileUri.fsPath);
@@ -308,8 +773,104 @@ class LingxiSidebarProvider {
                     this.handleTabSwitch(message.tabId);
                     break;
                 case 'createCanvas':
-                    // 调用创建Draw.io画布的命令
-                    vscode.commands.executeCommand('lingxixiezuo.createDrawio');
+                    // 调用创建Excalidraw画布的命令
+                    vscode.commands.executeCommand('lingxixiezuo.createExcalidraw');
+                    break;
+                case 'getClipboardHistory':
+                    this.sendClipboardHistory();
+                    break;
+                case 'getCanvasList':
+                    this.sendCanvasList();
+                    break;
+                case 'openCanvas':
+                    // 打开指定路径的画布文件
+                    if (message.path) {
+                        try {
+                            const uri = vscode.Uri.file(message.path);
+                            await vscode.commands.executeCommand('vscode.open', uri);
+                        } catch (error) {
+                            console.error('打开画布文件失败:', error);
+                        }
+                    }
+                    break;
+                case 'sendChatMessage':
+                    // 处理聊天消息
+                    if (message.message) {
+                        this.handleChatMessage(message.message);
+                    }
+                    break;
+                case 'startChatServer':
+                    // 启动聊天室服务器
+                    vscode.commands.executeCommand('lingxixiezuo.startChatServer');
+                    break;
+                case 'stopChatServer':
+                    // 停止聊天室服务器
+                    vscode.commands.executeCommand('lingxixiezuo.stopChatServer');
+                    break;
+                case 'connectToChatServer':
+                    // 连接到聊天室服务器
+                    this.connectToChatServer(message.port || 3000, message.ipAddress || 'localhost');
+                    break;
+                case 'disconnectFromChatServer':
+                    // 断开聊天室服务器连接
+                    this.disconnectFromChatServer();
+                    break;
+                case 'setUserName':
+                    // 设置用户名
+                    if (message.userName) {
+                        this._userName = message.userName;
+                    }
+                    break;
+                case 'agentQuery':
+                    // 处理Agent查询
+                    if (message.query) {
+                        this.handleAgentQuery(message.query, message.thinkingId);
+                    }
+                    break;
+                case 'updateApiKey': // 处理更新 API Key 的消息
+                    if (message.apiKey) {
+                        try {
+                            await context.secrets.store('lingxi.apiKey', message.apiKey);
+                            agentApi.updateConfig({ apiKey: message.apiKey }); // 更新 agentApi 配置
+                            vscode.window.showInformationMessage('智谱AI API Key 已保存。');
+                            // 通知 Webview 更新状态
+                            this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: true });
+                        } catch (error) {
+                            console.error('保存 API Key 失败:', error);
+                            vscode.window.showErrorMessage('保存 API Key 失败。');
+                        }
+                    }
+                    break;
+                case 'getApiKeyStatus': // 处理获取 API Key 状态的消息
+                    try {
+                        const apiKey = await context.secrets.get('lingxi.apiKey');
+                        this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: !!apiKey });
+                    } catch (error) {
+                        console.error('读取 API Key 状态失败:', error);
+                        this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: false });
+                    }
+                    break;
+                case 'copyToClipboard':
+                    // 复制文本到剪贴板
+                    if (message.text) {
+                        try {
+                            await vscode.env.clipboard.writeText(message.text);
+                            this._webviewView.webview.postMessage({
+                                command: 'clipboardCopyResult',
+                                success: true
+                            });
+                        } catch (error) {
+                            console.error('复制到剪贴板失败:', error);
+                            this._webviewView.webview.postMessage({
+                                command: 'clipboardCopyResult',
+                                success: false,
+                                error: error.message
+                            });
+                        }
+                    }
+                    break;
+                case 'showCanvasContextMenu':
+                    this.showCanvasContextMenu(message.path, message.name);
                     break;
                 case 'getClipboardHistory':
                     this.sendClipboardHistory();
@@ -438,6 +999,91 @@ class LingxiSidebarProvider {
         } catch (e) {
             console.error("读取或处理 sidebar.html 失败:", e);
             return `<html><body><h2>灵犀协作侧边栏</h2><p>无法加载页面。</p></body></html>`;
+        }
+    }
+
+    /**
+     * 显示画布右键菜单
+     * @param {string} path 画布文件路径
+     * @param {string} name 画布文件名
+     */
+    async showCanvasContextMenu(path, name) {
+        const items = [
+            {
+                label: '提交画布',
+                description: '将当前画布保存并提交到协作服务器'
+            },
+            {
+                label: '拉取画布',
+                description: '从协作服务器拉取画布并合并'
+            }
+        ];
+
+        const selected = await vscode.window.showQuickPick(items, {
+            placeHolder: '选择操作'
+        });
+
+        if (selected) {
+            if (selected.label === '提交画布') {
+                await this.submitCanvas(path, name);
+            } else if (selected.label === '拉取画布') {
+                await this.pullCanvas(path, name);
+            }
+        }
+    }
+
+    /**
+     * 处理画布列表
+     * @param {Array} canvasList 画布列表
+     */
+    async handleCanvasList(canvasList) {
+        try {
+            console.log('开始处理画布列表:', canvasList);
+            
+            if (!canvasList || canvasList.length === 0) {
+                vscode.window.showInformationMessage('当前没有可用的画布');
+                return;
+            }
+
+            // 格式化画布列表项
+            const items = canvasList.map(canvas => ({
+                label: canvas.fileName,
+                description: `由用户 ${canvas.userId || '未知用户'} 在 ${new Date(canvas.timestamp).toLocaleString()} 提交`,
+                detail: `版本数: ${canvas.versionCount || 0}`,
+                canvas: canvas
+            }));
+
+            console.log('格式化后的画布列表项:', items);
+
+            // 显示画布选择列表
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: '选择要拉取的画布',
+                ignoreFocusOut: true
+            });
+
+            console.log('用户选择的画布:', selected);
+
+            if (selected) {
+                // 发送拉取请求
+                if (this._chatClient && this._chatClient.readyState === WebSocket.OPEN) {
+                    const message = {
+                        type: 'canvas',
+                        action: 'pull',
+                        fileName: selected.canvas.fileName,
+                        timestamp: Date.now()
+                    };
+                    console.log('发送拉取请求:', message);
+                    this._chatClient.send(JSON.stringify(message));
+                    vscode.window.showInformationMessage(`正在拉取画布 ${selected.canvas.fileName} 的版本历史...`);
+                } else {
+                    vscode.window.showErrorMessage('未连接到协作服务器，请先连接');
+                }
+            } else {
+                vscode.window.showInformationMessage('已取消选择画布');
+            }
+        } catch (error) {
+            console.error('处理画布列表时出错:', error);
+            vscode.window.showErrorMessage(`处理画布列表失败: ${error.message}`);
         }
     }
 }

@@ -8,13 +8,67 @@
 <body>
     <div class="tab-container">
         <div class="tab-header">
-            <button class="tab-button active" data-tab="workspace">Workspace</button>
+            <button class="tab-button active" data-tab="collab-area">协作区</button>
             <button class="tab-button" data-tab="history">History</button>
             <button class="tab-button" data-tab="canvas">Canvas</button>
         </div>
         <div class="tab-content">
-            <div class="tab-pane active" id="workspace">
+            <div class="tab-pane active" id="collab-area">
+                <div class="inner-tab-container">
+                    <div class="inner-tab-header">
+                        <button class="inner-tab-button active" data-inner-tab="chat">聊天室</button>
+                        <button class="inner-tab-button" data-inner-tab="agent">Agent</button>
+                        <button class="inner-tab-button" data-inner-tab="settings">设置</button>
+                    </div>
+                    <div class="inner-tab-content">
+                        <div class="inner-tab-pane active" id="chat">
                 <div class="chat-pane live-share-style">
+                    <div class="chat-server-controls">
+                        <div class="server-status">
+                            <span>服务器状态: </span>
+                            <span id="chat-server-status" class="status-offline">离线</span>
+                        </div>
+                        <div class="connection-modes">
+                            <button id="host-mode-btn" class="mode-button active">主机模式</button>
+                            <button id="client-mode-btn" class="mode-button">从机模式</button>
+                        </div>
+                        <div id="host-mode-panel" class="mode-panel">
+                            <div class="server-actions">
+                                <button id="start-chat-server" class="action-button">启动聊天室</button>
+                                <button id="stop-chat-server" class="action-button" disabled>停止聊天室</button>
+                            </div>
+                            <div class="server-connection" style="display: none;" id="server-connection-info">
+                                <div class="connection-display">
+                                    <span>连接地址: </span>
+                                    <span id="server-connection-url">未连接</span>
+                                </div>
+                                <button id="copy-connection" class="action-button">复制连接信息</button>
+                            </div>
+                        </div>
+                        <div id="client-mode-panel" class="mode-panel" style="display: none;">
+                            <div class="client-connection">
+                                <div class="input-group">
+                                    <input type="text" id="server-address" placeholder="服务器地址 (如: 192.168.1.100)" />
+                                    <input type="text" id="server-port" placeholder="端口 (如: 3000)" value="3000" />
+                                </div>
+                                <div class="connection-actions">
+                                    <button id="connect-to-server" class="action-button">连接服务器</button>
+                                    <button id="disconnect-from-server" class="action-button" disabled>断开连接</button>
+                                </div>
+                                <div class="room-actions" style="margin-top: 6px; display: none;" id="room-control">
+                                    <div class="room-info">
+                                        <span>当前房间:</span>
+                                        <span id="current-room-id">default</span>
+                                    </div>
+                                    <button id="leave-room" class="action-button">离开聊天室</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="user-settings">
+                            <input type="text" id="user-name" placeholder="输入用户名..." />
+                            <button id="set-username" class="action-button">设置用户名</button>
+                        </div>
+                    </div>
                     <div class="chat-messages">
                         <div class="chat-row left">
                             <div class="chat-avatar-group">
@@ -22,7 +76,8 @@
                                 <div class="sender">协作助手</div>
                             </div>
                             <div class="chat-bubble-group">
-                                <div class="chat-bubble left">你好，这里是灵犀协作！<span class="chat-time">10:01</span></div>
+                                            <div class="chat-bubble left">你好，欢迎使用灵犀协作！有什么可以帮到你？</div>
+                                            <div class="chat-time">10:01</div>
                             </div>
                         </div>
                         <div class="chat-row right">
@@ -31,22 +86,125 @@
                                 <div class="sender">我</div>
                             </div>
                             <div class="chat-bubble-group">
-                                <div class="chat-bubble right">你好！请问有什么可以帮忙的吗？<span class="chat-time">10:02</span></div>
-                            </div>
-                        </div>
-                        <div class="chat-row left">
-                            <div class="chat-avatar-group">
-                                <div class="avatar">A</div>
-                                <div class="sender">协作助手</div>
-                            </div>
-                            <div class="chat-bubble-group">
-                                <div class="chat-bubble left">你可以试试剪贴板历史功能。<span class="chat-time">10:03</span></div>
+                                            <div class="chat-bubble right">你好！请问这个工具有哪些功能？</div>
+                                            <div class="chat-time">10:02</div>
                             </div>
                         </div>
                     </div>
                     <div class="chat-input-bar">
                         <input type="text" id="chat-input" class="chat-input" placeholder="输入消息..." />
                         <button id="chat-send" class="chat-send">发送</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="inner-tab-pane" id="agent">
+                            <div class="agent-container live-share-style">
+                                <div class="agent-header">
+                                    <h3>智能助手</h3>
+                                    <p>专业的AI助手，帮助完成编程任务</p>
+                                </div>
+                                <div class="agent-content">
+                                    <div class="agent-tools">
+                                        <div class="agent-tool-item">
+                                            <div class="agent-tool-icon">🔍</div>
+                                            <div class="agent-tool-name">代码搜索</div>
+                                        </div>
+                                        <div class="agent-tool-item">
+                                            <div class="agent-tool-icon">📝</div>
+                                            <div class="agent-tool-name">代码生成</div>
+                                        </div>
+                                        <div class="agent-tool-item">
+                                            <div class="agent-tool-icon">🐞</div>
+                                            <div class="agent-tool-name">Bug修复</div>
+                                        </div>
+                                        <div class="agent-tool-item">
+                                            <div class="agent-tool-icon">📚</div>
+                                            <div class="agent-tool-name">代码解释</div>
+                                        </div>
+                                    </div>
+                                    <div class="agent-messages" id="agent-messages">
+                                        <div class="agent-welcome">
+                                            <div class="agent-welcome-icon">🤖</div>
+                                            <div class="agent-welcome-text">
+                                                <h4>AI编程助手</h4>
+                                                <p>我可以帮助你搜索代码、生成函数、修复Bug或解释代码。请在下方输入你的问题或选择上方工具。</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="agent-input-bar">
+                                        <input type="text" id="agent-input" class="chat-input" placeholder="向AI助手询问..." />
+                                        <button id="agent-send" class="chat-send">发送</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="inner-tab-pane" id="settings">
+                            <div class="settings-container live-share-style">
+                                <div class="settings-header">
+                                    <h3>系统设置</h3>
+                                </div>
+                                <div class="settings-content">
+                                    <div class="settings-group">
+                                        <div class="settings-title">协作设置</div>
+                                        <div class="settings-item">
+                                            <div class="settings-label">启用实时协作</div>
+                                            <div class="settings-control">
+                                                <label class="switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="slider round"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="settings-item">
+                                            <div class="settings-label">自动同步剪贴板</div>
+                                            <div class="settings-control">
+                                                <label class="switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="slider round"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="settings-group">
+                                        <div class="settings-title">AI助手设置</div>
+                                        <div class="settings-item">
+                                            <div class="settings-label">API Key</div>
+                                            <div class="settings-control api-key-control">
+                                                <input type="password" id="api-key-input" class="settings-input" placeholder="输入你的 ZhipuAI API Key">
+                                                <button id="save-api-key-btn" class="settings-button">保存</button>
+                                            </div>
+                                        </div>
+                                        <div class="settings-item">
+                                            <div class="settings-label">API Key 状态</div>
+                                            <div class="settings-control">
+                                                <span id="api-key-status" class="api-key-status-text">未设置</span>
+                                            </div>
+                                        </div>
+                                        <div class="settings-item">
+                                            <div class="settings-label">AI模型</div>
+                                            <div class="settings-control">
+                                                <select class="settings-select">
+                                                    <option>glm-4</option>
+                                                    <option selected>glm-4-flash</option> 
+                                                    <option>glm-3-turbo</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="settings-item">
+                                            <div class="settings-label">代码生成语言</div>
+                                            <div class="settings-control">
+                                                <select class="settings-select">
+                                                    <option>自动检测</option>
+                                                    <option selected>JavaScript</option>
+                                                    <option>Python</option>
+                                                    <option>Java</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -207,6 +365,7 @@
             display: flex;
             flex-direction: column;
             height: 100%;
+            width: 100%;
         }
         .chat-container {
             flex: 1 1 auto;
@@ -215,6 +374,7 @@
             gap: 16px;
             padding: 12px 0 0 0;
             overflow-y: auto;
+            width: 100%;
         }
         .chat-input-bar {
             display: flex;
@@ -229,7 +389,8 @@
             left: 0;
             right: 0;
             z-index: 10;
-            width: calc(100% - 16px);
+            width: 100%;
+            box-sizing: border-box;
         }
         .chat-input {
             flex: 1;
@@ -278,24 +439,31 @@
         .chat-messages {
             flex: 1 1 auto;
             overflow-y: auto;
+            overflow-x: hidden;
             padding: 18px 8px 0 8px;
             display: flex;
             flex-direction: column;
             gap: 18px;
             min-height: 0;
+            width: 100%;
+            box-sizing: border-box;
         }
         .chat-row {
             display: flex;
-            align-items: flex-end;
+            align-items: flex-start;
             gap: 10px;
+            width: 100%;
+            box-sizing: border-box;
         }
         .chat-row.left {
             flex-direction: row;
             justify-content: flex-start;
+            padding-right: 20px;
         }
         .chat-row.right {
             flex-direction: row-reverse;
-            justify-content: flex-end;
+            justify-content: flex-start;
+            padding-left: 20px;
         }
         .chat-avatar-group {
             display: flex;
@@ -303,6 +471,7 @@
             align-items: center;
             min-width: 48px;
             margin-bottom: 2px;
+            flex-shrink: 0;
         }
         .avatar {
             width: 36px;
@@ -337,24 +506,29 @@
         .chat-bubble-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
             align-items: flex-start;
+            flex: 1;
+            max-width: calc(100% - 60px);
+            word-break: break-word;
+            overflow-wrap: break-word;
         }
         .chat-row.right .chat-bubble-group {
             align-items: flex-end;
         }
         .chat-bubble {
             position: relative;
-            max-width: 70vw;
+            max-width: 100%;
             background: #232323;
             color: #fff;
-            padding: 12px 18px 10px 18px;
+            padding: 12px 16px;
             border-radius: 18px 18px 18px 6px;
             font-size: 15px;
             line-height: 1.7;
             box-shadow: 0 2px 8px #0002;
             word-break: break-word;
-            margin-bottom: 2px;
+            overflow-wrap: break-word;
+            width: fit-content;
+            max-width: 100%;
         }
         .chat-bubble.left {
             border-bottom-left-radius: 6px;
@@ -366,14 +540,17 @@
             color: #fff;
         }
         .chat-time {
-            position: absolute;
-            right: 12px;
-            bottom: 4px;
-            font-size: 12px;
-            color: #aaa;
-            opacity: 0.8;
+            font-size: 11px;
+            color: #8a8a8a;
+            margin-top: 2px;
         }
-        /* 画布标签页样式 */
+        .chat-row.right .chat-time {
+            margin-left: auto;
+            margin-right: 5px;
+        }
+        .chat-row.left .chat-time {
+            margin-left: 5px;
+        }
         .canvas-pane {
             background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);
             border-radius: 0;
@@ -498,7 +675,6 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        /* History 标签页样式 */
         .history-container {
             display: flex;
             flex-direction: column;
@@ -601,10 +777,590 @@
         .preview-content.active {
             display: block;
         }
+        .inner-tab-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);
+        }
+        .inner-tab-header {
+            display: flex;
+            border-bottom: 1px solid #333;
+            width: 100%;
+            background: rgba(35, 35, 35, 0.5);
+            padding: 0;
+            height: 42px;
+        }
+        .inner-tab-button {
+            flex: 1;
+            padding: 8px 0;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            outline: none;
+            font-size: 14px;
+            color: #bbb;
+            transition: background 0.2s, color 0.2s, border-bottom 0.2s;
+            text-align: center;
+        }
+        .inner-tab-button.active {
+            border-bottom: 2px solid #3794ff;
+            color: #fff;
+            font-weight: bold;
+        }
+        .inner-tab-button:not(.active):hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+        }
+        .inner-tab-content {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .inner-tab-pane {
+            flex: 1 1 auto;
+            display: none;
+            padding: 0;
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .inner-tab-pane.active {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .agent-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 0;
+        }
+        .agent-header {
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .agent-header h3 {
+            color: #fff;
+            font-size: 16px;
+            margin: 0 0 4px 0;
+            font-weight: 500;
+        }
+        .agent-header p {
+            color: #bbb;
+            font-size: 13px;
+            margin: 0;
+            line-height: 1.4;
+        }
+        .agent-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            overflow-y: auto;
+        }
+        .agent-tools {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        .agent-tool-item {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 8px 12px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .agent-tool-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: #3794ff;
+            transform: translateY(-2px);
+        }
+        .agent-tool-icon {
+            font-size: 20px;
+            margin-right: 8px;
+        }
+        .agent-tool-name {
+            color: #ddd;
+            font-size: 14px;
+        }
+        .agent-messages {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 10px 0;
+            padding-right: 5px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .agent-welcome {
+            display: flex;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .agent-welcome-icon {
+            font-size: 24px;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .agent-welcome-text h4 {
+            margin: 0 0 4px 0;
+            color: #fff;
+            font-weight: 500;
+            font-size: 15px;
+        }
+        .agent-welcome-text p {
+            margin: 0;
+            color: #bbb;
+            line-height: 1.4;
+            font-size: 13px;
+        }
+        .agent-message {
+            display: flex;
+            width: 100%;
+            animation: fadeIn 0.3s ease-out;
+            box-sizing: border-box;
+            margin-bottom: 12px;
+        }
+        .agent-message-user {
+            flex-direction: row-reverse;
+            justify-content: flex-start;
+            padding-left: 10px;
+        }
+        .agent-message-assistant {
+            flex-direction: row;
+            justify-content: flex-start;
+            padding-right: 10px;
+        }
+        .agent-avatar {
+            width: 32px;
+            height: 32px;
+            min-width: 32px;
+            min-height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3794ff 60%, #4ec9b0 100%);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            margin: 0 8px;
+        }
+        .agent-message-assistant .agent-avatar {
+            background: #444;
+        }
+        .agent-message-bubble {
+            display: flex;
+            flex-direction: column;
+            max-width: calc(100% - 60px);
+        }
+        .agent-message-content {
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.5;
+            word-break: break-word;
+            width: fit-content;
+            max-width: 100%;
+        }
+        .agent-message-user .agent-message-content {
+            background: linear-gradient(135deg, #3794ff 60%, #4ec9b0 100%);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+            margin-left: auto;
+        }
+        .agent-message-assistant .agent-message-content {
+            background: #2d2d2d;
+            color: #fff;
+            border-bottom-left-radius: 4px;
+        }
+        .agent-message-pre {
+            white-space: pre-wrap;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background: #1e1e1e;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 3px solid #3794ff;
+            margin: 8px 0;
+            overflow-x: auto;
+        }
+        .agent-message-time {
+            font-size: 11px;
+            color: #8a8a8a;
+            margin-top: 2px;
+        }
+        .agent-message-user .agent-message-time {
+            margin-left: auto;
+            margin-right: 5px;
+        }
+        .agent-message-assistant .agent-message-time {
+            margin-left: 5px;
+        }
+        .agent-thinking {
+            display: flex;
+            align-items: center;
+            color: #bbb;
+            font-size: 14px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+        }
+        .agent-thinking-dots {
+            display: flex;
+            margin-left: 8px;
+        }
+        .agent-thinking-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #3794ff;
+            border-radius: 50%;
+            margin-right: 4px;
+            animation: pulse 1.5s infinite;
+        }
+        .agent-thinking-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .agent-thinking-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        .agent-input-bar {
+            margin-top: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 0;
+        }
+        .settings-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 0;
+        }
+        .settings-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .settings-header h3 {
+            color: #fff;
+            font-size: 18px;
+            margin: 0;
+            font-weight: 500;
+        }
+        .settings-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            overflow-y: auto;
+        }
+        .settings-group {
+            margin-bottom: 24px;
+        }
+        .settings-title {
+            font-size: 16px;
+            font-weight: 500;
+            color: #fff;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .settings-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .settings-label {
+            color: #ddd;
+            font-size: 14px;
+        }
+        .settings-control {
+            display: flex;
+            align-items: center;
+        }
+        .settings-input {
+            background: #232323;
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 6px 8px;
+            font-size: 14px;
+            flex-grow: 1;
+            margin-right: 8px;
+        }
+        .settings-button {
+            background: #3794ff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .settings-button:hover {
+            background: #2176c7;
+        }
+        .api-key-control {
+            flex-grow: 1;
+        }
+        .api-key-status-text {
+            font-style: italic;
+            color: #888;
+        }
+        .settings-select {
+            background: #232323;
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 6px 24px 6px 8px;
+            font-size: 14px;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23cccccc' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            background-size: 12px;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 46px;
+            height: 24px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #444;
+            transition: .4s;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+        }
+        input:checked + .slider {
+            background-color: #3794ff;
+        }
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+        .slider.round {
+            border-radius: 34px;
+        }
+        .slider.round:before {
+            border-radius: 50%;
+        }
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.5;
+                transform: scale(0.8);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        /* 聊天室服务器控制样式 */
+        .chat-server-controls {
+            background-color: var(--vscode-editor-background);
+            border-bottom: 1px solid var(--vscode-panel-border);
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .server-status, .server-actions, .user-settings, .server-connection, .connection-display, .room-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .client-connection, .connection-actions, .room-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .connection-modes {
+            display: flex;
+            margin-bottom: 6px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 6px;
+        }
+        
+        .mode-button {
+            flex: 1;
+            background: none;
+            border: none;
+            padding: 5px 10px;
+            color: var(--vscode-foreground);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .mode-button.active {
+            color: var(--vscode-button-foreground);
+            border-bottom: 2px solid var(--vscode-button-background);
+            font-weight: bold;
+        }
+        
+        .mode-button:hover:not(.active) {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .mode-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 6px;
+            width: 100%;
+        }
+        
+        .input-group input {
+            flex: 1;
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            padding: 4px 6px;
+            border-radius: 2px;
+        }
+        
+        #server-port {
+            flex: 0 0 80px;
+        }
+        
+        .connection-display {
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        #server-connection-url {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: monospace;
+            padding: 2px 4px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            flex: 1;
+            margin-left: 5px;
+        }
+        
+        .status-online {
+            color: #4CAF50;
+        }
+        
+        .status-offline {
+            color: #F44336;
+        }
+        
+        .action-button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 4px 8px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .action-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .user-settings input {
+            flex: 1;
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            padding: 4px;
+            border-radius: 2px;
+            margin-right: 8px;
+        }
+        
+        .room-info {
+            background-color: rgba(255, 255, 255, 0.05);
+            padding: 4px 6px;
+            border-radius: 2px;
+            font-size: 12px;
+        }
+        
+        #current-room-id {
+            font-family: monospace;
+            color: #4ec9b0;
+            margin-left: 5px;
+        }
+        
+        /* 确保按钮有足够的空间 */
+        .connection-actions .action-button, .room-actions .action-button {
+            flex: 1;
+            min-width: 90px;
+            margin: 0 3px;
+            white-space: nowrap;
+        }
+        
+        .connection-actions .action-button:first-child {
+            margin-left: 0;
+        }
+        
+        .connection-actions .action-button:last-child {
+            margin-right: 0;
+        }
     </style>
     
     <script>
-        // 标签切换逻辑
         document.querySelectorAll('.tab-button').forEach(btn => {
             btn.addEventListener('click', function() {
                 const tabId = this.dataset.tab;
@@ -615,7 +1371,6 @@
                 document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
                 document.getElementById(tabId).classList.add('active');
                 
-                // 通知主进程标签切换
                 if (vscode) {
                     vscode.postMessage({
                         command: 'switchTab',
@@ -623,17 +1378,26 @@
                     });
                 }
                 
-                // 如果切换到 history 标签，主动请求最新历史记录
                 if (tabId === 'history' && vscode) {
                     vscode.postMessage({ type: 'getClipboardHistory' });
                 }
             });
         });
 
-        // 与VS Code主进程通信API
+        document.querySelectorAll('.inner-tab-button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const tabId = this.dataset.innerTab;
+                
+                document.querySelectorAll('.inner-tab-button').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                document.querySelectorAll('.inner-tab-pane').forEach(pane => pane.classList.remove('active'));
+                document.getElementById(tabId).classList.add('active');
+            });
+        });
+
         const vscode = window.acquireVsCodeApi ? window.acquireVsCodeApi() : null;
 
-        // 新建画布按钮点击处理
         document.getElementById('canvas-action-btn').addEventListener('click', function() {
             if (vscode) {
                 vscode.postMessage({
@@ -642,21 +1406,17 @@
             }
         });
 
-        // 剪贴板历史记录模拟数据（回退用）
-        let historyData = [
-            { id: 1, content: 'function foo() { return 42; }', type: 'code', time: '2024-05-01 10:00' },
-            { id: 2, content: 'Hello, world!', type: 'text', time: '2024-05-01 09:58' },
-            { id: 3, content: 'let x = 123;', type: 'code', time: '2024-05-01 09:55' },
-            { id: 4, content: '一段中文内容', type: 'text', time: '2024-05-01 09:50' }
-        ];
+        // 剪贴板历史记录相关
+        let historyData = [];
 
-        // 监听主进程消息，接收clipboardHistory
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.type === 'clipboardHistory') {
-                console.log('收到剪贴板历史数据:', message.data);
                 historyData = message.data || [];
                 renderHistoryList(historyData);
+            } else if (message.type === 'canvasList') {
+                canvasListData = message.data || [];
+                renderCanvasList(canvasListData);
             }
         });
 
@@ -706,25 +1466,13 @@
             });
         }
 
-        renderHistoryList(historyData);
-
-        // 页面加载后请求主进程发送clipboardHistory
+        // 页面加载后请求剪贴板历史数据
         if (vscode) {
             vscode.postMessage({ type: 'getClipboardHistory' });
         }
         
-        // Canvas标签页功能
+        // 画布列表相关
         let canvasListData = [];
-        
-        // 监听主进程消息，处理画布列表
-        window.addEventListener('message', event => {
-            const message = event.data;
-            if (message.type === 'canvasList') {
-                console.log('收到画布列表数据:', message.data);
-                canvasListData = message.data || [];
-                renderCanvasList(canvasListData);
-            }
-        });
         
         const canvasListEl = document.querySelector('.canvas-list');
         
@@ -759,10 +1507,440 @@
             });
         }
         
-        // 打开"Canvas"标签时，请求画布列表数据
+        // 打开Canvas标签时请求画布列表
         document.querySelector('.tab-button[data-tab="canvas"]').addEventListener('click', function() {
             if (vscode) {
                 vscode.postMessage({ type: 'getCanvasList' });
+            }
+        });
+
+        // 设置Agent标签页工具项点击事件
+        document.querySelectorAll('.agent-tool-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const toolName = this.querySelector('.agent-tool-name').textContent;
+                const agentInput = document.getElementById('agent-input');
+                
+                // 根据不同工具预填充不同的提示词
+                switch(toolName) {
+                    case '代码搜索':
+                        agentInput.value = '搜索: ';
+                        break;
+                    case '代码生成':
+                        agentInput.value = '生成一个函数用于: ';
+                        break;
+                    case 'Bug修复':
+                        agentInput.value = '修复这段代码: ';
+                        break;
+                    case '代码解释':
+                        agentInput.value = '解释这段代码: ';
+                        break;
+                }
+                
+                agentInput.focus();
+            });
+        });
+
+        // Agent输入处理
+        document.getElementById('agent-send').addEventListener('click', function() {
+            const input = document.getElementById('agent-input');
+            if (input.value.trim() && vscode) {
+                const query = input.value.trim();
+                
+                // 添加用户消息到Agent界面
+                const agentMessagesContainer = document.getElementById('agent-messages');
+                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                
+                const userMessageHtml = `
+                    <div class="agent-message agent-message-user">
+                        <div class="agent-avatar">我</div>
+                        <div class="agent-message-bubble">
+                            <div class="agent-message-content">${query}</div>
+                            <div class="agent-message-time">${time}</div>
+                        </div>
+                    </div>
+                `;
+                
+                agentMessagesContainer.insertAdjacentHTML('beforeend', userMessageHtml);
+                
+                // 添加思考中提示
+                const thinkingId = 'thinking-' + Date.now();
+                const thinkingHtml = `
+                    <div class="agent-thinking" id="${thinkingId}">
+                        <span>AI助手思考中</span>
+                        <div class="agent-thinking-dots">
+                            <div class="agent-thinking-dot"></div>
+                            <div class="agent-thinking-dot"></div>
+                            <div class="agent-thinking-dot"></div>
+                        </div>
+                    </div>
+                `;
+                
+                agentMessagesContainer.insertAdjacentHTML('beforeend', thinkingHtml);
+                agentMessagesContainer.scrollTop = agentMessagesContainer.scrollHeight;
+                
+                // 发送查询到扩展
+                vscode.postMessage({
+                    command: 'agentQuery',
+                    query: query,
+                    thinkingId: thinkingId
+                });
+                
+                input.value = '';
+            }
+        });
+
+        // 聊天输入处理
+        document.getElementById('chat-send').addEventListener('click', function() {
+            const input = document.getElementById('chat-input');
+            if (input.value.trim() && vscode) {
+                const message = input.value.trim();
+                
+                // 添加用户消息到聊天界面
+                const messagesContainer = document.querySelector('.chat-messages');
+                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                
+                // 获取用户名
+                const userName = document.getElementById('user-name').value.trim() || '我';
+                
+                const userMessageHtml = `
+                    <div class="chat-row right">
+                        <div class="chat-avatar-group">
+                            <div class="avatar">我</div>
+                            <div class="sender">${userName}</div>
+                        </div>
+                        <div class="chat-bubble-group">
+                            <div class="chat-bubble right">${message}</div>
+                            <div class="chat-time">${time}</div>
+                        </div>
+                    </div>
+                `;
+                
+                messagesContainer.insertAdjacentHTML('beforeend', userMessageHtml);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                
+                // 发送消息到扩展
+                vscode.postMessage({
+                    command: 'sendChatMessage',
+                    message: message
+                });
+                
+                input.value = '';
+            }
+        });
+
+        // 聊天室服务器控制
+        document.getElementById('start-chat-server').addEventListener('click', function() {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'startChatServer'
+                });
+            }
+        });
+
+        document.getElementById('stop-chat-server').addEventListener('click', function() {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'stopChatServer'
+                });
+            }
+        });
+
+        // 切换主机/从机模式
+        document.getElementById('host-mode-btn').addEventListener('click', function() {
+            // 切换到主机模式
+            document.getElementById('host-mode-btn').classList.add('active');
+            document.getElementById('client-mode-btn').classList.remove('active');
+            document.getElementById('host-mode-panel').style.display = 'flex';
+            document.getElementById('client-mode-panel').style.display = 'none';
+        });
+
+        document.getElementById('client-mode-btn').addEventListener('click', function() {
+            // 切换到从机模式
+            document.getElementById('client-mode-btn').classList.add('active');
+            document.getElementById('host-mode-btn').classList.remove('active');
+            document.getElementById('client-mode-panel').style.display = 'flex';
+            document.getElementById('host-mode-panel').style.display = 'none';
+        });
+
+        // 从机模式:连接到服务器
+        document.getElementById('connect-to-server').addEventListener('click', function() {
+            const serverAddress = document.getElementById('server-address').value.trim();
+            const serverPort = document.getElementById('server-port').value.trim();
+            
+            if (!serverAddress) {
+                // 如果服务器地址为空，显示错误
+                const statusElement = document.getElementById('chat-server-status');
+                statusElement.textContent = '错误: 请输入服务器地址';
+                statusElement.className = 'status-offline';
+                return;
+            }
+            
+            const port = parseInt(serverPort, 10);
+            if (isNaN(port) || port < 1 || port > 65535) {
+                // 如果端口无效，显示错误
+                const statusElement = document.getElementById('chat-server-status');
+                statusElement.textContent = '错误: 请输入有效端口 (1-65535)';
+                statusElement.className = 'status-offline';
+                return;
+            }
+            
+            // 发送连接请求
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'connectToChatServer',
+                    ipAddress: serverAddress,
+                    port: port
+                });
+                
+                // 更新UI状态
+                document.getElementById('connect-to-server').disabled = true;
+                document.getElementById('disconnect-from-server').disabled = false;
+                
+                const statusElement = document.getElementById('chat-server-status');
+                statusElement.textContent = '正在连接...';
+                statusElement.className = 'status-online';
+            }
+        });
+
+        // 从机模式:断开连接
+        document.getElementById('disconnect-from-server').addEventListener('click', function() {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'disconnectFromChatServer'
+                });
+                
+                // 更新UI状态
+                document.getElementById('connect-to-server').disabled = false;
+                document.getElementById('disconnect-from-server').disabled = true;
+                document.getElementById('room-control').style.display = 'none';
+            }
+        });
+
+        // 从机模式:离开聊天室
+        document.getElementById('leave-room').addEventListener('click', function() {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'leaveRoom'
+                });
+                
+                // 隐藏房间控制界面
+                document.getElementById('room-control').style.display = 'none';
+            }
+        });
+
+        // 复制连接信息按钮
+        document.getElementById('copy-connection').addEventListener('click', function() {
+            const connectionUrl = document.getElementById('server-connection-url').textContent;
+            if (connectionUrl && connectionUrl !== '未连接') {
+                // 使用VSCode API复制文本
+                vscode.postMessage({
+                    command: 'copyToClipboard',
+                    text: `灵犀协作聊天室连接信息: ${connectionUrl}`
+                });
+                
+                // 变更按钮文本显示已复制，然后还原
+                const copyBtn = document.getElementById('copy-connection');
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = '已复制!';
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                }, 2000);
+            }
+        });
+
+        // 设置用户名
+        document.getElementById('set-username').addEventListener('click', function() {
+            const userNameInput = document.getElementById('user-name');
+            const userName = userNameInput.value.trim();
+            
+            if (userName && vscode) {
+                vscode.postMessage({
+                    command: 'setUserName',
+                    userName: userName
+                });
+                
+                // 更新用户显示
+                const userDisplayElements = document.querySelectorAll('.chat-row.right .sender');
+                userDisplayElements.forEach(element => {
+                    element.textContent = userName;
+                });
+            }
+        });
+
+        // 监听消息响应
+        window.addEventListener('message', event => {
+            const message = event.data;
+            
+            // 聊天室服务器状态响应
+            if (message.command === 'chatServerStatus') {
+                const statusElement = document.getElementById('chat-server-status');
+                const startButton = document.getElementById('start-chat-server');
+                const stopButton = document.getElementById('stop-chat-server');
+                const connectButton = document.getElementById('connect-to-server');
+                const disconnectButton = document.getElementById('disconnect-from-server');
+                const connectionInfoDiv = document.getElementById('server-connection-info');
+                const connectionUrlElement = document.getElementById('server-connection-url');
+                const roomControlDiv = document.getElementById('room-control');
+                const currentRoomElement = document.getElementById('current-room-id');
+                
+                if (message.status === 'running' || message.status === 'connected') {
+                    statusElement.textContent = message.status === 'connected' ? '已连接' : '运行中';
+                    statusElement.className = 'status-online';
+                    
+                    // 主机模式下的UI状态
+                    startButton.disabled = true;
+                    stopButton.disabled = false;
+                    
+                    // 从机模式下的UI状态
+                    connectButton.disabled = true;
+                    disconnectButton.disabled = false;
+                    
+                    // 显示房间信息
+                    if (message.roomId) {
+                        roomControlDiv.style.display = 'flex';
+                        currentRoomElement.textContent = message.roomId;
+                    }
+                    
+                    // 显示连接信息
+                    if (message.port) {
+                        // 获取本机IP地址
+                        connectionInfoDiv.style.display = 'flex';
+                        // 使用localhost或IP地址
+                        const ipAddress = message.ipAddress || 'localhost';
+                        connectionUrlElement.textContent = `ws://${ipAddress}:${message.port}`;
+                    }
+                    
+                    // 如果服务器运行中但客户端未连接，自动连接
+                    if (message.status === 'running' && message.port) {
+                        vscode.postMessage({
+                            command: 'connectToChatServer',
+                            port: message.port,
+                            ipAddress: message.ipAddress || 'localhost'
+                        });
+                    }
+                } else if (message.status === 'stopped' || message.status === 'disconnected') {
+                    statusElement.textContent = '离线';
+                    statusElement.className = 'status-offline';
+                    
+                    // 主机模式下的UI状态
+                    startButton.disabled = false;
+                    stopButton.disabled = true;
+                    
+                    // 从机模式下的UI状态
+                    connectButton.disabled = false;
+                    disconnectButton.disabled = true;
+                    
+                    // 隐藏房间控制界面
+                    roomControlDiv.style.display = 'none';
+                    
+                    // 隐藏连接信息
+                    connectionInfoDiv.style.display = 'none';
+                    connectionUrlElement.textContent = '未连接';
+                } else if (message.status === 'error') {
+                    statusElement.textContent = '错误: ' + (message.error || '未知错误');
+                    statusElement.className = 'status-offline';
+                    
+                    // 主机模式下的UI状态
+                    startButton.disabled = false;
+                    stopButton.disabled = true;
+                    
+                    // 从机模式下的UI状态
+                    connectButton.disabled = false;
+                    disconnectButton.disabled = true;
+                    
+                    // 隐藏房间控制界面
+                    roomControlDiv.style.display = 'none';
+                    
+                    // 隐藏连接信息
+                    connectionInfoDiv.style.display = 'none';
+                    connectionUrlElement.textContent = '未连接';
+                }
+            }
+            
+            // 聊天消息响应
+            if (message.command === 'chatResponse') {
+                // 添加助手响应到聊天界面
+                const messagesContainer = document.querySelector('.chat-messages');
+                
+                const botMessageHtml = `
+                    <div class="chat-row left">
+                        <div class="chat-avatar-group">
+                            <div class="avatar">A</div>
+                            <div class="sender">${message.sender}</div>
+                        </div>
+                        <div class="chat-bubble-group">
+                            <div class="chat-bubble left">${message.content}</div>
+                            <div class="chat-time">${message.time}</div>
+                        </div>
+                    </div>
+                `;
+                
+                messagesContainer.insertAdjacentHTML('beforeend', botMessageHtml);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            } 
+            // Agent响应
+            else if (message.command === 'agentResponse') {
+                const agentMessagesContainer = document.getElementById('agent-messages');
+                
+                // 移除思考中提示
+                if (message.thinkingId) {
+                    const thinkingElement = document.getElementById(message.thinkingId);
+                    if (thinkingElement) {
+                        thinkingElement.remove();
+                    }
+                }
+                
+                // 格式化结果，支持代码块
+                let formattedContent = message.result;
+                
+                // 简单的代码块检测和格式化
+                if (formattedContent.includes('```')) {
+                    const parts = formattedContent.split('```');
+                    formattedContent = '';
+                    for (let i = 0; i < parts.length; i++) {
+                        if (i % 2 === 0) {
+                            // 非代码部分
+                            formattedContent += parts[i];
+                        } else {
+                            // 代码部分
+                            formattedContent += `<div class="agent-message-pre">${parts[i]}</div>`;
+                        }
+                    }
+                }
+                
+                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                const assistantMessageHtml = `
+                    <div class="agent-message agent-message-assistant">
+                        <div class="agent-avatar">AI</div>
+                        <div class="agent-message-bubble">
+                            <div class="agent-message-content">${formattedContent}</div>
+                            <div class="agent-message-time">${time}</div>
+                        </div>
+                    </div>
+                `;
+                
+                agentMessagesContainer.insertAdjacentHTML('beforeend', assistantMessageHtml);
+                agentMessagesContainer.scrollTop = agentMessagesContainer.scrollHeight;
+            }
+            // 处理思考状态
+            else if (message.command === 'agentThinking') {
+                // 这部分由上面的代码自动处理
+            }
+        });
+
+        // 添加聊天输入框回车键支持
+        document.getElementById('chat-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('chat-send').click();
+            }
+        });
+
+        // 添加Agent输入框回车键支持
+        document.getElementById('agent-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('agent-send').click();
             }
         });
     </script>

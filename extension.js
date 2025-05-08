@@ -5,6 +5,8 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const path = require('path');
 const { createAndOpenDrawio } = require('./createDrawio');
+const agentApi = require('./agent/agentApi');
+const { startChatServer, stopChatServer, setSidebarProvider } = require('./chatroom/startServer');
 
 /**
  * 创建并打开Draw.io文件
@@ -26,8 +28,21 @@ async function createAndOpenDrawioCommand(filePath) {
  * 激活插件时的回调函数
  * @param {vscode.ExtensionContext} context
  */
-function activate(context) {
+async function activate(context) {
     console.log('灵犀协作插件已激活');
+    
+    // 插件激活时，尝试从 secrets 加载 API Key 并更新 agentApi 配置
+    try {
+        const storedApiKey = await context.secrets.get('lingxi.apiKey');
+        if (storedApiKey) {
+            agentApi.updateConfig({ apiKey: storedApiKey });
+            console.log('已加载存储的 API Key。');
+        } else {
+            console.log('未找到存储的 API Key。');
+        }
+    } catch (error) {
+        console.error('加载 API Key 失败:', error);
+    }
     
     // 输出调试信息，帮助诊断命令注册问题
     console.log('正在注册命令...');
@@ -112,7 +127,7 @@ function activate(context) {
 
         // 格式化过滤后的历史记录用于 QuickPick
         const items = filteredHistory.map(entry => ({
-            label: `${entry.type === 'code' ? '📝 代码' : (entry.type === 'text' ? '📄 文本' : '❓ 其他')} - ${new Date(entry.timestamp).toLocaleString()}`,
+            label: `${entry.type === 'code' ? '📝 代码' : (entry.type === 'text' ? '📄 文本' : '❓ 其他')} - ${new Date(entry.timestamp).toLocaleString([], {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})}`,
             description: typeof entry.content === 'string' && entry.content.length > 50 ? entry.content.substring(0, 50) + '...' : (typeof entry.content === 'string' ? entry.content : '[非文本内容]'),
             entry
         }));
@@ -172,7 +187,11 @@ function activate(context) {
     });
 
     // 注册灵犀协作侧边栏视图
+    // 包含协作区(聊天室、Agent、设置)、剪贴板历史和协同画布三个主要功能区域
     const sidebarProvider = new LingxiSidebarProvider(context);
+    
+    // 将侧边栏提供者实例传递给startServer
+    setSidebarProvider(sidebarProvider);
     
     // 确保使用正确的视图ID注册WebviewViewProvider
     const viewProvider = vscode.window.registerWebviewViewProvider('lingxixiezuoView', sidebarProvider);
@@ -181,6 +200,14 @@ function activate(context) {
     console.log('注册命令: lingxixiezuo.createDrawio');
     let createDrawioDisposable = vscode.commands.registerCommand('lingxixiezuo.createDrawio', createAndOpenDrawioCommand);
 
+    // 注册启动聊天室服务器命令
+    console.log('注册命令: lingxixiezuo.startChatServer');
+    let startChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.startChatServer', startChatServer);
+    
+    // 注册停止聊天室服务器命令
+    console.log('注册命令: lingxixiezuo.stopChatServer');
+    let stopChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.stopChatServer', stopChatServer);
+
     context.subscriptions.push(
         copyTextDisposable,
         copyCodeDisposable,
@@ -188,7 +215,9 @@ function activate(context) {
         showHistoryDisposable,
         pasteSmartDisposable,
         viewProvider,
-        createDrawioDisposable
+        createDrawioDisposable,
+        startChatServerDisposable,
+        stopChatServerDisposable
     );
     
     console.log('所有命令注册完成');

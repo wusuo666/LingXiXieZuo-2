@@ -4,30 +4,8 @@ const LingxiSidebarProvider = require('./sidebar/sidebarViewProvider');
 const fs = require('fs');
 const { exec } = require('child_process');
 const path = require('path');
-<<<<<<< HEAD
-const { createAndOpenDrawio } = require('./createDrawio');
 const agentApi = require('./agent/agentApi');
 const { startChatServer, stopChatServer, setSidebarProvider } = require('./chatroom/startServer');
-
-/**
- * 创建并打开Draw.io文件
- * 创建一个新的.drawio文件并使用关联程序打开
- * @param {string} [filePath] 可选的文件路径，如果不提供则在临时目录创建
- * @returns {Promise<void>}
- */
-async function createAndOpenDrawioCommand(filePath) {
-    try {
-        const createdFilePath = await createAndOpenDrawio(filePath);
-        vscode.window.showInformationMessage(`成功创建并打开Draw.io文件: ${createdFilePath}`);
-    } catch (error) {
-        console.error('创建或打开Draw.io文件失败:', error);
-        vscode.window.showErrorMessage(`创建或打开Draw.io文件失败: ${error.message}`);
-    }
-}
-=======
-const agentApi = require('./agent/agentApi');
-const { startChatServer, stopChatServer, setSidebarProvider } = require('./chatroom/startServer');
->>>>>>> 136f446 (完善了画布的功能)
 
 /**
  * 激活插件时的回调函数
@@ -272,14 +250,6 @@ async function activate(context) {
         })
     );
 
-    // 注册启动聊天室服务器命令
-    console.log('注册命令: lingxixiezuo.startChatServer');
-    let startChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.startChatServer', startChatServer);
-    
-    // 注册停止聊天室服务器命令
-    console.log('注册命令: lingxixiezuo.stopChatServer');
-    let stopChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.stopChatServer', stopChatServer);
-
     context.subscriptions.push(
         copyTextDisposable,
         copyCodeDisposable,
@@ -287,10 +257,6 @@ async function activate(context) {
         showHistoryDisposable,
         pasteSmartDisposable,
         viewProvider,
-<<<<<<< HEAD
-        createDrawioDisposable,
-=======
->>>>>>> 136f446 (完善了画布的功能)
         startChatServerDisposable,
         stopChatServerDisposable
     );

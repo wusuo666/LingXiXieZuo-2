@@ -6,11 +6,6 @@ const path = require('path');
 // 聊天室用户和消息存储
 const chatRooms = new Map(); // 存储多个聊天室
 const users = new Map(); // 存储用户信息
-<<<<<<< HEAD
-
-// 创建HTTP服务器
-const server = http.createServer((req, res) => {
-=======
 const canvasVersions = new Map(); // 画布版本集合
 
 // 存储画布内容
@@ -30,7 +25,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
->>>>>>> 136f446 (完善了画布的功能)
   // 简单的HTTP响应，可以在这里提供静态文件服务
   if (req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -41,10 +35,6 @@ const server = http.createServer((req, res) => {
         res.end(data);
       }
     });
-<<<<<<< HEAD
-  } else {
-    res.writeHead(404);
-=======
   } else if (req.url === '/canvas/list') {
     // 获取所有画布列表
     const canvasList = Array.from(canvasStore.entries()).map(([canvasId, canvas]) => ({
@@ -96,13 +86,9 @@ const server = http.createServer((req, res) => {
           const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
           const contentLength = Buffer.byteLength(contentStr);
 
-          // 对文件名进行URL编码
-          const encodedFileName = encodeURIComponent(canvas.fileName);
-
           console.log('准备下载画布:', {
             id: canvasId,
             fileName: canvas.fileName,
-            encodedFileName,
             contentLength,
             contentType: typeof content,
             contentPreview: contentStr.substring(0, 100) // 只记录前100个字符
@@ -111,7 +97,7 @@ const server = http.createServer((req, res) => {
           // 设置响应头
           res.writeHead(200, {
             'Content-Type': 'application/json',
-            'Content-Disposition': `attachment; filename*=UTF-8''${encodedFileName}`,
+            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(canvas.fileName)}`,
             'Content-Length': contentLength,
             'Cache-Control': 'no-cache',
             'Access-Control-Expose-Headers': 'Content-Disposition'
@@ -169,7 +155,7 @@ const server = http.createServer((req, res) => {
                       const url = window.URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = '${canvas.fileName.replace(/'/g, "\\'")}';
+                      a.download = '${canvas.fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}';
                       document.body.appendChild(a);
                       a.click();
                       window.URL.revokeObjectURL(url);
@@ -199,11 +185,10 @@ const server = http.createServer((req, res) => {
             // 直接返回JSON内容
             const content = canvas.content;
             const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
-            const encodedFileName = encodeURIComponent(canvas.fileName);
             
             res.writeHead(200, {
               'Content-Type': 'application/json',
-              'Content-Disposition': `attachment; filename*=UTF-8''${encodedFileName}`,
+              'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(canvas.fileName)}`,
               'Content-Length': Buffer.byteLength(contentStr),
               'Cache-Control': 'no-cache',
               'Access-Control-Expose-Headers': 'Content-Disposition'
@@ -240,7 +225,6 @@ const server = http.createServer((req, res) => {
     }
   } else {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
->>>>>>> 136f446 (完善了画布的功能)
     res.end('Not found');
   }
 });
@@ -323,13 +307,10 @@ wss.on('connection', (ws) => {
             }));
           }
           break;
-<<<<<<< HEAD
-=======
           
         case 'canvas':
           handleCanvasMessage(ws, data, userId, currentRoom);
           break;
->>>>>>> 136f446 (完善了画布的功能)
       }
     } catch (error) {
       console.error('处理消息时出错:', error);
@@ -361,8 +342,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-<<<<<<< HEAD
-=======
 /**
  * 处理画布相关消息
  * @param {WebSocket} ws WebSocket连接
@@ -513,20 +492,14 @@ function handleCanvasMessage(ws, data, userId, currentRoom) {
   }
 }
 
->>>>>>> 136f446 (完善了画布的功能)
 // 向聊天室广播消息
 function broadcastToRoom(roomId, message, senderUserId = null) {
   if (!chatRooms.has(roomId)) return;
   
   const messageStr = JSON.stringify(message);
   chatRooms.get(roomId).forEach(userId => {
-<<<<<<< HEAD
-    // 不向消息发送者发送消息
-    if (users.has(userId) && userId !== senderUserId) {
-=======
     // 移除不向发送者发送消息的限制
     if (users.has(userId)) {
->>>>>>> 136f446 (完善了画布的功能)
       users.get(userId).ws.send(messageStr);
     }
   });

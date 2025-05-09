@@ -4,13 +4,10 @@ const path = require('path');
 const { getClipboardHistory } = require('../clipboard');
 const agentApi = require('../agent/agentApi');
 const { connectToServer, sendMessage, disconnectFromServer, isConnected } = require('../chatroom/client');
-<<<<<<< HEAD
-=======
 const WebSocket = require('ws');
 const { DOMParser, XMLSerializer } = require('xmldom');
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
->>>>>>> 136f446 (完善了画布的功能)
 
 /**
  * 灵犀协作侧边栏视图提供者
@@ -27,8 +24,6 @@ class LingxiSidebarProvider {
         this._chatClient = null;
         this._userName = `User_${Date.now().toString().slice(-4)}`;
         this._roomId = 'default';
-<<<<<<< HEAD
-=======
         
         // 设置WebSocket消息处理
         this.setupWebSocketHandlers();
@@ -484,7 +479,6 @@ class LingxiSidebarProvider {
             console.error('拉取画布失败:', error);
             vscode.window.showErrorMessage(`拉取画布失败: ${error.message}`);
         }
->>>>>>> 136f446 (完善了画布的功能)
     }
 
     /**
@@ -871,99 +865,6 @@ class LingxiSidebarProvider {
                     break;
                 case 'showCanvasContextMenu':
                     this.showCanvasContextMenu(message.path, message.name);
-                    break;
-                case 'getClipboardHistory':
-                    this.sendClipboardHistory();
-                    break;
-                case 'getCanvasList':
-                    this.sendCanvasList();
-                    break;
-                case 'openCanvas':
-                    // 打开指定路径的画布文件
-                    if (message.path) {
-                        try {
-                            const uri = vscode.Uri.file(message.path);
-                            await vscode.commands.executeCommand('vscode.open', uri);
-                        } catch (error) {
-                            console.error('打开画布文件失败:', error);
-                        }
-                    }
-                    break;
-                case 'sendChatMessage':
-                    // 处理聊天消息
-                    if (message.message) {
-                        this.handleChatMessage(message.message);
-                    }
-                    break;
-                case 'startChatServer':
-                    // 启动聊天室服务器
-                    vscode.commands.executeCommand('lingxixiezuo.startChatServer');
-                    break;
-                case 'stopChatServer':
-                    // 停止聊天室服务器
-                    vscode.commands.executeCommand('lingxixiezuo.stopChatServer');
-                    break;
-                case 'connectToChatServer':
-                    // 连接到聊天室服务器
-                    this.connectToChatServer(message.port || 3000, message.ipAddress || 'localhost');
-                    break;
-                case 'disconnectFromChatServer':
-                    // 断开聊天室服务器连接
-                    this.disconnectFromChatServer();
-                    break;
-                case 'setUserName':
-                    // 设置用户名
-                    if (message.userName) {
-                        this._userName = message.userName;
-                    }
-                    break;
-                case 'agentQuery':
-                    // 处理Agent查询
-                    if (message.query) {
-                        this.handleAgentQuery(message.query, message.thinkingId);
-                    }
-                    break;
-                case 'updateApiKey': // 处理更新 API Key 的消息
-                    if (message.apiKey) {
-                        try {
-                            await context.secrets.store('lingxi.apiKey', message.apiKey);
-                            agentApi.updateConfig({ apiKey: message.apiKey }); // 更新 agentApi 配置
-                            vscode.window.showInformationMessage('智谱AI API Key 已保存。');
-                            // 通知 Webview 更新状态
-                            this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: true });
-                        } catch (error) {
-                            console.error('保存 API Key 失败:', error);
-                            vscode.window.showErrorMessage('保存 API Key 失败。');
-                        }
-                    }
-                    break;
-                case 'getApiKeyStatus': // 处理获取 API Key 状态的消息
-                    try {
-                        const apiKey = await context.secrets.get('lingxi.apiKey');
-                        this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: !!apiKey });
-                    } catch (error) {
-                        console.error('读取 API Key 状态失败:', error);
-                        this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: false });
-                    }
-                    break;
-                case 'copyToClipboard':
-                    // 复制文本到剪贴板
-                    if (message.text) {
-                        try {
-                            await vscode.env.clipboard.writeText(message.text);
-                            this._webviewView.webview.postMessage({
-                                command: 'clipboardCopyResult',
-                                success: true
-                            });
-                        } catch (error) {
-                            console.error('复制到剪贴板失败:', error);
-                            this._webviewView.webview.postMessage({
-                                command: 'clipboardCopyResult',
-                                success: false,
-                                error: error.message
-                            });
-                        }
-                    }
                     break;
             }
         });

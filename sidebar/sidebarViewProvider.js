@@ -643,7 +643,36 @@ class LingxiSidebarProvider {
         webviewView.webview.html = this.getHtmlForWebview();
         
         // 监听Webview消息
-        this.setupMessageListeners(this._context); // 将 context 传递下去
+        this.setupMessageListeners();
+
+        // 监听 webview 消息，实现 clipboardHistory 同步
+        webviewView.webview.onDidReceiveMessage(async (message) => {
+            if (message.type === 'getClipboardHistory') {
+                this.sendClipboardHistory();
+            } else if (message.command === 'switchTab') {
+                if (message.tabId === 'history') {
+                    // 切换到 History 标签页时刷新数据
+                    this.sendClipboardHistory();
+                } else if (message.tabId === 'canvas') {
+                    // 切换到 Canvas 标签页时加载画布列表
+                    this.sendCanvasList();
+                }
+                this.handleTabSwitch(message.tabId);
+            } else if (message.type === 'getCanvasList') {
+                // 响应画布列表请求
+                this.sendCanvasList();
+            } else if (message.command === 'openCanvas') {
+                // 打开指定路径的画布文件
+                if (message.path) {
+                    try {
+                        const uri = vscode.Uri.file(message.path);
+                        await vscode.commands.executeCommand('vscode.open', uri);
+                    } catch (error) {
+                        console.error('打开画布文件失败:', error);
+                    }
+                }
+            }
+        });
 
         // 初始加载时主动发送一次剪贴板历史
         setTimeout(() => {

@@ -6,6 +6,23 @@ const { exec } = require('child_process');
 const path = require('path');
 const agentApi = require('./agent/agentApi');
 const { startChatServer, stopChatServer, setSidebarProvider } = require('./chatroom/startServer');
+const { createAndOpenDrawio } = require('./createDrawio');
+
+/**
+ * 创建并打开Draw.io文件
+ * 创建一个新的.drawio文件并使用关联程序打开
+ * @param {string} [filePath] 可选的文件路径，如果不提供则在临时目录创建
+ * @returns {Promise<void>}
+ */
+async function createAndOpenDrawioCommand(filePath) {
+    try {
+        const createdFilePath = await createAndOpenDrawio(filePath);
+        vscode.window.showInformationMessage(`成功创建并打开Draw.io文件: ${createdFilePath}`);
+    } catch (error) {
+        console.error('创建或打开Draw.io文件失败:', error);
+        vscode.window.showErrorMessage(`创建或打开Draw.io文件失败: ${error.message}`);
+    }
+}
 
 /**
  * 激活插件时的回调函数
@@ -249,6 +266,10 @@ async function activate(context) {
             }
         })
     );
+    
+    // 注册创建并打开Drawio命令
+    console.log('注册命令: lingxixiezuo.createDrawio');
+    let createDrawioDisposable = vscode.commands.registerCommand('lingxixiezuo.createDrawio', createAndOpenDrawioCommand);
 
     context.subscriptions.push(
         copyTextDisposable,
@@ -258,7 +279,8 @@ async function activate(context) {
         pasteSmartDisposable,
         viewProvider,
         startChatServerDisposable,
-        stopChatServerDisposable
+        stopChatServerDisposable,
+        createDrawioDisposable
     );
     
     console.log('所有命令注册完成');

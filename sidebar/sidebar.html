@@ -1371,6 +1371,7 @@
                 document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
                 document.getElementById(tabId).classList.add('active');
                 
+                // 通知主进程标签切换
                 if (vscode) {
                     vscode.postMessage({
                         command: 'switchTab',
@@ -1378,6 +1379,7 @@
                     });
                 }
                 
+                // 如果切换到 history 标签，主动请求最新历史记录
                 if (tabId === 'history' && vscode) {
                     vscode.postMessage({ type: 'getClipboardHistory' });
                 }

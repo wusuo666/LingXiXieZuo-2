@@ -643,7 +643,14 @@ class LingxiSidebarProvider {
         webviewView.webview.html = this.getHtmlForWebview();
         
         // 监听Webview消息
-        this.setupMessageListeners();
+        this.setupMessageListeners(this._context);
+
+        // 初始化API配置并立即向前端发送状态
+        this.initializeApiConfiguration().then(() => {
+            // 已在initializeApiConfiguration中向前端传递状态
+        }).catch(error => {
+            console.error('初始化API配置失败:', error);
+        });
 
         // 监听 webview 消息，实现 clipboardHistory 同步
         webviewView.webview.onDidReceiveMessage(async (message) => {
@@ -673,13 +680,35 @@ class LingxiSidebarProvider {
                 }
             }
         });
+    }
 
-        // 初始加载时主动发送一次剪贴板历史
-        setTimeout(() => {
-            this.sendClipboardHistory();
-            // 同时请求 API Key 状态
-            this._webviewView.webview.postMessage({ command: 'getApiKeyStatus' });
-        }, 500);
+    /**
+     * 初始化API配置，从secrets加载已存储的API Keys
+     * @returns {Promise<void>}
+     */
+    async initializeApiConfiguration() {
+        try {
+            // 不再从secrets加载API Key，但仍保留状态通知功能
+            
+            // 显式通知前端智谱AI API Key未设置
+            if (this._webviewView) {
+                this._webviewView.webview.postMessage({ 
+                    command: 'apiKeyStatus', 
+                    isSet: false 
+                });
+            }
+            
+            // 显式通知前端DeepSeek API Key未设置
+            if (this._webviewView) {
+                this._webviewView.webview.postMessage({ 
+                    command: 'deepseekApiKeyStatus', 
+                    isSet: false 
+                });
+            }
+        } catch (error) {
+            console.error('初始化API配置失败:', error);
+            throw error; // 重新抛出错误以便上层捕获
+        }
     }
 
     /**
@@ -850,28 +879,92 @@ class LingxiSidebarProvider {
                         this.handleAgentQuery(message.query, message.thinkingId);
                     }
                     break;
-                case 'updateApiKey': // 处理更新 API Key 的消息
+                case 'saveApiKey': // 处理更新智谱API Key的消息
                     if (message.apiKey) {
                         try {
-                            await context.secrets.store('lingxi.apiKey', message.apiKey);
+                            // 不再持久化存储API Key到secrets
+                            // 只更新当前会话中的设置
                             agentApi.updateConfig({ apiKey: message.apiKey }); // 更新 agentApi 配置
-                            vscode.window.showInformationMessage('智谱AI API Key 已保存。');
+                            vscode.window.showInformationMessage('智谱AI API Key 已保存至当前会话。');
                             // 通知 Webview 更新状态
                             this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: true });
                         } catch (error) {
-                            console.error('保存 API Key 失败:', error);
-                            vscode.window.showErrorMessage('保存 API Key 失败。');
+                            console.error('保存智谱API Key 失败:', error);
+                            vscode.window.showErrorMessage('保存智谱AI API Key 失败。');
                         }
                     }
                     break;
-                case 'getApiKeyStatus': // 处理获取 API Key 状态的消息
-                    try {
-                        const apiKey = await context.secrets.get('lingxi.apiKey');
-                        this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: !!apiKey });
-                    } catch (error) {
-                        console.error('读取 API Key 状态失败:', error);
-                        this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: false });
+                case 'saveDeepSeekApiKey': // 处理更新DeepSeek API Key的消息
+                    if (message.apiKey) {
+                        try {
+                            // 不再持久化存储API Key到secrets
+                            // 只更新当前会话中的设置
+                            agentApi.updateConfig({ deepseekApiKey: message.apiKey }); // 更新 agentApi 配置
+                            vscode.window.showInformationMessage('DeepSeek API Key 已保存至当前会话。');
+                            // 通知 Webview 更新状态
+                            this._webviewView.webview.postMessage({ command: 'deepseekApiKeyStatus', isSet: true });
+                        } catch (error) {
+                            console.error('保存DeepSeek API Key 失败:', error);
+                            vscode.window.showErrorMessage('保存DeepSeek API Key 失败。');
+                        }
                     }
+                    break;
+                case 'setAIProvider': // 处理AI提供商切换
+                    if (message.provider) {
+                        try {
+                            // 更新提供商配置
+                            const updateConfig = { provider: message.provider };
+                            
+                            // 如果同时传入了model，一并更新
+                            if (message.model) {
+                                if (message.provider === 'zhipuai') {
+                                    updateConfig.model = message.model;
+                                } else if (message.provider === 'deepseek') {
+                                    updateConfig.deepseekModel = message.model;
+                                }
+                            }
+                            
+                            // 更新配置
+                            agentApi.updateConfig(updateConfig);
+                            console.log(`已切换AI提供商至: ${message.provider}，模型: ${message.model || '默认'}`);
+                            vscode.window.showInformationMessage(`已切换至${message.provider === 'zhipuai' ? '智谱AI' : 'DeepSeek'}模型。`);
+                        } catch (error) {
+                            console.error('切换AI提供商失败:', error);
+                            vscode.window.showErrorMessage('切换AI提供商失败。');
+                        }
+                    }
+                    break;
+                case 'setAIModel': // 处理智谱AI模型选择
+                    if (message.model) {
+                        try {
+                            agentApi.updateConfig({ model: message.model });
+                            console.log(`已切换智谱AI模型至: ${message.model}`);
+                            vscode.window.showInformationMessage(`已切换至智谱AI ${message.model} 模型。`);
+                        } catch (error) {
+                            console.error('更新智谱AI模型失败:', error);
+                            vscode.window.showErrorMessage('更新智谱AI模型失败。');
+                        }
+                    }
+                    break;
+                case 'setDeepSeekModel': // 处理DeepSeek模型选择
+                    if (message.model) {
+                        try {
+                            agentApi.updateConfig({ deepseekModel: message.model });
+                            console.log(`已切换DeepSeek模型至: ${message.model}`);
+                            vscode.window.showInformationMessage(`已切换至DeepSeek ${message.model} 模型。`);
+                        } catch (error) {
+                            console.error('更新DeepSeek模型失败:', error);
+                            vscode.window.showErrorMessage('更新DeepSeek模型失败。');
+                        }
+                    }
+                    break;
+                case 'getApiKeyStatus': // 处理获取智谱AI API Key 状态的消息
+                    // 每次启动时状态都是未设置
+                    this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: false });
+                    break;
+                case 'getDeepSeekApiKeyStatus': // 处理获取DeepSeek API Key 状态的消息
+                    // 每次启动时状态都是未设置
+                    this._webviewView.webview.postMessage({ command: 'deepseekApiKeyStatus', isSet: false });
                     break;
                 case 'copyToClipboard':
                     // 复制文本到剪贴板

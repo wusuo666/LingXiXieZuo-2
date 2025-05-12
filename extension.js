@@ -31,18 +31,8 @@ async function createAndOpenDrawioCommand(filePath) {
 async function activate(context) {
     console.log('灵犀协作插件已激活');
     
-    // 插件激活时，尝试从 secrets 加载 API Key 并更新 agentApi 配置
-    try {
-        const storedApiKey = await context.secrets.get('lingxi.apiKey');
-        if (storedApiKey) {
-            agentApi.updateConfig({ apiKey: storedApiKey });
-            console.log('已加载存储的 API Key。');
-        } else {
-            console.log('未找到存储的 API Key。');
-        }
-    } catch (error) {
-        console.error('加载 API Key 失败:', error);
-    }
+    // 不再从secrets加载API Key
+    console.log('注意: 此版本需要在每次启动后手动配置API Keys');
     
     // 输出调试信息，帮助诊断命令注册问题
     console.log('正在注册命令...');

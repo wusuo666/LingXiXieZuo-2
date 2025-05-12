@@ -168,28 +168,70 @@
                                     <div class="settings-group">
                                         <div class="settings-title">AI助手设置</div>
                                         <div class="settings-item">
-                                            <div class="settings-label">API Key</div>
-                                            <div class="settings-control api-key-control">
-                                                <input type="password" id="api-key-input" class="settings-input" placeholder="输入你的 ZhipuAI API Key">
-                                                <button id="save-api-key-btn" class="settings-button">保存</button>
-                                            </div>
-                                        </div>
-                                        <div class="settings-item">
-                                            <div class="settings-label">API Key 状态</div>
+                                            <div class="settings-label">AI提供商</div>
                                             <div class="settings-control">
-                                                <span id="api-key-status" class="api-key-status-text">未设置</span>
-                                            </div>
-                                        </div>
-                                        <div class="settings-item">
-                                            <div class="settings-label">AI模型</div>
-                                            <div class="settings-control">
-                                                <select class="settings-select">
-                                                    <option>glm-4</option>
-                                                    <option selected>glm-4-flash</option> 
-                                                    <option>glm-3-turbo</option>
+                                                <select id="ai-provider-select" class="settings-select">
+                                                    <option value="zhipuai">智谱AI</option>
+                                                    <option value="deepseek">DeepSeek</option>
                                                 </select>
                                             </div>
                                         </div>
+                                        
+                                        <div id="provider-settings-container">
+                                            <!-- 智谱AI设置 -->
+                                            <div id="zhipuai-settings" class="model-settings">
+                                                <div class="settings-item" id="zhipuai-container">
+                                                    <div class="settings-label">智谱AI API Key</div>
+                                                    <div class="settings-control api-key-control">
+                                                        <input type="password" id="zhipuai-api-key-input" class="settings-input" placeholder="输入你的 ZhipuAI API Key">
+                                                        <button id="save-zhipuai-api-key-btn" class="settings-button">保存</button>
+                                                    </div>
+                                                </div>
+                                                <div class="settings-item" id="zhipuai-status-container">
+                                                    <div class="settings-label">API Key 状态</div>
+                                                    <div class="settings-control">
+                                                        <span id="zhipuai-api-key-status" class="api-key-status-text">未设置</span>
+                                                    </div>
+                                                </div>
+                                                <div class="settings-item" id="zhipuai-model-container">
+                                                    <div class="settings-label">模型选择</div>
+                                                    <div class="settings-control">
+                                                        <select id="zhipuai-model-select" class="settings-select">
+                                                            <option value="glm-4-flash">GLM-4-flash (默认)</option>
+                                                            <option value="glm-4">GLM-4</option>
+                                                            <option value="glm-3-turbo">GLM-3-turbo</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- DeepSeek设置 -->
+                                            <div id="deepseek-settings" class="model-settings" style="display: none;">
+                                                <div class="settings-item" id="deepseek-container">
+                                                    <div class="settings-label">DeepSeek API Key</div>
+                                                    <div class="settings-control api-key-control">
+                                                        <input type="password" id="deepseek-api-key-input" class="settings-input" placeholder="输入你的 DeepSeek API Key">
+                                                        <button id="save-deepseek-api-key-btn" class="settings-button">保存</button>
+                                                    </div>
+                                                </div>
+                                                <div class="settings-item" id="deepseek-status-container">
+                                                    <div class="settings-label">API Key 状态</div>
+                                                    <div class="settings-control">
+                                                        <span id="deepseek-api-key-status" class="api-key-status-text">未设置</span>
+                                                    </div>
+                                                </div>
+                                                <div class="settings-item" id="deepseek-model-container">
+                                                    <div class="settings-label">模型选择</div>
+                                                    <div class="settings-control">
+                                                        <select id="deepseek-model-select" class="settings-select">
+                                                            <option value="deepseek-chat">DeepSeek Chat (默认)</option>
+                                                            <option value="deepseek-coder">DeepSeek Coder</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
                                         <div class="settings-item">
                                             <div class="settings-label">代码生成语言</div>
                                             <div class="settings-control">
@@ -560,7 +602,6 @@
             display: flex;
             flex-direction: column;
             min-height: 0;
-            overflow: hidden;
         }
         .canvas-container {
             flex: 1 1 auto;
@@ -1104,8 +1145,8 @@
             border-radius: 4px;
             padding: 6px 8px;
             font-size: 14px;
-            flex-grow: 1;
-            margin-right: 8px;
+            width: 100%;
+            box-sizing: border-box;
         }
         .settings-button {
             background: #3794ff;
@@ -1116,12 +1157,16 @@
             font-size: 13px;
             cursor: pointer;
             transition: background 0.2s;
+            align-self: flex-end;
         }
         .settings-button:hover {
             background: #2176c7;
         }
         .api-key-control {
-            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
         }
         .api-key-status-text {
             font-style: italic;
@@ -1358,6 +1403,31 @@
         .connection-actions .action-button:last-child {
             margin-right: 0;
         }
+        
+        .model-settings {
+            border-left: 2px solid #444;
+            margin-left: 10px;
+            padding-left: 10px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+        
+        /* 当侧边栏很窄时的样式 */
+        @media (max-width: 250px) {
+            .api-key-control {
+                flex-direction: column;
+                width: 100%;
+            }
+            .settings-input {
+                width: 100%;
+                margin-right: 0;
+                margin-bottom: 8px;
+            }
+            .settings-button {
+                width: auto;
+                align-self: flex-end;
+            }
+        }
     </style>
     
     <script>
@@ -1399,6 +1469,26 @@
         });
 
         const vscode = window.acquireVsCodeApi ? window.acquireVsCodeApi() : null;
+
+        // 初始化AI提供商显示/隐藏状态
+        document.addEventListener('DOMContentLoaded', function() {
+            const provider = document.getElementById('ai-provider-select').value;
+            
+            // 根据当前选择的提供商设置显示/隐藏状态
+            if (provider === 'zhipuai') {
+                document.getElementById('zhipuai-settings').style.display = 'block';
+                document.getElementById('deepseek-settings').style.display = 'none';
+            } else if (provider === 'deepseek') {
+                document.getElementById('zhipuai-settings').style.display = 'none';
+                document.getElementById('deepseek-settings').style.display = 'block';
+            }
+            
+            // 请求初始API Key状态
+            if (vscode) {
+                vscode.postMessage({ command: 'getApiKeyStatus' });
+                vscode.postMessage({ command: 'getDeepSeekApiKeyStatus' });
+            }
+        });
 
         document.getElementById('canvas-action-btn').addEventListener('click', function() {
             if (vscode) {
@@ -1948,7 +2038,7 @@
                 const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
                 const assistantMessageHtml = `
                     <div class="agent-message agent-message-assistant">
-                        <div class="agent-avatar">AI</div>
+                        <div class="agent-avatar">🤖</div>
                         <div class="agent-message-bubble">
                             <div class="agent-message-content">${formattedContent}</div>
                             <div class="agent-message-time">${time}</div>
@@ -1962,6 +2052,32 @@
             // 处理思考状态
             else if (message.command === 'agentThinking') {
                 // 这部分由上面的代码自动处理
+            }
+            // 处理智谱AI API Key状态
+            else if (message.command === 'apiKeyStatus') {
+                const statusElement = document.getElementById('zhipuai-api-key-status');
+                if (statusElement) {
+                    if (message.isSet) {
+                        statusElement.textContent = '已设置';
+                        statusElement.style.color = '#4CAF50';
+                    } else {
+                        statusElement.textContent = '未设置';
+                        statusElement.style.color = '#F44336';
+                    }
+                }
+            }
+            // 处理DeepSeek API Key状态
+            else if (message.command === 'deepseekApiKeyStatus') {
+                const statusElement = document.getElementById('deepseek-api-key-status');
+                if (statusElement) {
+                    if (message.isSet) {
+                        statusElement.textContent = '已设置';
+                        statusElement.style.color = '#4CAF50';
+                    } else {
+                        statusElement.textContent = '未设置';
+                        statusElement.style.color = '#F44336';
+                    }
+                }
             }
         });
 
@@ -2001,6 +2117,122 @@
             }
         `;
         document.head.appendChild(style);
+
+        // 保存API Key
+        document.getElementById('save-zhipuai-api-key-btn').addEventListener('click', function() {
+            const apiKey = document.getElementById('zhipuai-api-key-input').value.trim();
+            if (apiKey) {
+                // 发送保存请求到VSCode扩展
+                vscode.postMessage({
+                    command: 'saveApiKey',
+                    apiKey
+                });
+            } else {
+                document.getElementById('zhipuai-api-key-status').textContent = '请输入有效的API Key';
+                document.getElementById('zhipuai-api-key-status').style.color = '#ff0000';
+            }
+        });
+        
+        // 保存DeepSeek API Key
+        document.getElementById('save-deepseek-api-key-btn').addEventListener('click', function() {
+            const apiKey = document.getElementById('deepseek-api-key-input').value.trim();
+            if (apiKey) {
+                // 发送保存请求到VSCode扩展
+                vscode.postMessage({
+                    command: 'saveDeepSeekApiKey',
+                    apiKey
+                });
+            } else {
+                document.getElementById('deepseek-api-key-status').textContent = '请输入有效的API Key';
+                document.getElementById('deepseek-api-key-status').style.color = '#ff0000';
+            }
+        });
+        
+        // AI提供商切换处理
+        document.getElementById('ai-provider-select').addEventListener('change', function() {
+            const provider = this.value;
+            
+            // 根据选择的提供商显示/隐藏相关设置
+            if (provider === 'zhipuai') {
+                document.getElementById('zhipuai-settings').style.display = 'block';
+                document.getElementById('deepseek-settings').style.display = 'none';
+                
+                // 通过消息发送设置为智谱AI
+                const model = document.getElementById('zhipuai-model-select').value;
+                vscode.postMessage({
+                    command: 'setAIProvider',
+                    provider: 'zhipuai',
+                    model: model
+                });
+            } else if (provider === 'deepseek') {
+                document.getElementById('zhipuai-settings').style.display = 'none';
+                document.getElementById('deepseek-settings').style.display = 'block';
+                
+                // 通过消息发送设置为DeepSeek
+                const model = document.getElementById('deepseek-model-select').value;
+                vscode.postMessage({
+                    command: 'setAIProvider',
+                    provider: 'deepseek',
+                    model: model
+                });
+            }
+        });
+        
+        // 智谱AI模型选择处理
+        document.getElementById('zhipuai-model-select').addEventListener('change', function() {
+            const model = this.value;
+            vscode.postMessage({
+                command: 'setAIModel',
+                model
+            });
+        });
+        
+        // DeepSeek模型选择处理
+        document.getElementById('deepseek-model-select').addEventListener('change', function() {
+            const model = this.value;
+            vscode.postMessage({
+                command: 'setDeepSeekModel',
+                model
+            });
+        });
+
+        // 保存智谱AI API Key
+        document.getElementById('save-zhipuai-api-key-btn').addEventListener('click', function() {
+            const apiKey = document.getElementById('zhipuai-api-key-input').value.trim();
+            if (apiKey) {
+                // 发送保存请求到VSCode扩展
+                vscode.postMessage({
+                    command: 'saveApiKey',
+                    apiKey
+                });
+            } else {
+                document.getElementById('zhipuai-api-key-status').textContent = '请输入有效的API Key';
+                document.getElementById('zhipuai-api-key-status').style.color = '#ff0000';
+            }
+        });
+        
+        // 保存DeepSeek API Key
+        document.getElementById('save-deepseek-api-key-btn').addEventListener('click', function() {
+            const apiKey = document.getElementById('deepseek-api-key-input').value.trim();
+            if (apiKey) {
+                // 发送保存请求到VSCode扩展
+                vscode.postMessage({
+                    command: 'saveDeepSeekApiKey',
+                    apiKey
+                });
+            } else {
+                document.getElementById('deepseek-api-key-status').textContent = '请输入有效的API Key';
+                document.getElementById('deepseek-api-key-status').style.color = '#ff0000';
+            }
+        });
+
+        // 在vscode消息监听中添加调试信息
+        window.addEventListener('message', event => {
+            const message = event.data;
+            console.log('收到VSCode消息:', message);
+            
+            // 处理消息...
+        });
     </script>
 </body>
 </html>

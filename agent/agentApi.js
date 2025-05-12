@@ -320,6 +320,26 @@ async function handleAgentQuery(query) {
         console.log('OpenAI API Key是否已设置:', !!config.openaiApiKey);
     }
     
+    // 检查服务器连接和工具状态
+    console.log('服务器进程状态:', serverProcess ? '已连接' : '未连接');
+    console.log('可用工具数量:', availableTools ? availableTools.length : 0);
+    
+    // 如果服务器已连接但没有可用工具，尝试重新获取工具列表
+    if (serverProcess && rl && (!availableTools || availableTools.length === 0)) {
+        try {
+            console.log('尝试重新获取工具列表...');
+            const tools = await listTools();
+            if (tools && tools.length > 0) {
+                availableTools = tools;
+                console.log('成功获取工具列表，可用工具:', tools.map(tool => tool.name));
+            } else {
+                console.log('获取工具列表成功，但没有可用工具');
+            }
+        } catch (error) {
+            console.error('获取工具列表失败:', error);
+        }
+    }
+    
     try {
         if (config.provider === 'zhipuai') {
             // 使用智谱AI
@@ -365,16 +385,25 @@ async function handleAgentQuery(query) {
             }
             
             if (!openaiClient) {
-                openaiClient = initOpenAIClient();
+                try {
+                    openaiClient = initOpenAIClient();
+                    console.log('成功初始化OpenAI客户端');
+                } catch (error) {
+                    console.error('初始化OpenAI客户端失败:', error);
+                    return `初始化客户端失败: ${error.message}`;
+                }
             }
             
             const modelName = config.provider === 'deepseek' ? config.deepseekModel : config.model;
             console.log(`向${config.provider}发送请求，使用模型: ${modelName}`);
             
+            // 初始消息
             const messages = [{ role: 'user', content: query }];
             
             // 检查是否有可用的工具
             if (availableTools && availableTools.length > 0) {
+                console.log('有可用工具，数量:', availableTools.length);
+                
                 // 将工具转换为OpenAI工具格式
                 const tools = availableTools.map(tool => ({
                     type: 'function',
@@ -387,87 +416,96 @@ async function handleAgentQuery(query) {
                 
                 console.log('可用工具：', tools.map(t => t.function.name));
                 
-                // 第一步：调用模型决定是否调用工具
-                const response = await openaiClient.chat.completions.create({
-                    model: modelName,
-                    messages,
-                    tools: tools
-                });
-                
-                const content = response.choices[0];
-                
-                // 如果模型决定调用工具
-                if (content.finish_reason === 'tool_calls' && content.message.tool_calls) {
-                    const toolCall = content.message.tool_calls[0];
-                    const toolName = toolCall.function.name;
-                    let toolArgs;
-                    
-                    try {
-                        toolArgs = JSON.parse(toolCall.function.arguments);
-                    } catch (error) {
-                        console.error(`解析工具参数错误: ${error.message}`);
-                        return `解析工具参数时出错: ${error.message}`;
-                    }
-                    
-                    console.log(`调用工具: ${toolName}, 参数:`, toolArgs);
-                    
-                    // 执行工具调用
-                    let result;
-                    try {
-                        result = await callTool(toolName, toolArgs);
-                        console.log('工具调用结果:', result);
-                    } catch (error) {
-                        console.error(`工具调用错误: ${error.message}`);
-                        result = { content: [{ type: 'text', text: `工具调用失败: ${error.message}` }] };
-                    }
-                    
-                    // 将模型返回和工具执行结果存入messages
-                    messages.push({
-                        role: 'assistant',
-                        content: null,
-                        tool_calls: [{
-                            id: toolCall.id,
-                            type: 'function',
-                            function: {
-                                name: toolName,
-                                arguments: JSON.stringify(toolArgs)
-                            }
-                        }]
+                try {
+                    // 第一步：调用模型获取工具调用意图
+                    console.log('第一次调用模型，判断是否需要使用工具');
+                    const response = await openaiClient.chat.completions.create({
+                        model: modelName,
+                        messages,
+                        tools
                     });
                     
-                    messages.push({
-                        role: 'tool',
-                        content: result.content?.[0]?.text || '工具未返回任何内容',
-                        tool_call_id: toolCall.id
-                    });
+                    const assistantMessage = response.choices[0].message;
+                    console.log('模型回复类型:', response.choices[0].finish_reason);
                     
-                    // 第二步：将结果返回给大模型生成最终回答
-                    try {
-                        const finalResponse = await openaiClient.chat.completions.create({
-                            model: modelName,
-                            messages
-                        });
+                    // 添加模型回复到消息列表
+                    messages.push(assistantMessage);
+                    
+                    // 检查是否有工具调用
+                    if (response.choices[0].finish_reason === 'tool_calls' && assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+                        console.log('模型选择调用工具');
                         
-                        return finalResponse.choices[0].message.content;
-                    } catch (error) {
-                        console.error(`最终响应错误: ${error.message}`);
-                        return `生成最终回答时出错: ${error.message}`;
+                        // 处理每个工具调用
+                        for (const toolCall of assistantMessage.tool_calls) {
+                            const toolName = toolCall.function.name;
+                            let toolArgs;
+                            
+                            try {
+                                toolArgs = JSON.parse(toolCall.function.arguments);
+                            } catch (error) {
+                                console.error(`解析工具参数错误: ${error.message}`);
+                                return `解析工具参数时出错: ${error.message}`;
+                            }
+                            
+                            console.log(`调用工具: ${toolName}, 参数:`, toolArgs);
+                            
+                            // 执行工具调用
+                            let result;
+                            try {
+                                result = await callTool(toolName, toolArgs);
+                                console.log('工具调用结果:', result);
+                            } catch (error) {
+                                console.error(`工具调用错误: ${error.message}`);
+                                result = { content: [{ type: 'text', text: `工具调用失败: ${error.message}` }] };
+                            }
+                            
+                            // 添加工具结果到消息列表
+                            messages.push({
+                                role: 'tool',
+                                tool_call_id: toolCall.id,
+                                content: result.content?.[0]?.text || '工具未返回任何内容'
+                            });
+                        }
+                        
+                        // 第二步：将结果返回给大模型生成最终回答
+                        console.log('第二次调用模型，生成最终回答');
+                        try {
+                            const finalResponse = await openaiClient.chat.completions.create({
+                                model: modelName,
+                                messages
+                            });
+                            
+                            return finalResponse.choices[0].message.content;
+                        } catch (error) {
+                            console.error(`最终响应错误: ${error.message}`);
+                            return `生成最终回答时出错: ${error.message}`;
+                        }
+                    } else {
+                        // 模型直接回答，没有调用工具
+                        console.log('模型直接回答，没有调用工具');
+                        return assistantMessage.content;
                     }
+                } catch (error) {
+                    console.error('调用模型错误:', error);
+                    return `调用模型时出错: ${error.message}`;
                 }
-                
-                // 如果模型直接回答没有调用工具
-                return content.message.content;
             } else {
+                console.log('没有可用工具，直接调用大模型');
                 // 没有可用工具，直接调用大模型
-                const completion = await openaiClient.chat.completions.create({
-                    messages: [
-                        { role: "system", content: "你是一位专业的编程助手，擅长回答编程相关问题和解释代码。" },
-                        { role: "user", content: query }
-                    ],
-                    model: modelName,
-                });
-                
-                return completion.choices[0].message.content;
+                try {
+                    const completion = await openaiClient.chat.completions.create({
+                        messages: [
+                            { role: "system", content: "你是一位专业的编程助手，擅长回答编程相关问题和解释代码。" },
+                            { role: "user", content: query }
+                        ],
+                        model: modelName,
+                    });
+                    
+                    return completion.choices[0].message.content;
+                } catch (error) {
+                    console.error('调用模型错误:', error);
+                    return `调用模型时出错: ${error.message}`;
+                }
             }
         } else {
             throw new Error(`不支持的AI提供商: ${config.provider}`);
@@ -507,5 +545,7 @@ module.exports = {
     handleAgentQuery,
     clearApiKeys,
     connectToServer,
-    cleanup
+    cleanup,
+    listTools,  // 导出获取工具列表的函数
+    callTool    // 导出调用工具的函数
 };

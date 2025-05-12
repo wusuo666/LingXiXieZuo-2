@@ -1,9 +1,9 @@
 import axios from 'axios';
-import dotenv from 'dotenv';
+// import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 
-// 加载环境变量
-dotenv.config();
+// 注释掉环境变量加载
+// dotenv.config();
 
 /**
  * MCP 服务器类，管理JSON-RPC通信和工具
@@ -219,17 +219,18 @@ const mcp = new FastMCP('WeatherServer');
 
 // OpenWeather API配置
 const OPENWEATHER_API_BASE = 'https://api.openweathermap.org/data/2.5/weather';
-const API_KEY = process.env.OPENWEATHER_API_KEY || 'a44caf262fdf751fca4d1a6b5ca10bc8'; // 使用环境变量或默认值
+// 直接使用默认API密钥，不再从环境变量获取
+const API_KEY = 'a44caf262fdf751fca4d1a6b5ca10bc8'; 
 const USER_AGENT = 'weather-app/1.0';
 
 /**
  * 从OpenWeather API获取天气信息
  * @param {string} city - 城市名称（需使用英文，如Beijing）
- * @returns {Promise<object|null>} 天气数据字典；若出错返回包含error信息的字典
+ * @returns {Promise<object>} 天气数据对象；若出错返回包含error信息的对象
  */
 async function fetchWeather(city) {
   // 记录请求信息到标准错误流
-  console.error(`请求天气数据，城市: ${city}，API密钥: ${API_KEY.substring(0, 4)}...`);
+  console.error(`请求天气数据，城市: ${city}`);
   
   const params = {
     q: city,
@@ -243,20 +244,31 @@ async function fetchWeather(city) {
   };
   
   try {
+    // 使用axios发送GET请求，设置更短的超时时间
     const response = await axios.get(OPENWEATHER_API_BASE, { 
       params, 
       headers, 
-      timeout: 30000
+      timeout: 10000 // 10秒超时
     });
+    
     console.error(`API响应状态码: ${response.status}`);
     return response.data;
   } catch (error) {
-    console.error(`API请求错误:`, error.message);
+    console.error(`API请求错误: ${error.message}`);
+    
+    // 处理不同类型的错误
     if (error.response) {
+      // 服务器返回了错误状态码
       console.error(`HTTP状态码: ${error.response.status}`);
       return { error: `HTTP错误: ${error.response.status}` };
+    } else if (error.request) {
+      // 请求已发送但没有收到响应（可能是超时）
+      console.error('没有收到响应，可能超时');
+      return { error: '请求超时，未收到响应' };
+    } else {
+      // 请求设置时出现问题
+      return { error: `请求失败: ${error.message}` };
     }
-    return { error: `请求失败: ${error.message}` };
   }
 }
 
@@ -280,14 +292,14 @@ function formatWeather(data) {
     return `⚠️ ${data.error}`;
   }
   
-  // 提取数据时做容错处理
+  // 提取数据时做容错处理（与Python版本保持一致的逻辑）
   const city = data.name || '未知';
   const country = data.sys?.country || '未知';
   const temp = data.main?.temp ?? 'N/A';
   const humidity = data.main?.humidity ?? 'N/A';
   const windSpeed = data.wind?.speed ?? 'N/A';
-  const weatherList = data.weather || [{}];
-  const description = weatherList[0].description || '未知';
+  const weatherList = data.weather || [];
+  const description = weatherList.length > 0 ? weatherList[0].description || '未知' : '未知';
   
   return (
     `🌍 ${city}, ${country}\n` +
@@ -299,43 +311,19 @@ function formatWeather(data) {
 }
 
 /**
- * 查询指定城市的天气
- * @param {string} city - 城市名称（需使用英文）
- * @returns {Promise<string>} 格式化后的天气信息
+ * 查询指定城市的天气信息
+ * @param {string} city - 城市名称（需使用英文，如Beijing）
+ * @returns {Promise<string>} 格式化后的天气信息字符串
  */
 async function queryWeather(city) {
-  // 使用stderr而不是stdout进行调试
-  console.error(`查询城市天气: ${city}`);
-  
-  // 参数验证
-  if (!city) {
-    return "错误: 未提供城市名称，请指定要查询天气的城市";
-  }
-  
-  try {
-    // 尝试自动将中文城市名转换为英文（简单处理常见城市）
-    const cityMapping = {
-      '北京': 'Beijing',
-      '上海': 'Shanghai',
-      '广州': 'Guangzhou',
-      '深圳': 'Shenzhen',
-      '香港': 'Hong Kong',
-      '台北': 'Taipei',
-      '东京': 'Tokyo',
-      '首尔': 'Seoul',
-      '纽约': 'New York'
-    };
-    
-    const queryCity = cityMapping[city] || city;
-    console.error(`使用城市名称查询: ${queryCity}`);
-    
-    const data = await fetchWeather(queryCity);
-    return formatWeather(data);
-  } catch (error) {
-    console.error(`天气查询错误: ${error.message}`);
-    return `查询天气时出错: ${error.message}`;
-  }
+  console.error(`开始查询天气，城市: ${city}`);
+  const data = await fetchWeather(city);
+  console.error(`已获取天气数据，正在格式化`);
+  const result = formatWeather(data);
+  console.error(`天气查询完成`);
+  return result;
 }
+
 // 添加函数描述，用于MCP工具注册
 queryWeather.description = '输入指定城市的英文名称，返回今日天气查询结果';
 

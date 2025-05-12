@@ -966,6 +966,57 @@ class LingxiSidebarProvider {
                     // 每次启动时状态都是未设置
                     this._webviewView.webview.postMessage({ command: 'deepseekApiKeyStatus', isSet: false });
                     break;
+                case 'toggleMcpServer': // 处理MCP服务器启用/禁用
+                    if (message.isEnabled) {
+                        try {
+                            // 使用扩展上下文路径找到服务器脚本
+                            // 构建服务器脚本的绝对路径
+                            const serverPath = path.join(this._context.extensionPath, 'agent', message.serverPath || 'server.js');
+                            
+                            console.log(`正在启动MCP服务器，脚本路径: ${serverPath}`);
+                            
+                            // 检查文件是否存在
+                            if (!fs.existsSync(serverPath)) {
+                                throw new Error(`服务器脚本文件不存在: ${serverPath}`);
+                            }
+                            
+                            // 启动MCP服务器
+                            await agentApi.connectToServer(serverPath);
+                            
+                            // 通知前端更新状态
+                            this._webviewView.webview.postMessage({ 
+                                command: 'mcpServerStatus', 
+                                status: '运行中'
+                            });
+                            
+                            vscode.window.showInformationMessage('MCP服务器已启动');
+                        } catch (error) {
+                            console.error('启动MCP服务器失败:', error);
+                            this._webviewView.webview.postMessage({ 
+                                command: 'mcpServerStatus', 
+                                status: '启动失败'
+                            });
+                            vscode.window.showErrorMessage(`启动MCP服务器失败: ${error.message}`);
+                        }
+                    } else {
+                        try {
+                            // 停止MCP服务器
+                            console.log('正在停止MCP服务器');
+                            agentApi.cleanup();
+                            
+                            // 通知前端更新状态
+                            this._webviewView.webview.postMessage({ 
+                                command: 'mcpServerStatus', 
+                                status: '已停止'
+                            });
+                            
+                            vscode.window.showInformationMessage('MCP服务器已停止');
+                        } catch (error) {
+                            console.error('停止MCP服务器失败:', error);
+                            vscode.window.showErrorMessage(`停止MCP服务器失败: ${error.message}`);
+                        }
+                    }
+                    break;
                 case 'copyToClipboard':
                     // 复制文本到剪贴板
                     if (message.text) {

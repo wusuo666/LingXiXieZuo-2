@@ -165,6 +165,28 @@
                                             </div>
                                         </div>
                                     </div>
+                                    
+                                    <!-- 添加MCP服务设置 -->
+                                    <div class="settings-group">
+                                        <div class="settings-title">MCP服务</div>
+                                        <div class="settings-item">
+                                            <div class="settings-label">启用MCP服务器</div>
+                                            <div class="settings-control">
+                                                <label class="switch">
+                                                    <input type="checkbox" id="enable-mcp-server">
+                                                    <span class="slider round"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="settings-item" id="mcp-server-status-container">
+                                            <div class="settings-label">服务器状态</div>
+                                            <div class="settings-control">
+                                                <span id="mcp-server-status" class="api-key-status-text">未启动</span>
+                                            </div>
+                                        </div>
+                                        <!-- 移除服务器路径输入框 -->
+                                    </div>
+                                    
                                     <div class="settings-group">
                                         <div class="settings-title">AI助手设置</div>
                                         <div class="settings-item">
@@ -1483,10 +1505,16 @@
                 document.getElementById('deepseek-settings').style.display = 'block';
             }
             
-            // 请求初始API Key状态
+            // 初始加载时请求 API Key 状态
             if (vscode) {
                 vscode.postMessage({ command: 'getApiKeyStatus' });
                 vscode.postMessage({ command: 'getDeepSeekApiKeyStatus' });
+                vscode.postMessage({ command: 'getMcpServerStatus' }); // 获取MCP服务器状态
+            }
+            
+            // 处理浏览器直接打开的情况（开发测试用）
+            if (typeof vscode === 'undefined') {
+                console.warn('未在VS Code环境中运行，部分功能可能不可用。');
             }
         });
 
@@ -2232,6 +2260,54 @@
             console.log('收到VSCode消息:', message);
             
             // 处理消息...
+        });
+
+        // MCP服务器相关事件处理
+        document.getElementById('enable-mcp-server').addEventListener('change', function() {
+            const isEnabled = this.checked;
+            // 只指定文件名，让后端计算完整路径
+            const serverPath = 'server.js';
+            
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'toggleMcpServer',
+                    isEnabled: isEnabled,
+                    serverPath: serverPath
+                });
+                
+                const statusElement = document.getElementById('mcp-server-status');
+                if (isEnabled) {
+                    statusElement.textContent = '正在启动...';
+                    statusElement.style.color = '#FFA500'; // 橙色表示正在启动
+                } else {
+                    statusElement.textContent = '已停止';
+                    statusElement.style.color = '#aaa'; // 灰色表示已停止
+                }
+            }
+        });
+        
+        // 监听来自扩展的MCP服务器状态更新消息
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.command === 'mcpServerStatus') {
+                const statusElement = document.getElementById('mcp-server-status');
+                const toggleSwitch = document.getElementById('enable-mcp-server');
+                
+                // 更新状态显示
+                statusElement.textContent = message.status;
+                
+                // 根据状态设置颜色
+                if (message.status === '运行中') {
+                    statusElement.style.color = '#4CAF50'; // 绿色表示运行中
+                    toggleSwitch.checked = true;
+                } else if (message.status === '已停止') {
+                    statusElement.style.color = '#aaa'; // 灰色表示已停止
+                    toggleSwitch.checked = false;
+                } else if (message.status === '启动失败') {
+                    statusElement.style.color = '#f44336'; // 红色表示失败
+                    toggleSwitch.checked = false;
+                }
+            }
         });
     </script>
 </body>

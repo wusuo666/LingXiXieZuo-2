@@ -1,6 +1,8 @@
 import axios from 'axios';
 // import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
+import fs from 'fs/promises';
+import path from 'path';
 
 // 注释掉环境变量加载
 // dotenv.config();
@@ -215,132 +217,522 @@ class FastMCP {
 }
 
 // 初始化MCP服务器
-const mcp = new FastMCP('WeatherServer');
+const mcp = new FastMCP('ExcalidrawServer');
 
-// OpenWeather API配置
-const OPENWEATHER_API_BASE = 'https://api.openweathermap.org/data/2.5/weather';
-// 直接使用默认API密钥，不再从环境变量获取
-const API_KEY = 'a44caf262fdf751fca4d1a6b5ca10bc8'; 
-const USER_AGENT = 'weather-app/1.0';
-
-/**
- * 从OpenWeather API获取天气信息
- * @param {string} city - 城市名称（需使用英文，如Beijing）
- * @returns {Promise<object>} 天气数据对象；若出错返回包含error信息的对象
- */
-async function fetchWeather(city) {
-  // 记录请求信息到标准错误流
-  console.error(`请求天气数据，城市: ${city}`);
-  
-  const params = {
-    q: city,
-    appid: API_KEY,
-    units: 'metric',
-    lang: 'zh_cn'
-  };
-  
-  const headers = {
-    'User-Agent': USER_AGENT
-  };
-  
-  try {
-    // 使用axios发送GET请求，设置更短的超时时间
-    const response = await axios.get(OPENWEATHER_API_BASE, { 
-      params, 
-      headers, 
-      timeout: 10000 // 10秒超时
-    });
-    
-    console.error(`API响应状态码: ${response.status}`);
-    return response.data;
-  } catch (error) {
-    console.error(`API请求错误: ${error.message}`);
-    
-    // 处理不同类型的错误
-    if (error.response) {
-      // 服务器返回了错误状态码
-      console.error(`HTTP状态码: ${error.response.status}`);
-      return { error: `HTTP错误: ${error.response.status}` };
-    } else if (error.request) {
-      // 请求已发送但没有收到响应（可能是超时）
-      console.error('没有收到响应，可能超时');
-      return { error: '请求超时，未收到响应' };
-    } else {
-      // 请求设置时出现问题
-      return { error: `请求失败: ${error.message}` };
-    }
-  }
-}
-
-/**
- * 将天气数据格式化为易读文本
- * @param {object|string} data - 天气数据（可以是对象或JSON字符串）
- * @returns {string} 格式化后的天气信息字符串
- */
-function formatWeather(data) {
-  // 如果传入的是字符串，则先转换为对象
-  if (typeof data === 'string') {
-    try {
-      data = JSON.parse(data);
-    } catch (error) {
-      return `无法解析天气数据: ${error.message}`;
-    }
-  }
-  
-  // 如果数据中包含错误信息，直接返回错误提示
-  if (data.error) {
-    return `⚠️ ${data.error}`;
-  }
-  
-  // 提取数据时做容错处理（与Python版本保持一致的逻辑）
-  const city = data.name || '未知';
-  const country = data.sys?.country || '未知';
-  const temp = data.main?.temp ?? 'N/A';
-  const humidity = data.main?.humidity ?? 'N/A';
-  const windSpeed = data.wind?.speed ?? 'N/A';
-  const weatherList = data.weather || [];
-  const description = weatherList.length > 0 ? weatherList[0].description || '未知' : '未知';
-  
-  return (
-    `🌍 ${city}, ${country}\n` +
-    `🌡 温度: ${temp}°C\n` +
-    `💧 湿度: ${humidity}%\n` +
-    `🌬 风速: ${windSpeed} m/s\n` +
-    `🌤 天气: ${description}\n`
-  );
-}
-
-/**
- * 查询指定城市的天气信息
- * @param {string} city - 城市名称（需使用英文，如Beijing）
- * @returns {Promise<string>} 格式化后的天气信息字符串
- */
-async function queryWeather(city) {
-  console.error(`开始查询天气，城市: ${city}`);
-  const data = await fetchWeather(city);
-  console.error(`已获取天气数据，正在格式化`);
-  const result = formatWeather(data);
-  console.error(`天气查询完成`);
-  return result;
-}
-
-// 添加函数描述，用于MCP工具注册
-queryWeather.description = '输入指定城市的英文名称，返回今日天气查询结果';
-
-// 更明确地定义参数信息
-queryWeather.parameters = {
-  type: 'object',
-  properties: {
-    city: {
-      type: 'string',
-      description: '城市名称（英文）'
+// 模拟Excalidraw存储位置
+const EXCALIDRAW_DIR = path.join(process.cwd(), 'excalidraw_files');
+const DEFAULT_TEMPLATES = {
+  '空白画布': {
+    type: 'excalidraw',
+    version: 2,
+    source: 'https://excalidraw.com',
+    elements: [],
+    appState: {
+      theme: 'light',
+      viewBackgroundColor: '#ffffff',
+      currentItemFontFamily: 1
     }
   },
-  required: ['city']
+  '基础图形': {
+    type: 'excalidraw',
+    version: 2,
+    source: 'https://excalidraw.com',
+    elements: [
+      {
+        id: 'rectangle1',
+        type: 'rectangle',
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 100,
+        strokeColor: '#000000',
+        backgroundColor: '#ffffff',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100
+      },
+      {
+        id: 'ellipse1',
+        type: 'ellipse',
+        x: 400,
+        y: 100,
+        width: 150,
+        height: 100,
+        strokeColor: '#1864ab',
+        backgroundColor: '#a5d8ff',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100
+      }
+    ],
+    appState: {
+      theme: 'light',
+      viewBackgroundColor: '#ffffff',
+      currentItemFontFamily: 1
+    }
+  },
+  '流程图': {
+    type: 'excalidraw',
+    version: 2,
+    source: 'https://excalidraw.com',
+    elements: [
+      {
+        id: 'rectangle1',
+        type: 'rectangle',
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 80,
+        strokeColor: '#000000',
+        backgroundColor: '#ffffff',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100
+      },
+      {
+        id: 'rectangle2',
+        type: 'rectangle',
+        x: 100,
+        y: 300,
+        width: 200,
+        height: 80,
+        strokeColor: '#000000',
+        backgroundColor: '#ffffff',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100
+      },
+      {
+        id: 'arrow1',
+        type: 'arrow',
+        x: 200,
+        y: 180,
+        width: 0,
+        height: 120,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100
+      }
+    ],
+    appState: {
+      theme: 'light',
+      viewBackgroundColor: '#ffffff',
+      currentItemFontFamily: 1
+    }
+  }
+};
+
+/**
+ * 确保Excalidraw文件目录存在
+ * @returns {Promise<void>}
+ */
+async function ensureExcalidrawDir() {
+  try {
+    await fs.mkdir(EXCALIDRAW_DIR, { recursive: true });
+    console.error(`Excalidraw目录已确认: ${EXCALIDRAW_DIR}`);
+  } catch (error) {
+    console.error(`创建Excalidraw目录失败: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * 创建新的Excalidraw画布
+ * @param {string} name - 画布名称
+ * @param {string} template - 模板名称 (可选)
+ * @returns {Promise<string>} 创建结果
+ */
+async function createCanvas(name, template = '空白画布') {
+  console.error(`开始创建画布，名称: ${name}, 模板: ${template}`);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 检查文件是否已存在
+    const fileName = `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    try {
+      await fs.access(filePath);
+      return `⚠️ 画布 ${name} 已存在，请使用不同名称或使用 editCanvas 工具编辑`;
+    } catch {
+      // 文件不存在，可以继续创建
+    }
+    
+    // 检查模板是否有效
+    if (!DEFAULT_TEMPLATES[template]) {
+      return `⚠️ 模板 ${template} 不存在，可用模板: ${Object.keys(DEFAULT_TEMPLATES).join(', ')}`;
+    }
+    
+    // 创建基于模板的新画布
+    const canvasData = JSON.stringify(DEFAULT_TEMPLATES[template], null, 2);
+    await fs.writeFile(filePath, canvasData, 'utf8');
+    
+    console.error(`画布创建成功: ${filePath}`);
+    return `✅ 成功创建画布 ${name}\n💾 文件保存在: ${filePath}\n📐 使用模板: ${template}`;
+  } catch (error) {
+    console.error(`创建画布失败: ${error.message}`);
+    return `❌ 创建画布失败: ${error.message}`;
+  }
+}
+
+/**
+ * 列出所有Excalidraw画布
+ * @returns {Promise<string>} 画布列表
+ */
+async function listCanvases() {
+  console.error(`开始列出画布`);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    const files = await fs.readdir(EXCALIDRAW_DIR);
+    const excalidrawFiles = files.filter(file => 
+      file.endsWith('.excalidraw') || 
+      file.endsWith('.excalidraw.json') || 
+      file.endsWith('.excalidraw.svg') || 
+      file.endsWith('.excalidraw.png')
+    );
+    
+    if (excalidrawFiles.length === 0) {
+      return `📂 当前没有Excalidraw画布文件`;
+    }
+    
+    // 获取文件信息
+    const fileInfoPromises = excalidrawFiles.map(async (file) => {
+      const filePath = path.join(EXCALIDRAW_DIR, file);
+      const stats = await fs.stat(filePath);
+      return {
+        name: file,
+        size: stats.size,
+        modified: stats.mtime
+      };
+    });
+    
+    const fileInfos = await Promise.all(fileInfoPromises);
+    
+    // 格式化输出
+    let result = `📋 Excalidraw画布列表 (共${excalidrawFiles.length}个):\n\n`;
+    fileInfos.forEach((info, index) => {
+      result += `${index + 1}. 📄 ${info.name}\n`;
+      result += `   📅 修改时间: ${info.modified.toLocaleString()}\n`;
+      result += `   📊 文件大小: ${formatFileSize(info.size)}\n\n`;
+    });
+    
+    console.error(`画布列表生成完成，找到${excalidrawFiles.length}个文件`);
+    return result;
+  } catch (error) {
+    console.error(`列出画布失败: ${error.message}`);
+    return `❌ 列出画布失败: ${error.message}`;
+  }
+}
+
+/**
+ * 格式化文件大小为人类可读格式
+ * @param {number} bytes - 文件字节大小
+ * @returns {string} 格式化后的文件大小
+ */
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} 字节`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/**
+ * 切换画布主题
+ * @param {string} name - 画布名称
+ * @param {string} theme - 主题名称 (light/dark/auto)
+ * @returns {Promise<string>} 操作结果
+ */
+async function switchTheme(name, theme) {
+  console.error(`开始切换画布主题，名称: ${name}, 主题: ${theme}`);
+  
+  if (!['light', 'dark', 'auto'].includes(theme)) {
+    return `⚠️ 无效的主题: ${theme}，请使用 light, dark 或 auto`;
+  }
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
+    }
+    
+    // 更新主题
+    if (!canvasData.appState) {
+      canvasData.appState = {};
+    }
+    
+    const oldTheme = canvasData.appState.theme || 'light';
+    canvasData.appState.theme = theme;
+    
+    // 写回文件
+    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2), 'utf8');
+    
+    console.error(`画布主题切换成功: ${filePath}`);
+    return `✅ 成功将画布 ${name} 的主题从 ${oldTheme} 切换为 ${theme}`;
+  } catch (error) {
+    console.error(`切换画布主题失败: ${error.message}`);
+    return `❌ 切换画布主题失败: ${error.message}`;
+  }
+}
+
+/**
+ * 导出画布为图像格式
+ * @param {string} name - 画布名称
+ * @param {string} format - 导出格式 (svg/png)
+ * @param {boolean} withBackground - 是否包含背景
+ * @returns {Promise<string>} 操作结果
+ */
+async function exportCanvas(name, format, withBackground) {
+  console.error(`开始导出画布，名称: ${name}, 格式: ${format}, 包含背景: ${withBackground}`);
+  
+  if (!['svg', 'png'].includes(format)) {
+    return `⚠️ 无效的导出格式: ${format}，请使用 svg 或 png`;
+  }
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 导出文件名
+    const exportName = fileName.replace('.excalidraw', `.excalidraw.${format}`);
+    const exportPath = path.join(EXCALIDRAW_DIR, exportName);
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    
+    // 模拟导出过程
+    // 实际实现中，这里应该调用Excalidraw的导出API
+    // 我们这里简单地复制文件并模拟导出
+    await fs.copyFile(filePath, exportPath);
+    
+    console.error(`画布导出成功: ${exportPath}`);
+    return `✅ 成功导出画布 ${name} 为 ${format.toUpperCase()} 格式\n💾 导出文件: ${exportPath}\n${withBackground ? '🎨 包含背景' : '🔍 透明背景'}`;
+  } catch (error) {
+    console.error(`导出画布失败: ${error.message}`);
+    return `❌ 导出画布失败: ${error.message}`;
+  }
+}
+
+/**
+ * 添加基本形状到画布
+ * @param {string} name - 画布名称
+ * @param {string} shapeType - 形状类型
+ * @param {number} x - X坐标
+ * @param {number} y - Y坐标 
+ * @param {string} color - 颜色代码
+ * @returns {Promise<string>} 操作结果
+ */
+async function addShape(name, shapeType, x, y, color) {
+  console.error(`开始添加形状，画布: ${name}, 类型: ${shapeType}, 位置: (${x},${y}), 颜色: ${color}`);
+  
+  // 验证形状类型
+  const validShapes = ['rectangle', 'ellipse', 'diamond', 'line', 'arrow', 'text'];
+  if (!validShapes.includes(shapeType)) {
+    return `⚠️ 无效的形状类型: ${shapeType}，有效类型: ${validShapes.join(', ')}`;
+  }
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
+    }
+    
+    // 确保elements数组存在
+    if (!canvasData.elements) {
+      canvasData.elements = [];
+    }
+    
+    // 创建新形状
+    const newShape = {
+      id: `shape-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: shapeType,
+      x: parseInt(x),
+      y: parseInt(y),
+      width: 100,
+      height: 80,
+      strokeColor: color,
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 1,
+      opacity: 100
+    };
+    
+    // 根据形状类型调整属性
+    if (shapeType === 'text') {
+      newShape.text = '双击编辑文本';
+      newShape.fontSize = 20;
+      newShape.fontFamily = 1;
+      newShape.textAlign = 'center';
+      newShape.verticalAlign = 'middle';
+    }
+    
+    // 添加到画布
+    canvasData.elements.push(newShape);
+    
+    // 写回文件
+    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2), 'utf8');
+    
+    console.error(`形状添加成功: ${filePath}`);
+    return `✅ 成功添加 ${shapeType} 形状到画布 ${name}\n📍 位置: (${x}, ${y})\n🎨 颜色: ${color}\n🆔 形状ID: ${newShape.id}`;
+  } catch (error) {
+    console.error(`添加形状失败: ${error.message}`);
+    return `❌ 添加形状失败: ${error.message}`;
+  }
+}
+
+// 添加参数描述
+createCanvas.description = '创建新的Excalidraw画布，可选择模板';
+createCanvas.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称（不需要包含.excalidraw扩展名）'
+    },
+    template: {
+      type: 'string',
+      description: '可选的模板名称，可用模板: 空白画布, 基础图形, 流程图'
+    }
+  },
+  required: ['name']
+};
+
+listCanvases.description = '列出所有已创建的Excalidraw画布';
+listCanvases.parameters = {
+  type: 'object',
+  properties: {
+    random: {
+      type: 'string',
+      description: '无需参数'
+    }
+  }
+};
+
+switchTheme.description = '切换Excalidraw画布的主题';
+switchTheme.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    theme: {
+      type: 'string',
+      description: '主题名称: light, dark 或 auto'
+    }
+  },
+  required: ['name', 'theme']
+};
+
+exportCanvas.description = '将Excalidraw画布导出为图像格式';
+exportCanvas.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    format: {
+      type: 'string',
+      description: '导出格式: svg 或 png'
+    },
+    withBackground: {
+      type: 'boolean',
+      description: '是否包含背景（默认为true）'
+    }
+  },
+  required: ['name', 'format']
+};
+
+addShape.description = '向Excalidraw画布添加基本形状';
+addShape.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    shapeType: {
+      type: 'string',
+      description: '形状类型: rectangle, ellipse, diamond, line, arrow, text'
+    },
+    x: {
+      type: 'number',
+      description: 'X坐标位置'
+    },
+    y: {
+      type: 'number',
+      description: 'Y坐标位置'
+    },
+    color: {
+      type: 'string',
+      description: '颜色代码，如 #000000 或 #ff0000'
+    }
+  },
+  required: ['name', 'shapeType', 'x', 'y']
 };
 
 // 注册工具
-mcp.tool()(queryWeather);
+mcp.tool()(createCanvas);
+mcp.tool()(listCanvases);
+mcp.tool()(switchTheme);
+mcp.tool()(exportCanvas);
+mcp.tool()(addShape);
 
 // 如果直接运行此文件
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

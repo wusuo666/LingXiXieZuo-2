@@ -1540,6 +1540,38 @@
                 canvasListData = message.data || [];
                 renderCanvasList(canvasListData);
             }
+            // 添加对Agent响应的处理
+            else if (message.command === 'agentResponse') {
+                console.log('收到Agent响应:', message);
+                
+                // 移除"思考中"状态
+                if (message.thinkingId) {
+                    const thinkingElement = document.getElementById(message.thinkingId);
+                    if (thinkingElement) {
+                        thinkingElement.remove();
+                    }
+                }
+                
+                // 添加助手回复
+                const agentMessagesContainer = document.getElementById('agent-messages');
+                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                
+                // 检查结果是否存在且不为空
+                if (message.result) {
+                    const assistantMessageHtml = `
+                        <div class="agent-message agent-message-assistant">
+                            <div class="agent-avatar">AI</div>
+                            <div class="agent-message-bubble">
+                                <div class="agent-message-content">${message.result}</div>
+                                <div class="agent-message-time">${time}</div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    agentMessagesContainer.insertAdjacentHTML('beforeend', assistantMessageHtml);
+                    agentMessagesContainer.scrollTop = agentMessagesContainer.scrollHeight;
+                }
+            }
             // 添加对恢复状态的处理
             else if (message.command === 'restoreState') {
                 const state = message.state;

@@ -607,37 +607,50 @@ class LingxiSidebarProvider {
      * @param {string} thinkingId 思考状态元素ID
      */
     async handleAgentQuery(query, thinkingId) {
-        console.log('收到Agent查询:', query);
-        
-        if (!this._webviewView) {
-            console.error('Webview 未初始化，无法处理Agent查询');
-            return;
-        }
-
-        // 添加实际的 API 调用逻辑
         try {
-            // 调用 agentApi 处理查询
-            const result = await agentApi.handleAgentQuery(query);
+            // 保存查询消息到状态
+            if (!this._viewState.agentMessages) {
+                this._viewState.agentMessages = [];
+            }
             
-            // 将结果发送回 Webview
-            this._webviewView.webview.postMessage({
-                command: 'agentResponse',
-                result: result,
-                status: 'success',
-                thinkingId: thinkingId // 将 thinkingId 传回，以便前端移除"思考中"提示
+            // 添加用户消息到状态
+            this._viewState.agentMessages.push({
+                role: 'user',
+                content: query,
+                timestamp: Date.now()
             });
-
+            
+            // 调用 agentApi 的 handleAgentQuery 方法处理查询
+            console.log('调用 agentApi.handleAgentQuery：', query);
+            const response = await agentApi.handleAgentQuery(query);
+            console.log('Agent响应:', response);
+            
+            // 将响应保存到状态
+            this._viewState.agentMessages.push({
+                role: 'assistant',
+                content: response,
+                timestamp: Date.now()
+            });
+            
+            // 发送响应到前端
+            if (this._webviewView) {
+                this._webviewView.webview.postMessage({
+                    command: 'agentResponse',
+                    thinkingId: thinkingId,
+                    result: response
+                });
+            }
         } catch (error) {
-            console.error('处理 Agent 查询时出错:', error);
-            // 将错误信息发送回 Webview
-            this._webviewView.webview.postMessage({
-                command: 'agentResponse',
-                result: `处理请求时出错: ${error.message}`,
-                status: 'error',
-                thinkingId: thinkingId
-            });
-            // 可以在这里添加更友好的错误提示给用户
-            vscode.window.showErrorMessage(`AI助手请求失败: ${error.message}`);
+            console.error('处理Agent查询失败:', error);
+            
+            // 出错时也需要通知前端
+            if (this._webviewView) {
+                this._webviewView.webview.postMessage({
+                    command: 'agentResponse',
+                    thinkingId: thinkingId,
+                    result: `错误: ${error.message || '未知错误'}`
+                });
+            }
         }
     }
 

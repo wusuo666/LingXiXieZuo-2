@@ -102,6 +102,7 @@
                                 <div class="agent-header">
                                     <h3>智能助手</h3>
                                     <p>专业的AI助手，帮助完成编程任务</p>
+                                    <div class="agent-help-icon" id="agent-help-btn" title="查看可用工具">?</div>
                                 </div>
                                 <div class="agent-content">
                                     <div class="agent-tools">
@@ -127,13 +128,159 @@
                                             <div class="agent-welcome-icon">🤖</div>
                                             <div class="agent-welcome-text">
                                                 <h4>AI绘图助手</h4>
-                                                <p>我可以帮助你创建画布、添加形状、添加文本或查看画布信息。请在下方输入你的问题或选择上方工具。</p>
+                                                <p>我可以帮助你创建画布、添加形状、添加文本或查看画布信息等。请在下方输入你的问题或选择上方工具。</p>
                                             </div>
                                         </div>
                                     </div>
                                     <div class="agent-input-bar">
                                         <input type="text" id="agent-input" class="chat-input" placeholder="向AI助手询问..." />
                                         <button id="agent-send" class="chat-send">发送</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 工具说明弹出层 -->
+                            <div id="tools-modal" class="tools-modal">
+                                <div class="tools-modal-content">
+                                    <div class="tools-modal-header">
+                                        <h3>可用工具列表</h3>
+                                        <span class="tools-modal-close">&times;</span>
+                                    </div>
+                                    <div class="tools-modal-body">
+                                        <div class="tool-item">
+                                            <h4>创建画布 (createCanvas)</h4>
+                                            <p>创建新的Excalidraw画布，可选择模板</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称（不需要包含.excalidraw扩展名）</div>
+                                                <div class="param"><span class="param-name">template</span>: 可选的模板名称，可用模板: 空白画布, 基础图形, 流程图, 思维导图, 组织结构图</div>
+                                            </div>
+                                            <div class="tool-example">例如: 创建一个名为flowchart的画布，使用流程图模板</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>列出画布 (listCanvases)</h4>
+                                            <p>列出所有已创建的Excalidraw画布</p>
+                                            <div class="tool-example">例如: 列出所有画布</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>导出画布 (exportCanvas)</h4>
+                                            <p>将Excalidraw画布导出为SVG格式</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">format</span>: 导出格式: svg</div>
+                                                <div class="param"><span class="param-name">withBackground</span>: 是否包含背景（默认为true）</div>
+                                                <div class="param"><span class="param-name">withDarkMode</span>: 是否使用暗色模式（默认为false）</div>
+                                                <div class="param"><span class="param-name">exportScale</span>: 导出缩放比例（默认为1）</div>
+                                            </div>
+                                            <div class="tool-example">例如: 将flowchart画布导出为SVG格式，无背景</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>添加形状 (addShape)</h4>
+                                            <p>向Excalidraw画布添加基本形状</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">shapeType</span>: 形状类型: rectangle, ellipse, diamond, line, arrow, text</div>
+                                                <div class="param"><span class="param-name">x</span>: X坐标位置</div>
+                                                <div class="param"><span class="param-name">y</span>: Y坐标位置</div>
+                                                <div class="param"><span class="param-name">color</span>: 颜色代码，如 #000000 或 #ff0000</div>
+                                            </div>
+                                            <div class="tool-example">例如: 在flowchart画布上添加一个矩形，位置(100,100)，颜色蓝色</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>添加文本 (addText)</h4>
+                                            <p>向Excalidraw画布添加文本</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">text</span>: 文本内容</div>
+                                                <div class="param"><span class="param-name">x</span>: X坐标位置</div>
+                                                <div class="param"><span class="param-name">y</span>: Y坐标位置</div>
+                                                <div class="param"><span class="param-name">color</span>: 文本颜色（可选，默认为黑色）</div>
+                                                <div class="param"><span class="param-name">fontSize</span>: 字体大小（可选，默认为20）</div>
+                                            </div>
+                                            <div class="tool-example">例如: 在flowchart画布上添加文本"开始"，位置(150,150)</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>获取画布详情 (getCanvasDetails)</h4>
+                                            <p>获取Excalidraw画布的详细信息</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                            </div>
+                                            <div class="tool-example">例如: 获取flowchart画布的详细信息</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>导入库 (importLibrary)</h4>
+                                            <p>导入Excalidraw公共库或从URL导入库</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">libraryUrl</span>: 库URL或识别符（如"rocket"、"charts"等公共库ID或完整URL）</div>
+                                                <div class="param"><span class="param-name">canvasName</span>: 可选：要导入到的画布名称。如不提供，将作为工作区库导入</div>
+                                            </div>
+                                            <div class="tool-example">例如: 导入"rocket"库到flowchart画布</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>删除元素 (deleteElement)</h4>
+                                            <p>从Excalidraw画布中删除指定元素</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">elementId</span>: 要删除的元素ID</div>
+                                            </div>
+                                            <div class="tool-example">例如: 从flowchart画布中删除ID为"rectangle1"的元素</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>画框工具 (createFrame)</h4>
+                                            <p>在画布中创建一个框架用于分组元素</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">x</span>: 框架X坐标位置</div>
+                                                <div class="param"><span class="param-name">y</span>: 框架Y坐标位置</div>
+                                                <div class="param"><span class="param-name">width</span>: 框架宽度</div>
+                                                <div class="param"><span class="param-name">height</span>: 框架高度</div>
+                                                <div class="param"><span class="param-name">label</span>: 框架标签文本（默认为"框架"）</div>
+                                                <div class="param"><span class="param-name">color</span>: 框架颜色代码（默认为蓝色）</div>
+                                            </div>
+                                            <div class="tool-example">例如: 在flowchart画布上创建一个标签为"模块A"的框架，位置(200, 200)，尺寸300x200</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>嵌入网页 (embedWebpage)</h4>
+                                            <p>在画布中嵌入网页链接</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">url</span>: 要嵌入的网页URL</div>
+                                                <div class="param"><span class="param-name">x</span>: X坐标位置</div>
+                                                <div class="param"><span class="param-name">y</span>: Y坐标位置</div>
+                                                <div class="param"><span class="param-name">width</span>: 宽度（默认为320）</div>
+                                                <div class="param"><span class="param-name">height</span>: 高度（默认为180）</div>
+                                            </div>
+                                            <div class="tool-example">例如: 在flowchart画布上嵌入网页 https://github.com，位置(100, 300)</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>调整元素样式 (updateElementStyle)</h4>
+                                            <p>调整画布中元素的样式属性</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">elementId</span>: 要调整样式的元素ID</div>
+                                                <div class="param"><span class="param-name">styleOptions</span>: 样式选项对象，可包含以下属性:
+                                                    <div style="margin-left: 10px;">
+                                                        <div><span class="param-name">strokeColor</span>: 线条颜色</div>
+                                                        <div><span class="param-name">backgroundColor</span>: 背景颜色</div>
+                                                        <div><span class="param-name">fillStyle</span>: 填充样式(solid, hachure, cross-hatch等)</div>
+                                                        <div><span class="param-name">strokeWidth</span>: 线条宽度</div>
+                                                        <div><span class="param-name">strokeStyle</span>: 线条样式(solid, dashed等)</div>
+                                                        <div><span class="param-name">opacity</span>: 不透明度(0-100)</div>
+                                                        <div><span class="param-name">fontSize</span>: 字体大小(文本元素)</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="tool-example">例如: 更新flowchart画布中ID为"rect1"的矩形样式，将背景色改为红色，线条宽度改为2</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -879,6 +1026,7 @@
             padding: 0;
         }
         .agent-header {
+            position: relative;
             padding: 12px 14px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
@@ -1424,6 +1572,144 @@
                 align-self: flex-end;
             }
         }
+        /* 添加问号图标样式 */
+        .agent-help-icon {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        .agent-help-icon:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
+        
+        /* 工具说明弹出层样式 */
+        .tools-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        
+        .tools-modal-content {
+            position: relative;
+            background: #1e1e1e;
+            margin: 5% auto;
+            padding: 0;
+            width: 90%;
+            max-width: 800px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            animation: modalFadeIn 0.3s;
+        }
+        
+        .tools-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .tools-modal-header h3 {
+            margin: 0;
+            color: #fff;
+            font-size: 18px;
+            font-weight: 500;
+        }
+        
+        .tools-modal-close {
+            color: #aaa;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        
+        .tools-modal-close:hover {
+            color: #fff;
+        }
+        
+        .tools-modal-body {
+            padding: 20px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        
+        .tool-item {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .tool-item:last-child {
+            border-bottom: none;
+        }
+        
+        .tool-item h4 {
+            margin: 0 0 10px 0;
+            color: #3794ff;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        .tool-item p {
+            margin: 0 0 12px 0;
+            color: #ddd;
+            font-size: 14px;
+        }
+        
+        .tool-params {
+            margin-bottom: 12px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+        }
+        
+        .param {
+            margin-bottom: 6px;
+            color: #bbb;
+            font-size: 13px;
+        }
+        
+        .param:last-child {
+            margin-bottom: 0;
+        }
+        
+        .param-name {
+            color: #4ec9b0;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        
+        .tool-example {
+            font-style: italic;
+            color: #888;
+            font-size: 13px;
+        }
+        
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
     
     <script>
@@ -1480,6 +1766,38 @@
             // 处理浏览器直接打开的情况（开发测试用）
             if (typeof vscode === 'undefined') {
                 console.warn('未在VS Code环境中运行，部分功能可能不可用。');
+            }
+
+            // 添加问号图标点击事件
+            const helpBtn = document.getElementById('agent-help-btn');
+            const toolsModal = document.getElementById('tools-modal');
+            const closeModal = document.querySelector('.tools-modal-close');
+            
+            if (helpBtn) {
+                helpBtn.addEventListener('click', function() {
+                    toolsModal.style.display = 'block';
+                });
+            }
+            
+            if (closeModal) {
+                closeModal.addEventListener('click', function() {
+                    toolsModal.style.display = 'none';
+                });
+            }
+            
+            // 点击弹出层外部关闭弹出层
+            window.addEventListener('click', function(event) {
+                if (event.target === toolsModal) {
+                    toolsModal.style.display = 'none';
+                }
+            });
+            
+            // 阻止弹出层内部点击事件冒泡
+            const modalContent = document.querySelector('.tools-modal-content');
+            if (modalContent) {
+                modalContent.addEventListener('click', function(event) {
+                    event.stopPropagation();
+                });
             }
         });
 

@@ -429,6 +429,778 @@ const DEFAULT_TEMPLATES = {
       currentItemFontFamily: 1,
       gridSize: 20
     }
+  },
+  '思维导图': {
+    type: 'excalidraw',
+    version: 2,
+    source: 'https://excalidraw.com',
+    elements: [
+      {
+        id: 'central-topic',
+        type: 'ellipse',
+        x: 400,
+        y: 250,
+        width: 200,
+        height: 100,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#4c6ef5',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2000,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'central-text',
+        type: 'text',
+        x: 450,
+        y: 290,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2001,
+        version: 1,
+        versionNonce: 1,
+        text: '中心主题',
+        fontSize: 20,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'topic1',
+        type: 'rectangle',
+        x: 150,
+        y: 150,
+        width: 150,
+        height: 60,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#82c91e',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2002,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'topic1-text',
+        type: 'text',
+        x: 175,
+        y: 170,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2003,
+        version: 1,
+        versionNonce: 1,
+        text: '主题一',
+        fontSize: 16,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'topic2',
+        type: 'rectangle',
+        x: 700,
+        y: 150,
+        width: 150,
+        height: 60,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#fa5252',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2004,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'topic2-text',
+        type: 'text',
+        x: 725,
+        y: 170,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2005,
+        version: 1,
+        versionNonce: 1,
+        text: '主题二',
+        fontSize: 16,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'topic3',
+        type: 'rectangle',
+        x: 150,
+        y: 350,
+        width: 150,
+        height: 60,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#15aabf',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2006,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'topic3-text',
+        type: 'text',
+        x: 175,
+        y: 370,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2007,
+        version: 1,
+        versionNonce: 1,
+        text: '主题三',
+        fontSize: 16,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'topic4',
+        type: 'rectangle',
+        x: 700,
+        y: 350,
+        width: 150,
+        height: 60,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#a61e4d',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2008,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'topic4-text',
+        type: 'text',
+        x: 725,
+        y: 370,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2009,
+        version: 1,
+        versionNonce: 1,
+        text: '主题四',
+        fontSize: 16,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'line1',
+        type: 'line',
+        x: 300,
+        y: 180,
+        width: 100,
+        height: 80,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2010,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [100, 80]
+        ]
+      },
+      {
+        id: 'line2',
+        type: 'line',
+        x: 600,
+        y: 260,
+        width: 100,
+        height: -80,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2011,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [100, -80]
+        ]
+      },
+      {
+        id: 'line3',
+        type: 'line',
+        x: 400,
+        y: 300,
+        width: -100,
+        height: 80,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2012,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [-100, 80]
+        ]
+      },
+      {
+        id: 'line4',
+        type: 'line',
+        x: 600,
+        y: 300,
+        width: 100,
+        height: 80,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 2013,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [100, 80]
+        ]
+      }
+    ],
+    appState: {
+      theme: 'light',
+      viewBackgroundColor: '#ffffff',
+      currentItemFontFamily: 1,
+      gridSize: 20
+    }
+  },
+  '组织结构图': {
+    type: 'excalidraw',
+    version: 2,
+    source: 'https://excalidraw.com',
+    elements: [
+      {
+        id: 'ceo-box',
+        type: 'rectangle',
+        x: 400,
+        y: 50,
+        width: 200,
+        height: 60,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#4c6ef5',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3000,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'ceo-text',
+        type: 'text',
+        x: 450,
+        y: 70,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3001,
+        version: 1,
+        versionNonce: 1,
+        text: '总经理',
+        fontSize: 18,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'vp1-box',
+        type: 'rectangle',
+        x: 200,
+        y: 200,
+        width: 180,
+        height: 50,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#15aabf',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3002,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'vp1-text',
+        type: 'text',
+        x: 240,
+        y: 215,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3003,
+        version: 1,
+        versionNonce: 1,
+        text: '技术副总',
+        fontSize: 16,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'vp2-box',
+        type: 'rectangle',
+        x: 600,
+        y: 200,
+        width: 180,
+        height: 50,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#15aabf',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3004,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'vp2-text',
+        type: 'text',
+        x: 640,
+        y: 215,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3005,
+        version: 1,
+        versionNonce: 1,
+        text: '市场副总',
+        fontSize: 16,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'mgr1-box',
+        type: 'rectangle',
+        x: 100,
+        y: 350,
+        width: 150,
+        height: 50,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#82c91e',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3006,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'mgr1-text',
+        type: 'text',
+        x: 125,
+        y: 365,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3007,
+        version: 1,
+        versionNonce: 1,
+        text: '研发经理',
+        fontSize: 14,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'mgr2-box',
+        type: 'rectangle',
+        x: 330,
+        y: 350,
+        width: 150,
+        height: 50,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#82c91e',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3008,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'mgr2-text',
+        type: 'text',
+        x: 355,
+        y: 365,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3009,
+        version: 1,
+        versionNonce: 1,
+        text: '测试经理',
+        fontSize: 14,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'mgr3-box',
+        type: 'rectangle',
+        x: 520,
+        y: 350,
+        width: 150,
+        height: 50,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#82c91e',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3010,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'mgr3-text',
+        type: 'text',
+        x: 545,
+        y: 365,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3011,
+        version: 1,
+        versionNonce: 1,
+        text: '销售经理',
+        fontSize: 14,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'mgr4-box',
+        type: 'rectangle',
+        x: 750,
+        y: 350,
+        width: 150,
+        height: 50,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#82c91e',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3012,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'mgr4-text',
+        type: 'text',
+        x: 775,
+        y: 365,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3013,
+        version: 1,
+        versionNonce: 1,
+        text: '客服经理',
+        fontSize: 14,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'arrow1',
+        type: 'arrow',
+        x: 499,
+        y: 110,
+        width: 1,
+        height: 90,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3014,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [-210, 90]
+        ]
+      },
+      {
+        id: 'arrow2',
+        type: 'arrow',
+        x: 501,
+        y: 110,
+        width: 1,
+        height: 90,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3015,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [190, 90]
+        ]
+      },
+      {
+        id: 'arrow3',
+        type: 'arrow',
+        x: 290,
+        y: 250,
+        width: 1,
+        height: 100,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3016,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [-115, 100]
+        ]
+      },
+      {
+        id: 'arrow4',
+        type: 'arrow',
+        x: 290,
+        y: 250,
+        width: 1,
+        height: 100,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3017,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [115, 100]
+        ]
+      },
+      {
+        id: 'arrow5',
+        type: 'arrow',
+        x: 690,
+        y: 250,
+        width: 1,
+        height: 100,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3018,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [-95, 100]
+        ]
+      },
+      {
+        id: 'arrow6',
+        type: 'arrow',
+        x: 690,
+        y: 250,
+        width: 1,
+        height: 100,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 3019,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [135, 100]
+        ]
+      }
+    ],
+    appState: {
+      theme: 'light',
+      viewBackgroundColor: '#ffffff',
+      currentItemFontFamily: 1,
+      gridSize: 20
+    }
   }
 };
 
@@ -1299,6 +2071,84 @@ async function addText(name, text, x, y, color = '#000000', fontSize = 20) {
   }
 }
 
+/**
+ * 从画布中删除指定元素
+ * @param {string} name - 画布名称
+ * @param {string} elementId - 要删除的元素ID
+ * @returns {Promise<string>} 操作结果
+ */
+async function deleteElement(name, elementId) {
+  console.error(`开始删除元素，画布: ${name}, 元素ID: ${elementId}`);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
+    }
+    
+    // 确保elements数组存在
+    if (!canvasData.elements || !Array.isArray(canvasData.elements)) {
+      return `⚠️ 画布 ${name} 中没有找到有效的元素数组`;
+    }
+    
+    // 查找要删除的元素
+    const initialElementCount = canvasData.elements.length;
+    const elementIndex = canvasData.elements.findIndex(el => el.id === elementId);
+    
+    if (elementIndex === -1) {
+      return `⚠️ 在画布 ${name} 中未找到ID为 ${elementId} 的元素`;
+    }
+    
+    // 获取元素信息，用于报告
+    const elementToDelete = canvasData.elements[elementIndex];
+    const elementType = elementToDelete.type || '未知类型';
+    
+    // 删除元素
+    canvasData.elements.splice(elementIndex, 1);
+    
+    // 检查是否有箭头或线条绑定到这个元素，如果有需要解除绑定
+    canvasData.elements.forEach(el => {
+      // 检查startBinding
+      if (el.startBinding && el.startBinding.elementId === elementId) {
+        delete el.startBinding;
+      }
+      
+      // 检查endBinding
+      if (el.endBinding && el.endBinding.elementId === elementId) {
+        delete el.endBinding;
+      }
+    });
+    
+    // 写回文件
+    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2), 'utf8');
+    
+    console.error(`元素删除成功: ${filePath}`);
+    return `✅ 成功从画布 ${name} 中删除元素
+🆔 元素ID: ${elementId}
+📋 元素类型: ${elementType}
+📊 画布中剩余 ${canvasData.elements.length} 个元素`;
+  } catch (error) {
+    console.error(`删除元素失败: ${error.message}`);
+    return `❌ 删除元素失败: ${error.message}`;
+  }
+}
+
 // 添加参数描述
 createCanvas.description = '创建新的Excalidraw画布，可选择模板';
 createCanvas.parameters = {
@@ -1310,7 +2160,7 @@ createCanvas.parameters = {
     },
     template: {
       type: 'string',
-      description: '可选的模板名称，可用模板: 空白画布, 基础图形, 流程图'
+      description: '可选的模板名称，可用模板: 空白画布, 基础图形, 流程图，思维导图，组织结构图'
     }
   },
   required: ['name']
@@ -1443,6 +2293,22 @@ addText.parameters = {
   required: ['name', 'text', 'x', 'y']
 };
 
+deleteElement.description = '从Excalidraw画布中删除指定元素';
+deleteElement.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    elementId: {
+      type: 'string',
+      description: '要删除的元素ID'
+    }
+  },
+  required: ['name', 'elementId']
+};
+
 // 注册工具
 mcp.tool()(createCanvas);
 mcp.tool()(listCanvases);
@@ -1451,6 +2317,7 @@ mcp.tool()(addShape);
 mcp.tool()(importLibrary);
 mcp.tool()(getCanvasDetails);
 mcp.tool()(addText);
+mcp.tool()(deleteElement);
 
 // 如果直接运行此文件
 if (process.argv[1] === __filename) {
@@ -1479,3 +2346,462 @@ module.exports = {
   setExcalidrawDir,
   EXCALIDRAW_DIR
 }; 
+
+/**
+ * 在画布中创建一个框架用于分组元素
+ * @param {string} name - 画布名称
+ * @param {number} x - 框架X坐标位置
+ * @param {number} y - 框架Y坐标位置
+ * @param {number} width - 框架宽度
+ * @param {number} height - 框架高度
+ * @param {string} label - 框架标签文本
+ * @param {string} color - 框架颜色
+ * @returns {Promise<string>} 操作结果
+ */
+async function createFrame(name, x, y, width, height, label = '框架', color = '#4a90e2') {
+  console.error(`开始创建框架，画布: ${name}, 位置: (${x}, ${y}), 尺寸: ${width}x${height}`);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
+    }
+    
+    // 确保elements数组存在
+    if (!canvasData.elements) {
+      canvasData.elements = [];
+    }
+    
+    // 创建框架ID
+    const frameId = `frame_${Date.now()}`;
+    
+    // 创建框架元素
+    const frame = {
+      id: frameId,
+      type: 'rectangle',
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      angle: 0,
+      strokeColor: color,
+      backgroundColor: 'transparent',
+      fillStyle: 'hachure',
+      strokeWidth: 1,
+      strokeStyle: 'dashed',
+      roughness: 1,
+      opacity: 80,
+      groupIds: [],
+      frameId: null,
+      roundness: {
+        type: 3,
+        value: 10
+      },
+      seed: Math.floor(Math.random() * 1000),
+      version: 1,
+      versionNonce: Math.floor(Math.random() * 1000000),
+      isDeleted: false,
+      boundElements: null,
+      updated: Date.now(),
+      customData: {
+        isFrame: true
+      }
+    };
+    
+    // 创建框架标签
+    const labelElement = {
+      id: `label_${frameId}`,
+      type: 'text',
+      x: x + 10,
+      y: y - 5,
+      width: 100,
+      height: 25,
+      angle: 0,
+      strokeColor: color,
+      backgroundColor: 'transparent',
+      fillStyle: 'hachure',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 1,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      seed: Math.floor(Math.random() * 1000),
+      version: 1,
+      versionNonce: Math.floor(Math.random() * 1000000),
+      isDeleted: false,
+      boundElements: null,
+      updated: Date.now(),
+      text: label,
+      fontSize: 16,
+      fontFamily: 1,
+      textAlign: 'left',
+      verticalAlign: 'top',
+      baseline: 18
+    };
+    
+    // 添加框架和标签到画布
+    canvasData.elements.push(frame);
+    canvasData.elements.push(labelElement);
+    
+    // 保存更新后的画布
+    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2));
+    
+    return `✅ 成功在画布 ${name} 创建框架，位置:(${x}, ${y})，尺寸:${width}x${height}，标签:"${label}"`;
+  } catch (error) {
+    console.error('创建框架时出错：', error);
+    return `❌ 创建框架失败: ${error.message}`;
+  }
+}
+
+/**
+ * 在画布中嵌入网页链接
+ * @param {string} name - 画布名称
+ * @param {string} url - 要嵌入的网页URL
+ * @param {number} x - X坐标位置
+ * @param {number} y - Y坐标位置
+ * @param {number} width - 宽度
+ * @param {number} height - 高度
+ * @returns {Promise<string>} 操作结果
+ */
+async function embedWebpage(name, url, x, y, width = 320, height = 180) {
+  console.error(`开始嵌入网页，画布: ${name}, URL: ${url}, 位置: (${x}, ${y}), 尺寸: ${width}x${height}`);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
+    }
+    
+    // 确保elements数组存在
+    if (!canvasData.elements) {
+      canvasData.elements = [];
+    }
+    
+    // 创建嵌入网页的框架
+    const frameId = `embed_${Date.now()}`;
+    
+    // 创建框架元素表示网页容器
+    const embedFrame = {
+      id: frameId,
+      type: 'rectangle',
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      angle: 0,
+      strokeColor: '#1971c2',
+      backgroundColor: '#daeaf6',
+      fillStyle: 'solid',
+      strokeWidth: 2,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: {
+        type: 3,
+        value: 3
+      },
+      seed: Math.floor(Math.random() * 1000),
+      version: 1,
+      versionNonce: Math.floor(Math.random() * 1000000),
+      isDeleted: false,
+      boundElements: null,
+      updated: Date.now(),
+      customData: {
+        isEmbeddedWebpage: true,
+        url: url
+      }
+    };
+    
+    // 创建URL文本元素
+    const urlElement = {
+      id: `url_${frameId}`,
+      type: 'text',
+      x: x + 10,
+      y: y + 10,
+      width: width - 20,
+      height: 20,
+      angle: 0,
+      strokeColor: '#1971c2',
+      backgroundColor: 'transparent',
+      fillStyle: 'hachure',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      seed: Math.floor(Math.random() * 1000),
+      version: 1,
+      versionNonce: Math.floor(Math.random() * 1000000),
+      isDeleted: false,
+      boundElements: null,
+      updated: Date.now(),
+      text: `🔗 ${url}`,
+      fontSize: 14,
+      fontFamily: 1,
+      textAlign: 'left',
+      verticalAlign: 'top',
+      baseline: 14
+    };
+    
+    // 创建图标表示网页窗口
+    const iconElement = {
+      id: `icon_${frameId}`,
+      type: 'rectangle',
+      x: x + 10,
+      y: y + 40,
+      width: width - 20,
+      height: height - 50,
+      angle: 0,
+      strokeColor: '#1971c2',
+      backgroundColor: '#ffffff',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 0,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: null,
+      seed: Math.floor(Math.random() * 1000),
+      version: 1,
+      versionNonce: Math.floor(Math.random() * 1000000),
+      isDeleted: false,
+      boundElements: null,
+      updated: Date.now()
+    };
+    
+    // 添加元素到画布
+    canvasData.elements.push(embedFrame);
+    canvasData.elements.push(urlElement);
+    canvasData.elements.push(iconElement);
+    
+    // 保存更新后的画布
+    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2));
+    
+    return `✅ 成功在画布 ${name} 嵌入网页 ${url}，位置:(${x}, ${y})，尺寸:${width}x${height}`;
+  } catch (error) {
+    console.error('嵌入网页时出错：', error);
+    return `❌ 嵌入网页失败: ${error.message}`;
+  }
+}
+
+/**
+ * 调整画布中元素的样式
+ * @param {string} name - 画布名称
+ * @param {string} elementId - 元素ID
+ * @param {Object} styleOptions - 样式选项
+ * @returns {Promise<string>} 操作结果
+ */
+async function updateElementStyle(name, elementId, styleOptions = {}) {
+  console.error(`开始更新元素样式，画布: ${name}, 元素ID: ${elementId}, 样式选项:`, styleOptions);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
+    }
+    
+    // 确保elements数组存在
+    if (!canvasData.elements || !Array.isArray(canvasData.elements)) {
+      return `⚠️ 画布 ${name} 中不存在元素数组`;
+    }
+    
+    // 查找指定的元素
+    const elementIndex = canvasData.elements.findIndex(e => e.id === elementId);
+    if (elementIndex === -1) {
+      return `⚠️ 在画布 ${name} 中未找到ID为 ${elementId} 的元素`;
+    }
+    
+    // 获取元素引用
+    const element = canvasData.elements[elementIndex];
+    
+    // 可更新的样式属性列表
+    const updatableProps = [
+      'strokeColor', 'backgroundColor', 'fillStyle', 'strokeWidth', 
+      'strokeStyle', 'roughness', 'opacity', 'fontSize', 'fontFamily',
+      'textAlign', 'verticalAlign'
+    ];
+    
+    // 应用样式更新
+    let updatedProps = [];
+    
+    for (const [key, value] of Object.entries(styleOptions)) {
+      if (updatableProps.includes(key)) {
+        // 如果属性是有效的可更新属性
+        element[key] = value;
+        updatedProps.push(`${key}: ${value}`);
+      }
+    }
+    
+    // 更新时间戳
+    element.updated = Date.now();
+    element.versionNonce = Math.floor(Math.random() * 1000000);
+    
+    // 如果没有更新任何属性
+    if (updatedProps.length === 0) {
+      return `⚠️ 未指定任何有效的样式属性进行更新`;
+    }
+    
+    // 保存更新后的画布
+    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2));
+    
+    return `✅ 成功更新画布 ${name} 中元素 ${elementId} 的样式，更新了以下属性: ${updatedProps.join(', ')}`;
+  } catch (error) {
+    console.error('更新元素样式时出错：', error);
+    return `❌ 更新元素样式失败: ${error.message}`;
+  }
+}
+
+// 注册新工具
+createFrame.description = '创建一个框架用于分组元素';
+createFrame.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    x: {
+      type: 'number',
+      description: '框架X坐标位置'
+    },
+    y: {
+      type: 'number',
+      description: '框架Y坐标位置'
+    },
+    width: {
+      type: 'number',
+      description: '框架宽度'
+    },
+    height: {
+      type: 'number',
+      description: '框架高度'
+    },
+    label: {
+      type: 'string',
+      description: '框架标签文本（默认为"框架"）'
+    },
+    color: {
+      type: 'string',
+      description: '框架颜色代码（默认为蓝色）'
+    }
+  },
+  required: ['name', 'x', 'y', 'width', 'height']
+};
+
+embedWebpage.description = '在画布中嵌入网页链接';
+embedWebpage.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    url: {
+      type: 'string',
+      description: '要嵌入的网页URL'
+    },
+    x: {
+      type: 'number',
+      description: 'X坐标位置'
+    },
+    y: {
+      type: 'number',
+      description: 'Y坐标位置'
+    },
+    width: {
+      type: 'number',
+      description: '宽度（默认为320）'
+    },
+    height: {
+      type: 'number',
+      description: '高度（默认为180）'
+    }
+  },
+  required: ['name', 'url', 'x', 'y']
+};
+
+updateElementStyle.description = '调整画布中元素的样式';
+updateElementStyle.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    elementId: {
+      type: 'string',
+      description: '要调整样式的元素ID'
+    },
+    styleOptions: {
+      type: 'object',
+      description: '样式选项对象，可包含以下属性: strokeColor, backgroundColor, fillStyle, strokeWidth, strokeStyle, roughness, opacity, fontSize, fontFamily, textAlign, verticalAlign'
+    }
+  },
+  required: ['name', 'elementId', 'styleOptions']
+};
+
+// 注册MCP工具
+mcp.tool('createCanvas', createCanvas);
+mcp.tool('listCanvases', listCanvases);
+mcp.tool('exportCanvas', exportCanvas);
+mcp.tool('addShape', addShape);
+mcp.tool('addText', addText);
+mcp.tool('getCanvasDetails', getCanvasDetails);
+mcp.tool('importLibrary', importLibrary);
+mcp.tool('deleteElement', deleteElement);
+mcp.tool('createFrame', createFrame);
+mcp.tool('embedWebpage', embedWebpage);
+mcp.tool('updateElementStyle', updateElementStyle);

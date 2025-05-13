@@ -1540,6 +1540,123 @@
                 canvasListData = message.data || [];
                 renderCanvasList(canvasListData);
             }
+            // 添加对恢复状态的处理
+            else if (message.command === 'restoreState') {
+                const state = message.state;
+                console.log('恢复状态:', state);
+                
+                // 恢复主标签页
+                if (state.activeTab) {
+                    const tabButton = document.querySelector(`.tab-button[data-tab="${state.activeTab}"]`);
+                    if (tabButton) {
+                        tabButton.click();
+                    }
+                }
+                
+                // 恢复内部标签页
+                if (state.activeInnerTab) {
+                    const innerTabButton = document.querySelector(`.inner-tab-button[data-inner-tab="${state.activeInnerTab}"]`);
+                    if (innerTabButton) {
+                        innerTabButton.click();
+                    }
+                }
+                
+                // 更新MCP服务器状态显示
+                if (state.mcpServerStatus) {
+                    const statusElement = document.getElementById('mcp-server-status');
+                    if (statusElement) {
+                        statusElement.textContent = state.mcpServerStatus;
+                        
+                        // 根据状态更新开关
+                        const enableMcpServerSwitch = document.getElementById('enable-mcp-server');
+                        if (enableMcpServerSwitch) {
+                            enableMcpServerSwitch.checked = state.mcpServerStatus === '运行中';
+                        }
+                    }
+                }
+                
+                // 更新聊天服务器连接状态
+                if (state.chatServerConnected) {
+                    document.getElementById('chat-server-status').textContent = '已连接';
+                    document.getElementById('chat-server-status').classList.remove('status-offline');
+                    document.getElementById('chat-server-status').classList.add('status-online');
+                    
+                    // 启用/禁用相关按钮
+                    document.getElementById('start-chat-server').disabled = true;
+                    document.getElementById('stop-chat-server').disabled = false;
+                    document.getElementById('server-connection-info').style.display = 'block';
+                }
+            }
+            // 添加对聊天服务器状态的处理
+            else if (message.command === 'chatServerStatus') {
+                const statusElement = document.getElementById('chat-server-status');
+                if (statusElement) {
+                    if (message.status === 'connected') {
+                        statusElement.textContent = '已连接';
+                        statusElement.classList.remove('status-offline');
+                        statusElement.classList.add('status-online');
+                        
+                        // 更新视图状态
+                        if (vscode) {
+                            vscode.postMessage({
+                                command: 'saveViewState',
+                                key: 'chatServerConnected',
+                                value: true
+                            });
+                        }
+                    } else if (message.status === 'disconnected') {
+                        statusElement.textContent = '离线';
+                        statusElement.classList.remove('status-online');
+                        statusElement.classList.add('status-offline');
+                        
+                        // 更新视图状态
+                        if (vscode) {
+                            vscode.postMessage({
+                                command: 'saveViewState',
+                                key: 'chatServerConnected',
+                                value: false
+                            });
+                        }
+                    }
+                }
+            }
+            // 添加对MCP服务器状态的处理
+            else if (message.command === 'mcpServerStatus') {
+                const statusElement = document.getElementById('mcp-server-status');
+                if (statusElement) {
+                    statusElement.textContent = message.status;
+                    
+                    // 更新视图状态
+                    if (vscode) {
+                        vscode.postMessage({
+                            command: 'saveViewState',
+                            key: 'mcpServerStatus',
+                            value: message.status
+                        });
+                    }
+                    
+                    // 更新开关状态
+                    const enableMcpServerSwitch = document.getElementById('enable-mcp-server');
+                    if (enableMcpServerSwitch) {
+                        enableMcpServerSwitch.checked = message.status === '运行中';
+                    }
+                }
+            }
+            
+            // 记录标签页切换以便保存到状态
+            document.querySelectorAll('.inner-tab-button').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const innerTabId = this.dataset.innerTab;
+                    
+                    // 通知主进程内部标签切换
+                    if (vscode) {
+                        vscode.postMessage({
+                            command: 'switchInnerTab',
+                            innerTabId: innerTabId
+                        });
+                    }
+                });
+            });
         });
 
         const listEl = document.getElementById('clip-history-list');
@@ -1897,215 +2014,6 @@
                 userDisplayElements.forEach(element => {
                     element.textContent = userName;
                 });
-            }
-        });
-
-        // 监听消息响应
-        window.addEventListener('message', event => {
-            const message = event.data;
-            
-            // 聊天室服务器状态响应
-            if (message.command === 'chatServerStatus') {
-                const statusElement = document.getElementById('chat-server-status');
-                const startButton = document.getElementById('start-chat-server');
-                const stopButton = document.getElementById('stop-chat-server');
-                const connectButton = document.getElementById('connect-to-server');
-                const disconnectButton = document.getElementById('disconnect-from-server');
-                const connectionInfoDiv = document.getElementById('server-connection-info');
-                const connectionUrlElement = document.getElementById('server-connection-url');
-                const roomControlDiv = document.getElementById('room-control');
-                const currentRoomElement = document.getElementById('current-room-id');
-                
-                if (message.status === 'running' || message.status === 'connected') {
-                    statusElement.textContent = message.status === 'connected' ? '已连接' : '运行中';
-                    statusElement.className = 'status-online';
-                    
-                    // 主机模式下的UI状态
-                    startButton.disabled = true;
-                    stopButton.disabled = false;
-                    
-                    // 从机模式下的UI状态
-                    connectButton.disabled = true;
-                    disconnectButton.disabled = false;
-                    
-                    // 显示房间信息
-                    if (message.roomId) {
-                        roomControlDiv.style.display = 'flex';
-                        currentRoomElement.textContent = message.roomId;
-                    }
-                    
-                    // 显示连接信息
-                    if (message.port) {
-                        // 获取本机IP地址
-                        connectionInfoDiv.style.display = 'flex';
-                        // 使用localhost或IP地址
-                        const ipAddress = message.ipAddress || 'localhost';
-                        connectionUrlElement.textContent = `ws://${ipAddress}:${message.port}`;
-                    }
-                    
-                    // 如果服务器运行中但客户端未连接，自动连接
-                    if (message.status === 'running' && message.port) {
-                        vscode.postMessage({
-                            command: 'connectToChatServer',
-                            port: message.port,
-                            ipAddress: message.ipAddress || 'localhost'
-                        });
-                    }
-                } else if (message.status === 'stopped' || message.status === 'disconnected') {
-                    statusElement.textContent = '离线';
-                    statusElement.className = 'status-offline';
-                    
-                    // 主机模式下的UI状态
-                    startButton.disabled = false;
-                    stopButton.disabled = true;
-                    
-                    // 从机模式下的UI状态
-                    connectButton.disabled = false;
-                    disconnectButton.disabled = true;
-                    
-                    // 隐藏房间控制界面
-                    roomControlDiv.style.display = 'none';
-                    
-                    // 隐藏连接信息
-                    connectionInfoDiv.style.display = 'none';
-                    connectionUrlElement.textContent = '未连接';
-                } else if (message.status === 'error') {
-                    statusElement.textContent = '错误: ' + (message.error || '未知错误');
-                    statusElement.className = 'status-offline';
-                    
-                    // 主机模式下的UI状态
-                    startButton.disabled = false;
-                    stopButton.disabled = true;
-                    
-                    // 从机模式下的UI状态
-                    connectButton.disabled = false;
-                    disconnectButton.disabled = true;
-                    
-                    // 隐藏房间控制界面
-                    roomControlDiv.style.display = 'none';
-                    
-                    // 隐藏连接信息
-                    connectionInfoDiv.style.display = 'none';
-                    connectionUrlElement.textContent = '未连接';
-                }
-            }
-            
-            // 聊天消息响应
-            if (message.command === 'chatResponse') {
-                // 添加助手响应到聊天界面
-                const messagesContainer = document.querySelector('.chat-messages');
-                
-                let messageContent = message.content;
-                
-                // 如果是画布消息,添加预览按钮
-                if (message.canvasData) {
-                    messageContent += `<button class="preview-canvas-btn" data-canvas='${JSON.stringify(message.canvasData)}'>预览画布</button>`;
-                }
-                
-                const botMessageHtml = `
-                    <div class="chat-row left">
-                        <div class="chat-avatar-group">
-                            <div class="avatar">A</div>
-                            <div class="sender">${message.sender}</div>
-                        </div>
-                        <div class="chat-bubble-group">
-                            <div class="chat-bubble left">${messageContent}</div>
-                            <div class="chat-time">${message.time}</div>
-                        </div>
-                    </div>
-                `;
-                
-                messagesContainer.insertAdjacentHTML('beforeend', botMessageHtml);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                
-                // 为新添加的预览按钮绑定事件
-                const previewBtn = messagesContainer.querySelector('.preview-canvas-btn:last-child');
-                if (previewBtn) {
-                    previewBtn.addEventListener('click', function() {
-                        const canvasData = JSON.parse(this.dataset.canvas);
-                        if (vscode) {
-                            vscode.postMessage({
-                                command: 'previewCanvas',
-                                fileName: canvasData.fileName,
-                                content: canvasData.content
-                            });
-                        }
-                    });
-                }
-            } 
-            // Agent响应
-            else if (message.command === 'agentResponse') {
-                const agentMessagesContainer = document.getElementById('agent-messages');
-                
-                // 移除思考中提示
-                if (message.thinkingId) {
-                    const thinkingElement = document.getElementById(message.thinkingId);
-                    if (thinkingElement) {
-                        thinkingElement.remove();
-                    }
-                }
-                
-                // 格式化结果，支持代码块
-                let formattedContent = message.result;
-                
-                // 简单的代码块检测和格式化
-                if (formattedContent.includes('```')) {
-                    const parts = formattedContent.split('```');
-                    formattedContent = '';
-                    for (let i = 0; i < parts.length; i++) {
-                        if (i % 2 === 0) {
-                            // 非代码部分
-                            formattedContent += parts[i];
-                        } else {
-                            // 代码部分
-                            formattedContent += `<div class="agent-message-pre">${parts[i]}</div>`;
-                        }
-                    }
-                }
-                
-                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-                const assistantMessageHtml = `
-                    <div class="agent-message agent-message-assistant">
-                        <div class="agent-avatar">🤖</div>
-                        <div class="agent-message-bubble">
-                            <div class="agent-message-content">${formattedContent}</div>
-                            <div class="agent-message-time">${time}</div>
-                        </div>
-                    </div>
-                `;
-                
-                agentMessagesContainer.insertAdjacentHTML('beforeend', assistantMessageHtml);
-                agentMessagesContainer.scrollTop = agentMessagesContainer.scrollHeight;
-            }
-            // 处理思考状态
-            else if (message.command === 'agentThinking') {
-                // 这部分由上面的代码自动处理
-            }
-            // 处理智谱AI API Key状态
-            else if (message.command === 'apiKeyStatus') {
-                const statusElement = document.getElementById('zhipuai-api-key-status');
-                if (statusElement) {
-                    if (message.isSet) {
-                        statusElement.textContent = '已设置';
-                        statusElement.style.color = '#4CAF50';
-                    } else {
-                        statusElement.textContent = '未设置';
-                        statusElement.style.color = '#F44336';
-                    }
-                }
-            }
-            // 处理DeepSeek API Key状态
-            else if (message.command === 'deepseekApiKeyStatus') {
-                const statusElement = document.getElementById('deepseek-api-key-status');
-                if (statusElement) {
-                    if (message.isSet) {
-                        statusElement.textContent = '已设置';
-                        statusElement.style.color = '#4CAF50';
-                    } else {
-                        statusElement.textContent = '未设置';
-                        statusElement.style.color = '#F44336';
-                    }
-                }
             }
         });
 

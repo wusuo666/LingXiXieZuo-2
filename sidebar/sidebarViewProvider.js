@@ -25,6 +25,18 @@ class LingxiSidebarProvider {
         this._userName = `User_${Date.now().toString().slice(-4)}`;
         this._roomId = 'default';
         
+        // 添加视图状态存储变量
+        this._viewState = {
+            activeTab: 'collab-area',
+            activeInnerTab: 'chat',
+            chatMessages: [],
+            agentMessages: [],
+            clipboardHistory: [],
+            canvasList: [],
+            mcpServerStatus: '未启动',
+            chatServerConnected: false
+        };
+        
         // 设置WebSocket消息处理
         this.setupWebSocketHandlers();
     }
@@ -638,9 +650,18 @@ class LingxiSidebarProvider {
         webviewView.webview.options = {
             enableScripts: true,
             // 允许加载本地资源
-            localResourceRoots: [vscode.Uri.joinPath(this._context.extensionUri, 'sidebar')]
+            localResourceRoots: [vscode.Uri.joinPath(this._context.extensionUri, 'sidebar')],
+            retainContextWhenHidden: true  // 添加这个选项以在隐藏时保留Webview内容
         };
         webviewView.webview.html = this.getHtmlForWebview();
+        
+        // 监听Webview可见性变化
+        webviewView.onDidChangeVisibility(() => {
+            if (webviewView.visible) {
+                console.log('灵犀协作侧边栏变为可见，恢复状态');
+                this.restoreViewState();
+            }
+        });
         
         // 监听Webview消息
         this.setupMessageListeners(this._context);
@@ -657,6 +678,9 @@ class LingxiSidebarProvider {
             if (message.type === 'getClipboardHistory') {
                 this.sendClipboardHistory();
             } else if (message.command === 'switchTab') {
+                // 保存当前活动标签页状态
+                this._viewState.activeTab = message.tabId;
+                
                 if (message.tabId === 'history') {
                     // 切换到 History 标签页时刷新数据
                     this.sendClipboardHistory();
@@ -665,6 +689,9 @@ class LingxiSidebarProvider {
                     this.sendCanvasList();
                 }
                 this.handleTabSwitch(message.tabId);
+            } else if (message.command === 'switchInnerTab') {
+                // 保存当前活动内部标签页状态
+                this._viewState.activeInnerTab = message.innerTabId;
             } else if (message.type === 'getCanvasList') {
                 // 响应画布列表请求
                 this.sendCanvasList();
@@ -823,6 +850,16 @@ class LingxiSidebarProvider {
                         this.handleCollabAreaTab();
                     }
                     this.handleTabSwitch(message.tabId);
+                    break;
+                case 'switchInnerTab':
+                    // 处理内部标签切换
+                    this.saveViewState('activeInnerTab', message.innerTabId);
+                    break;
+                case 'saveViewState':
+                    // 处理保存视图状态的请求
+                    if (message.key) {
+                        this.saveViewState(message.key, message.value);
+                    }
                     break;
                 case 'createCanvas':
                     // 调用创建Excalidraw画布的命令
@@ -1055,6 +1092,10 @@ class LingxiSidebarProvider {
      * @param {string} tabId 要切换到的标签页ID
      */
     handleTabSwitch(tabId) {
+        // 保存当前活动的标签页
+        this.saveViewState('activeTab', tabId);
+        
+        // 通知前端更新标签页
         this._webviewView.webview.postMessage({
             command: 'updateTab',
             activeTab: tabId
@@ -1165,6 +1206,60 @@ class LingxiSidebarProvider {
         } catch (error) {
             console.error('处理画布列表时出错:', error);
             vscode.window.showErrorMessage(`处理画布列表失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 恢复视图状态
+     * 在Webview变为可见时调用以恢复之前的状态
+     */
+    restoreViewState() {
+        if (!this._webviewView) {
+            return;
+        }
+        
+        console.log('恢复视图状态', this._viewState);
+        
+        // 恢复活动标签页
+        this._webviewView.webview.postMessage({
+            command: 'restoreState',
+            state: this._viewState
+        });
+        
+        // 重新发送各种数据
+        this.sendClipboardHistory();
+        this.sendCanvasList();
+        
+        // 重新发送API密钥状态
+        this.initializeApiConfiguration().catch(err => {
+            console.error('恢复API配置状态失败:', err);
+        });
+        
+        // 如果之前连接了聊天服务器，恢复聊天服务器状态
+        if (this._viewState.chatServerConnected && this._chatClient) {
+            this._webviewView.webview.postMessage({
+                command: 'chatServerStatus',
+                status: 'connected',
+                port: 3000, // 使用默认端口，或者保存实际端口
+                ipAddress: 'localhost' // 使用默认地址，或者保存实际地址
+            });
+        }
+        
+        // 恢复MCP服务器状态
+        this._webviewView.webview.postMessage({
+            command: 'mcpServerStatus',
+            status: this._viewState.mcpServerStatus
+        });
+    }
+
+    /**
+     * 存储视图状态
+     * @param {string} key 状态键
+     * @param {any} value 状态值
+     */
+    saveViewState(key, value) {
+        if (this._viewState && key) {
+            this._viewState[key] = value;
         }
     }
 }

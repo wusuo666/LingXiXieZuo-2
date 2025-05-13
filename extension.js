@@ -206,7 +206,11 @@ async function activate(context) {
     setSidebarProvider(sidebarProvider);
     
     // 确保使用正确的视图ID注册WebviewViewProvider
-    const viewProvider = vscode.window.registerWebviewViewProvider('lingxixiezuoView', sidebarProvider);
+    const viewProvider = vscode.window.registerWebviewViewProvider('lingxixiezuoView', sidebarProvider, {
+        webviewOptions: {
+            retainContextWhenHidden: true // 加入此配置以在隐藏时保留Webview上下文
+        }
+    });
 
     // 注册启动聊天室服务器命令
     console.log('注册命令: lingxixiezuo.startChatServer');

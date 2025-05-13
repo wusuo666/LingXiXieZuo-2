@@ -934,10 +934,23 @@ class LingxiSidebarProvider {
                         try {
                             // 不再持久化存储API Key到secrets
                             // 只更新当前会话中的设置
-                            agentApi.updateConfig({ apiKey: message.apiKey }); // 更新 agentApi 配置
+                            console.log('正在保存智谱AI API Key...');
+                            agentApi.updateConfig({ 
+                                zhipuApiKey: message.apiKey 
+                            }); // 直接使用zhipuApiKey参数而不是apiKey
                             vscode.window.showInformationMessage('智谱AI API Key 已保存至当前会话。');
+                            
+                            // 获取最新配置并检查状态
+                            const config = agentApi.getConfig();
+                            console.log('保存后的智谱AI配置:', config);
+                            const isKeySet = !!(config && config.zhipuApiKey);
+                            
                             // 通知 Webview 更新状态
-                            this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: true });
+                            this._webviewView.webview.postMessage({ 
+                                command: 'apiKeyStatus', 
+                                isSet: isKeySet
+                            });
+                            console.log('已发送智谱AI API Key状态更新:', isKeySet);
                         } catch (error) {
                             console.error('保存智谱API Key 失败:', error);
                             vscode.window.showErrorMessage('保存智谱AI API Key 失败。');
@@ -949,10 +962,23 @@ class LingxiSidebarProvider {
                         try {
                             // 不再持久化存储API Key到secrets
                             // 只更新当前会话中的设置
-                            agentApi.updateConfig({ deepseekApiKey: message.apiKey }); // 更新 agentApi 配置
+                            console.log('正在保存DeepSeek API Key...');
+                            agentApi.updateConfig({ 
+                                deepseekApiKey: message.apiKey 
+                            }); // 更新 agentApi 配置
                             vscode.window.showInformationMessage('DeepSeek API Key 已保存至当前会话。');
+                            
+                            // 获取最新配置并检查状态
+                            const config = agentApi.getConfig();
+                            console.log('保存后的DeepSeek配置:', config);
+                            const isKeySet = !!(config && config.deepseekApiKey);
+                            
                             // 通知 Webview 更新状态
-                            this._webviewView.webview.postMessage({ command: 'deepseekApiKeyStatus', isSet: true });
+                            this._webviewView.webview.postMessage({ 
+                                command: 'deepseekApiKeyStatus', 
+                                isSet: isKeySet
+                            });
+                            console.log('已发送DeepSeek API Key状态更新:', isKeySet);
                         } catch (error) {
                             console.error('保存DeepSeek API Key 失败:', error);
                             vscode.window.showErrorMessage('保存DeepSeek API Key 失败。');
@@ -1009,12 +1035,44 @@ class LingxiSidebarProvider {
                     }
                     break;
                 case 'getApiKeyStatus': // 处理获取智谱AI API Key 状态的消息
-                    // 每次启动时状态都是未设置
-                    this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: false });
+                    // 检查API Key是否已设置 - 直接检查config对象
+                    try {
+                        const config = agentApi.getConfig();
+                        console.log('检查智谱AI API Key状态:', config);
+                        const isZhipuKeySet = !!(config && config.zhipuApiKey);
+                        console.log('智谱AI API Key是否已设置:', isZhipuKeySet);
+                        this._webviewView.webview.postMessage({ 
+                            command: 'apiKeyStatus', 
+                            isSet: isZhipuKeySet 
+                        });
+                    } catch (error) {
+                        console.error('获取智谱AI API Key状态失败:', error);
+                        this._webviewView.webview.postMessage({ 
+                            command: 'apiKeyStatus', 
+                            isSet: false,
+                            error: error.message
+                        });
+                    }
                     break;
                 case 'getDeepSeekApiKeyStatus': // 处理获取DeepSeek API Key 状态的消息
-                    // 每次启动时状态都是未设置
-                    this._webviewView.webview.postMessage({ command: 'deepseekApiKeyStatus', isSet: false });
+                    // 检查API Key是否已设置 - 直接检查config对象
+                    try {
+                        const config = agentApi.getConfig();
+                        console.log('检查DeepSeek API Key状态:', config);
+                        const isDeepSeekKeySet = !!(config && config.deepseekApiKey);
+                        console.log('DeepSeek API Key是否已设置:', isDeepSeekKeySet);
+                        this._webviewView.webview.postMessage({ 
+                            command: 'deepseekApiKeyStatus', 
+                            isSet: isDeepSeekKeySet 
+                        });
+                    } catch (error) {
+                        console.error('获取DeepSeek API Key状态失败:', error);
+                        this._webviewView.webview.postMessage({ 
+                            command: 'deepseekApiKeyStatus', 
+                            isSet: false,
+                            error: error.message
+                        });
+                    }
                     break;
                 case 'toggleMcpServer': // 处理MCP服务器启用/禁用
                     if (message.isEnabled) {

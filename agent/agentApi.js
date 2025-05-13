@@ -85,6 +85,7 @@ function initOpenAIClient() {
 function updateConfig(newConfig) {
     console.log('更新API配置:', JSON.stringify(newConfig, null, 2));
     
+    // 处理apiKey - 同时根据当前provider决定存储在哪个特定字段
     if (newConfig.apiKey !== undefined) {
         if (config.provider === 'zhipuai') {
             config.zhipuApiKey = newConfig.apiKey;
@@ -104,6 +105,13 @@ function updateConfig(newConfig) {
         console.log('已直接更新DeepSeek API Key:', config.deepseekApiKey ? '已设置' : '未设置');
     }
     
+    // 处理zhipuApiKey
+    if (newConfig.zhipuApiKey !== undefined) {
+        config.zhipuApiKey = newConfig.zhipuApiKey;
+        console.log('已直接更新智谱API Key:', config.zhipuApiKey ? '已设置' : '未设置');
+    }
+    
+    // 处理model
     if (newConfig.model !== undefined) {
         if (config.provider === 'zhipuai') {
             config.zhipuModel = newConfig.model;
@@ -117,11 +125,25 @@ function updateConfig(newConfig) {
         }
     }
     
+    // 处理deepseekModel
+    if (newConfig.deepseekModel !== undefined) {
+        config.deepseekModel = newConfig.deepseekModel;
+        console.log('已直接更新DeepSeek模型:', newConfig.deepseekModel);
+    }
+    
+    // 处理zhipuModel
+    if (newConfig.zhipuModel !== undefined) {
+        config.zhipuModel = newConfig.zhipuModel;
+        console.log('已直接更新智谱模型:', newConfig.zhipuModel);
+    }
+    
+    // 处理provider
     if (newConfig.provider !== undefined) {
         config.provider = newConfig.provider;
         console.log('已更新AI提供商:', newConfig.provider);
     }
     
+    // 处理baseUrl
     if (newConfig.baseUrl !== undefined) {
         if (config.provider === 'openai') {
             config.baseUrl = newConfig.baseUrl;
@@ -646,6 +668,15 @@ function clearConversationHistory(sessionId) {
     }
 }
 
+/**
+ * 获取当前配置
+ * @returns {Object} 当前配置对象的副本
+ */
+function getConfig() {
+    // 返回配置的副本而不是直接引用，以防止外部修改
+    return { ...config };
+}
+
 // 导出模块接口
 module.exports = {
     updateConfig,
@@ -658,5 +689,6 @@ module.exports = {
     addToConversationHistory,  // 导出对话历史管理函数
     getConversationHistory,    // 导出获取对话历史函数
     clearConversationHistory,  // 导出清除对话历史函数
-    setCurrentSessionId: (id) => { currentSessionId = id; }  // 设置当前会话ID的函数
+    setCurrentSessionId: (id) => { currentSessionId = id; },  // 设置当前会话ID的函数
+    getConfig  // 导出获取配置的函数
 };

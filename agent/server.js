@@ -243,7 +243,8 @@ const DEFAULT_TEMPLATES = {
     appState: {
       theme: 'light',
       viewBackgroundColor: '#ffffff',
-      currentItemFontFamily: 1
+      currentItemFontFamily: 1,
+      gridSize: 20
     }
   },
   '基础图形': {
@@ -258,13 +259,17 @@ const DEFAULT_TEMPLATES = {
         y: 100,
         width: 200,
         height: 100,
+        angle: 0,
         strokeColor: '#000000',
         backgroundColor: '#ffffff',
         fillStyle: 'solid',
         strokeWidth: 1,
         strokeStyle: 'solid',
         roughness: 1,
-        opacity: 100
+        opacity: 100,
+        seed: 42,
+        version: 1,
+        versionNonce: 1
       },
       {
         id: 'ellipse1',
@@ -273,19 +278,24 @@ const DEFAULT_TEMPLATES = {
         y: 100,
         width: 150,
         height: 100,
+        angle: 0,
         strokeColor: '#1864ab',
         backgroundColor: '#a5d8ff',
         fillStyle: 'solid',
         strokeWidth: 1,
         strokeStyle: 'solid',
         roughness: 1,
-        opacity: 100
+        opacity: 100,
+        seed: 43,
+        version: 1,
+        versionNonce: 1
       }
     ],
     appState: {
       theme: 'light',
       viewBackgroundColor: '#ffffff',
-      currentItemFontFamily: 1
+      currentItemFontFamily: 1,
+      gridSize: 20
     }
   },
   '流程图': {
@@ -294,55 +304,130 @@ const DEFAULT_TEMPLATES = {
     source: 'https://excalidraw.com',
     elements: [
       {
-        id: 'rectangle1',
+        id: 'start-box',
         type: 'rectangle',
         x: 100,
         y: 100,
         width: 200,
         height: 80,
+        angle: 0,
         strokeColor: '#000000',
-        backgroundColor: '#ffffff',
+        backgroundColor: '#4c6ef5',
         fillStyle: 'solid',
         strokeWidth: 1,
         strokeStyle: 'solid',
         roughness: 1,
-        opacity: 100
+        opacity: 100,
+        seed: 1234,
+        version: 1,
+        versionNonce: 1
       },
       {
-        id: 'rectangle2',
-        type: 'rectangle',
-        x: 100,
-        y: 300,
-        width: 200,
-        height: 80,
-        strokeColor: '#000000',
-        backgroundColor: '#ffffff',
-        fillStyle: 'solid',
-        strokeWidth: 1,
-        strokeStyle: 'solid',
-        roughness: 1,
-        opacity: 100
-      },
-      {
-        id: 'arrow1',
-        type: 'arrow',
-        x: 200,
-        y: 180,
-        width: 0,
-        height: 120,
+        id: 'start-text',
+        type: 'text',
+        x: 150,
+        y: 130,
+        width: 100,
+        height: 25,
+        angle: 0,
         strokeColor: '#000000',
         backgroundColor: 'transparent',
         fillStyle: 'solid',
         strokeWidth: 1,
         strokeStyle: 'solid',
         roughness: 1,
-        opacity: 100
+        opacity: 100,
+        seed: 1235,
+        version: 1,
+        versionNonce: 1,
+        text: '开始',
+        fontSize: 20,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'end-box',
+        type: 'rectangle',
+        x: 100,
+        y: 300,
+        width: 200,
+        height: 80,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: '#fa5252',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 1236,
+        version: 1,
+        versionNonce: 1
+      },
+      {
+        id: 'end-text',
+        type: 'text',
+        x: 150,
+        y: 330,
+        width: 100,
+        height: 25,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 1237,
+        version: 1,
+        versionNonce: 1,
+        text: '结束',
+        fontSize: 20,
+        fontFamily: 1,
+        textAlign: 'center',
+        verticalAlign: 'middle'
+      },
+      {
+        id: 'arrow1',
+        type: 'arrow',
+        x: 199,
+        y: 180,
+        width: 1,
+        height: 120,
+        angle: 0,
+        strokeColor: '#000000',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 1,
+        opacity: 100,
+        seed: 1238,
+        version: 1,
+        versionNonce: 1,
+        points: [
+          [0, 0],
+          [1, 120]
+        ],
+        startBinding: {
+          elementId: 'start-box',
+          focus: 0.5,
+          gap: 1
+        },
+        endBinding: {
+          elementId: 'end-box',
+          focus: 0.5,
+          gap: 1
+        }
       }
     ],
     appState: {
       theme: 'light',
       viewBackgroundColor: '#ffffff',
-      currentItemFontFamily: 1
+      currentItemFontFamily: 1,
+      gridSize: 20
     }
   }
 };
@@ -417,9 +502,68 @@ async function createCanvas(name, template = '空白画布') {
       return `⚠️ 模板 ${template} 不存在，可用模板: ${Object.keys(DEFAULT_TEMPLATES).join(', ')}`;
     }
     
-    // 创建基于模板的新画布
-    const canvasData = JSON.stringify(DEFAULT_TEMPLATES[template], null, 2);
-    await fs.writeFile(filePath, canvasData, 'utf8');
+    // 创建基于模板的新画布，确保数据格式正确
+    const templateData = DEFAULT_TEMPLATES[template];
+    
+    // 确保每个元素都有必要的属性
+    if (templateData.elements) {
+      templateData.elements.forEach(element => {
+        // 确保每个元素都有id
+        if (!element.id) {
+          element.id = `gen-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        }
+        
+        // 确保每个元素都有version和versionNonce
+        if (!element.version) {
+          element.version = 1;
+        }
+        if (!element.versionNonce) {
+          element.versionNonce = Math.floor(Math.random() * 1000);
+        }
+        
+        // 确保每个元素都有seed
+        if (!element.seed) {
+          element.seed = Math.floor(Math.random() * 10000);
+        }
+        
+        // 确保每个元素都有angle
+        if (element.angle === undefined) {
+          element.angle = 0;
+        }
+      });
+    }
+    
+    // 确保appState包含必要的字段
+    if (!templateData.appState) {
+      templateData.appState = {};
+    }
+    
+    if (!templateData.appState.theme) {
+      templateData.appState.theme = 'light';
+    }
+    
+    if (!templateData.appState.viewBackgroundColor) {
+      templateData.appState.viewBackgroundColor = '#ffffff';
+    }
+    
+    if (!templateData.appState.gridSize) {
+      templateData.appState.gridSize = 20;
+    }
+    
+    // 确保基本结构完整
+    const canvasData = {
+      type: 'excalidraw',
+      version: 2,
+      source: 'https://excalidraw.com',
+      elements: templateData.elements || [],
+      appState: templateData.appState,
+      files: {}
+    };
+    
+    console.error(`画布数据准备完成，包含 ${canvasData.elements.length} 个元素`);
+    
+    // 写入文件，确保格式正确
+    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2), 'utf8');
     
     console.error(`画布创建成功: ${filePath}`);
     return `✅ 成功创建画布 ${name}\n💾 文件保存在: ${filePath}\n📐 使用模板: ${template}`;
@@ -492,71 +636,19 @@ function formatFileSize(bytes) {
 }
 
 /**
- * 切换画布主题
- * @param {string} name - 画布名称
- * @param {string} theme - 主题名称 (light/dark/auto)
- * @returns {Promise<string>} 操作结果
- */
-async function switchTheme(name, theme) {
-  console.error(`开始切换画布主题，名称: ${name}, 主题: ${theme}`);
-  
-  if (!['light', 'dark', 'auto'].includes(theme)) {
-    return `⚠️ 无效的主题: ${theme}，请使用 light, dark 或 auto`;
-  }
-  
-  try {
-    await ensureExcalidrawDir();
-    
-    // 验证文件存在
-    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
-    const filePath = path.join(EXCALIDRAW_DIR, fileName);
-    
-    try {
-      await fs.access(filePath);
-    } catch {
-      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
-    }
-    
-    // 读取画布内容
-    const fileContent = await fs.readFile(filePath, 'utf8');
-    let canvasData;
-    try {
-      canvasData = JSON.parse(fileContent);
-    } catch {
-      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
-    }
-    
-    // 更新主题
-    if (!canvasData.appState) {
-      canvasData.appState = {};
-    }
-    
-    const oldTheme = canvasData.appState.theme || 'light';
-    canvasData.appState.theme = theme;
-    
-    // 写回文件
-    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2), 'utf8');
-    
-    console.error(`画布主题切换成功: ${filePath}`);
-    return `✅ 成功将画布 ${name} 的主题从 ${oldTheme} 切换为 ${theme}`;
-  } catch (error) {
-    console.error(`切换画布主题失败: ${error.message}`);
-    return `❌ 切换画布主题失败: ${error.message}`;
-  }
-}
-
-/**
  * 导出画布为图像格式
  * @param {string} name - 画布名称
- * @param {string} format - 导出格式 (svg/png)
+ * @param {string} format - 导出格式 (svg)
  * @param {boolean} withBackground - 是否包含背景
+ * @param {boolean} withDarkMode - 是否使用暗色模式
+ * @param {number} exportScale - 导出缩放比例
  * @returns {Promise<string>} 操作结果
  */
-async function exportCanvas(name, format, withBackground) {
-  console.error(`开始导出画布，名称: ${name}, 格式: ${format}, 包含背景: ${withBackground}`);
+async function exportCanvas(name, format, withBackground = true, withDarkMode = false, exportScale = 1) {
+  console.error(`开始导出画布，名称: ${name}, 格式: ${format}, 包含背景: ${withBackground}, 暗色模式: ${withDarkMode}, 缩放: ${exportScale}`);
   
-  if (!['svg', 'png'].includes(format)) {
-    return `⚠️ 无效的导出格式: ${format}，请使用 svg 或 png`;
+  if (format !== 'svg') {
+    return `⚠️ 无效的导出格式: ${format}，目前仅支持 svg 格式`;
   }
   
   try {
@@ -578,18 +670,217 @@ async function exportCanvas(name, format, withBackground) {
     
     // 读取画布内容
     const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch (e) {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容: ${e.message}`;
+    }
     
-    // 模拟导出过程
-    // 实际实现中，这里应该调用Excalidraw的导出API
-    // 我们这里简单地复制文件并模拟导出
-    await fs.copyFile(filePath, exportPath);
+    // 准备导出选项
+    const exportOptions = {
+      elements: canvasData.elements || [],
+      appState: {
+        ...canvasData.appState,
+        exportWithDarkMode: withDarkMode,
+        exportBackground: withBackground,
+        exportScale: exportScale,
+        viewBackgroundColor: withBackground ? (canvasData.appState?.viewBackgroundColor || '#ffffff') : 'transparent'
+      }
+    };
+    
+    try {
+      // 使用备选方法生成SVG
+      console.error(`正在生成SVG格式...`);
+      
+      // 使用简化的SVG生成方法
+      const svgContent = generateSVG(exportOptions);
+      await fs.writeFile(exportPath, svgContent, 'utf8');
+      console.error(`SVG生成成功: ${exportPath}`);
+    } catch (error) {
+      console.error(`SVG生成失败: ${error.message}`);
+      throw new Error(`SVG导出失败: ${error.message}`);
+    }
     
     console.error(`画布导出成功: ${exportPath}`);
-    return `✅ 成功导出画布 ${name} 为 ${format.toUpperCase()} 格式\n💾 导出文件: ${exportPath}\n${withBackground ? '🎨 包含背景' : '🔍 透明背景'}`;
+    return `✅ 成功导出画布 ${name} 为 SVG 格式
+💾 导出文件: ${exportPath}
+${withBackground ? '🎨 包含背景' : '🔍 透明背景'}
+${withDarkMode ? '🌙 暗色模式' : '☀️ 亮色模式'}
+📏 缩放比例: ${exportScale}x`;
   } catch (error) {
     console.error(`导出画布失败: ${error.message}`);
     return `❌ 导出画布失败: ${error.message}`;
   }
+}
+
+/**
+ * 生成SVG格式内容 - 备选方法，不依赖外部库
+ * @param {object} exportOptions - 导出选项
+ * @returns {string} SVG内容
+ */
+function generateSVG(exportOptions) {
+  console.error(`使用备选方法生成SVG...`);
+  
+  const { elements, appState } = exportOptions;
+  const width = 800; // 默认宽度
+  const height = 600; // 默认高度
+  const backgroundColor = appState.viewBackgroundColor || '#ffffff';
+  
+  // 计算画布边界，以便适当缩放
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  elements.forEach(el => {
+    if (el.x !== undefined && el.y !== undefined) {
+      minX = Math.min(minX, el.x);
+      minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x + (el.width || 0));
+      maxY = Math.max(maxY, el.y + (el.height || 0));
+    }
+  });
+  
+  // 如果没有元素或无法计算边界，使用默认值
+  if (minX === Infinity || minY === Infinity || maxX === -Infinity || maxY === -Infinity) {
+    minX = 0;
+    minY = 0;
+    maxX = width;
+    maxY = height;
+  }
+  
+  // 添加一些内边距
+  const padding = 20;
+  minX -= padding;
+  minY -= padding;
+  maxX += padding;
+  maxY += padding;
+  
+  // 计算尺寸和视图框
+  const svgWidth = maxX - minX;
+  const svgHeight = maxY - minY;
+  const viewBox = `${minX} ${minY} ${svgWidth} ${svgHeight}`;
+  
+  // 生成SVG元素
+  const svgElements = elements.map(el => {
+    let elementSvg = '';
+    const id = el.id || `el-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // 根据元素类型生成SVG
+    switch (el.type) {
+      case 'rectangle':
+        elementSvg = `<rect id="${id}" x="${el.x}" y="${el.y}" width="${el.width || 100}" height="${el.height || 80}" 
+          fill="${el.backgroundColor || 'none'}" stroke="${el.strokeColor || '#000'}" 
+          stroke-width="${el.strokeWidth || 1}" />`;
+        break;
+      
+      case 'ellipse':
+        const cx = el.x + (el.width || 100) / 2;
+        const cy = el.y + (el.height || 80) / 2;
+        const rx = (el.width || 100) / 2;
+        const ry = (el.height || 80) / 2;
+        elementSvg = `<ellipse id="${id}" cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" 
+          fill="${el.backgroundColor || 'none'}" stroke="${el.strokeColor || '#000'}" 
+          stroke-width="${el.strokeWidth || 1}" />`;
+        break;
+      
+      case 'diamond':
+        // 使用多边形绘制菱形
+        const diamondX = el.x;
+        const diamondY = el.y;
+        const diamondWidth = el.width || 100;
+        const diamondHeight = el.height || 80;
+        const points = `
+          ${diamondX + diamondWidth/2},${diamondY} 
+          ${diamondX + diamondWidth},${diamondY + diamondHeight/2} 
+          ${diamondX + diamondWidth/2},${diamondY + diamondHeight} 
+          ${diamondX},${diamondY + diamondHeight/2}
+        `;
+        elementSvg = `<polygon id="${id}" points="${points}" 
+          fill="${el.backgroundColor || 'none'}" stroke="${el.strokeColor || '#000'}" 
+          stroke-width="${el.strokeWidth || 1}" />`;
+        break;
+      
+      case 'line':
+      case 'arrow':
+        // 简单的直线或箭头
+        const isArrow = el.type === 'arrow';
+        const startX = el.x;
+        const startY = el.y;
+        const endX = startX + (el.width || 100);
+        const endY = startY + (el.height || 0);
+        
+        // 创建线条
+        const linePath = `M ${startX} ${startY} L ${endX} ${endY}`;
+        
+        // 如果是箭头，添加箭头标记
+        let arrowMarker = '';
+        if (isArrow) {
+          const markerId = `arrow-${id}`;
+          arrowMarker = `
+            <defs>
+              <marker id="${markerId}" viewBox="0 0 10 10" refX="9" refY="5" 
+                markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="${el.strokeColor || '#000'}" />
+              </marker>
+            </defs>
+          `;
+          
+          elementSvg = `${arrowMarker}
+            <path id="${id}" d="${linePath}" fill="none" stroke="${el.strokeColor || '#000'}" 
+              stroke-width="${el.strokeWidth || 1}" marker-end="url(#${markerId})" />`;
+        } else {
+          elementSvg = `<path id="${id}" d="${linePath}" fill="none" 
+            stroke="${el.strokeColor || '#000'}" stroke-width="${el.strokeWidth || 1}" />`;
+        }
+        break;
+      
+      case 'text':
+        // 文本元素
+        elementSvg = `<text id="${id}" x="${el.x}" y="${el.y + 20}" font-family="Arial" 
+          font-size="${el.fontSize || 20}" fill="${el.strokeColor || '#000'}">
+          ${el.text || '[文本]'}
+        </text>`;
+        break;
+      
+      default:
+        console.error(`不支持的元素类型: ${el.type}`);
+        break;
+    }
+    
+    return elementSvg;
+  }).join('\n  ');
+  
+  // 将原始数据嵌入到SVG中，以便以后编辑
+  const jsonData = JSON.stringify({
+    type: 'excalidraw',
+    version: 2,
+    source: 'https://excalidraw.com',
+    elements: elements,
+    appState: {
+      ...appState,
+      exportWithDarkMode: appState.exportWithDarkMode,
+      exportBackground: appState.exportBackground,
+      exportScale: appState.exportScale
+    }
+  });
+  const encodedData = Buffer.from(jsonData).toString('base64');
+  
+  // 创建完整的SVG文档
+  return `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  width="${svgWidth}"
+  height="${svgHeight}"
+  viewBox="${viewBox}"
+  version="1.1"
+  style="background-color: ${backgroundColor};"
+>
+  <!-- 由LingXiXieZuo Excalidraw生成 -->
+  ${svgElements}
+  <desc>
+    <!-- 原始Excalidraw数据 -->
+    excalidraw.data:${encodedData}
+  </desc>
+</svg>`;
 }
 
 /**
@@ -677,6 +968,337 @@ async function addShape(name, shapeType, x, y, color) {
   }
 }
 
+/**
+ * 导入Excalidraw公共库
+ * @param {string} libraryUrl - 库URL或识别符
+ * @param {string} canvasName - 要导入到的画布名称 (可选)
+ * @returns {Promise<string>} 操作结果
+ */
+async function importLibrary(libraryUrl, canvasName = '') {
+  console.error(`开始导入库，URL: ${libraryUrl}, 画布: ${canvasName || '(工作区库)'}`);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 检查URL格式，支持直接URL或预定义库标识符
+    let libraryContent;
+    if (libraryUrl.startsWith('http')) {
+      // 从URL获取库内容
+      try {
+        const response = await axios.get(libraryUrl);
+        libraryContent = response.data;
+        console.error(`成功从URL获取库内容`);
+      } catch (error) {
+        return `⚠️ 无法从URL获取库内容: ${error.message}`;
+      }
+    } else {
+      // 使用预定义库ID从Excalidraw公共库获取
+      try {
+        const response = await axios.get(`https://libraries.excalidraw.com/libraries/${libraryUrl}.excalidrawlib`);
+        libraryContent = response.data;
+        console.error(`成功从公共库获取: ${libraryUrl}`);
+      } catch (error) {
+        return `⚠️ 无法从公共库获取: ${error.message}`;
+      }
+    }
+    
+    // 验证库内容
+    if (!libraryContent || typeof libraryContent !== 'object') {
+      return `⚠️ 库内容无效，应为JSON对象`;
+    }
+    
+    // 处理导入选项
+    if (canvasName) {
+      // 导入到指定画布
+      const fileName = canvasName.endsWith('.excalidraw') ? canvasName : `${canvasName}.excalidraw`;
+      const filePath = path.join(EXCALIDRAW_DIR, fileName);
+      
+      try {
+        await fs.access(filePath);
+      } catch {
+        return `⚠️ 画布 ${canvasName} 不存在，请先创建或检查名称是否正确`;
+      }
+      
+      // 读取画布内容
+      const fileContent = await fs.readFile(filePath, 'utf8');
+      let canvasData;
+      try {
+        canvasData = JSON.parse(fileContent);
+      } catch {
+        return `⚠️ 画布文件 ${canvasName} 格式无效，无法解析JSON内容`;
+      }
+      
+      // 添加库项目到画布
+      if (libraryContent.libraryItems && Array.isArray(libraryContent.libraryItems)) {
+        // 确保elements数组存在
+        if (!canvasData.elements) {
+          canvasData.elements = [];
+        }
+        
+        // 导入库项目作为元素
+        let importCount = 0;
+        for (const item of libraryContent.libraryItems) {
+          if (item.elements && Array.isArray(item.elements)) {
+            // 给每个元素生成新ID
+            const elements = item.elements.map(el => ({
+              ...el,
+              id: `imported-${Date.now()}-${Math.floor(Math.random() * 1000)}-${importCount}`
+            }));
+            
+            canvasData.elements.push(...elements);
+            importCount += elements.length;
+          }
+        }
+        
+        // 写回文件
+        await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2), 'utf8');
+        console.error(`库导入到画布成功: ${filePath}`);
+        return `✅ 成功将库 ${getLibraryName(libraryUrl, libraryContent)} 导入到画布 ${canvasName}\n📊 导入了 ${importCount} 个元素`;
+      } else {
+        return `⚠️ 库格式不正确，缺少有效的libraryItems数组`;
+      }
+    } else {
+      // 保存为工作区库
+      const libraryName = getLibraryName(libraryUrl, libraryContent);
+      const libFileName = `${libraryName}.excalidrawlib`;
+      const libFilePath = path.join(EXCALIDRAW_DIR, libFileName);
+      
+      // 写入库文件
+      await fs.writeFile(libFilePath, JSON.stringify(libraryContent, null, 2), 'utf8');
+      
+      console.error(`库保存为工作区库成功: ${libFilePath}`);
+      return `✅ 成功导入库 ${libraryName} 作为工作区库\n💾 文件保存在: ${libFilePath}\n📊 包含 ${libraryContent.libraryItems?.length || 0} 个项目`;
+    }
+  } catch (error) {
+    console.error(`导入库失败: ${error.message}`);
+    return `❌ 导入库失败: ${error.message}`;
+  }
+}
+
+/**
+ * 获取库名称
+ * @param {string} url - 库URL
+ * @param {object} content - 库内容
+ * @returns {string} 库名称
+ */
+function getLibraryName(url, content) {
+  // 首先尝试从内容中获取名称
+  if (content.name) {
+    return content.name;
+  }
+  
+  // 然后从URL中提取
+  if (url.includes('/')) {
+    const parts = url.split('/');
+    const lastPart = parts[parts.length - 1];
+    return lastPart.replace('.excalidrawlib', '');
+  }
+  
+  // 最后使用默认名称
+  return `imported-library-${Date.now()}`;
+}
+
+/**
+ * 获取画布详细信息
+ * @param {string} name - 画布名称
+ * @returns {Promise<string>} 画布详细信息
+ */
+async function getCanvasDetails(name) {
+  console.error(`开始获取画布详细信息，名称: ${name}`);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
+    }
+    
+    // 获取元素分类统计
+    const elements = canvasData.elements || [];
+    const stats = {
+      total: elements.length,
+      types: {}
+    };
+    
+    // 统计各类元素数量
+    elements.forEach(element => {
+      const type = element.type || 'unknown';
+      if (!stats.types[type]) {
+        stats.types[type] = 0;
+      }
+      stats.types[type]++;
+    });
+    
+    // 生成元素详细信息
+    let elementDetails = '';
+    elements.forEach((element, index) => {
+      elementDetails += `\n${index + 1}. ${element.type || '未知类型'} (ID: ${element.id || '无ID'})`;
+      
+      if (element.type === 'text' && element.text) {
+        elementDetails += `\n   📝 文本内容: "${element.text.substring(0, 50)}${element.text.length > 50 ? '...' : ''}"`;
+      }
+      
+      elementDetails += `\n   📍 位置: (${element.x || 0}, ${element.y || 0})`;
+      
+      if (element.width && element.height) {
+        elementDetails += `\n   📏 尺寸: ${element.width}×${element.height}`;
+      }
+      
+      if (element.strokeColor) {
+        elementDetails += `\n   🎨 线条颜色: ${element.strokeColor}`;
+      }
+      
+      if (element.backgroundColor && element.backgroundColor !== 'transparent') {
+        elementDetails += `\n   🎨 背景颜色: ${element.backgroundColor}`;
+      }
+    });
+    
+    // 获取画布属性
+    const appState = canvasData.appState || {};
+    const theme = appState.theme || 'light';
+    const backgroundColor = appState.viewBackgroundColor || '#ffffff';
+    
+    // 生成完整报告
+    let result = `📊 画布 ${name} 详细信息:\n`;
+    result += `\n📄 基本信息:`;
+    result += `\n   🖼️ 画布主题: ${theme}`;
+    result += `\n   🎨 背景颜色: ${backgroundColor}`;
+    result += `\n   📂 文件路径: ${filePath}`;
+    
+    result += `\n\n📊 元素统计 (共${stats.total}个):`;
+    for (const [type, count] of Object.entries(stats.types)) {
+      result += `\n   ${getElementEmoji(type)} ${type}: ${count}个`;
+    }
+    
+    if (stats.total > 0) {
+      result += `\n\n📋 元素详细信息:${elementDetails}`;
+    }
+    
+    console.error(`画布详细信息生成完成: ${name}`);
+    return result;
+  } catch (error) {
+    console.error(`获取画布详细信息失败: ${error.message}`);
+    return `❌ 获取画布详细信息失败: ${error.message}`;
+  }
+}
+
+/**
+ * 获取元素类型对应的表情符号
+ * @param {string} type - 元素类型
+ * @returns {string} 表情符号
+ */
+function getElementEmoji(type) {
+  const emojiMap = {
+    'rectangle': '🔲',
+    'ellipse': '⭕',
+    'diamond': '💠',
+    'arrow': '➡️',
+    'line': '📏',
+    'text': '📝',
+    'unknown': '❓'
+  };
+  
+  return emojiMap[type] || emojiMap.unknown;
+}
+
+/**
+ * 添加文本到画布
+ * @param {string} name - 画布名称
+ * @param {string} text - 文本内容
+ * @param {number} x - X坐标
+ * @param {number} y - Y坐标
+ * @param {string} color - 文本颜色 (可选)
+ * @param {number} fontSize - 字体大小 (可选)
+ * @returns {Promise<string>} 操作结果
+ */
+async function addText(name, text, x, y, color = '#000000', fontSize = 20) {
+  console.error(`开始添加文本，画布: ${name}, 内容: "${text}", 位置: (${x},${y}), 颜色: ${color}, 字体大小: ${fontSize}`);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
+    }
+    
+    // 确保elements数组存在
+    if (!canvasData.elements) {
+      canvasData.elements = [];
+    }
+    
+    // 计算文本宽度（简单估计）
+    const estimatedWidth = text.length * fontSize * 0.6;
+    
+    // 创建新文本元素
+    const newText = {
+      id: `text-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'text',
+      x: parseInt(x),
+      y: parseInt(y),
+      width: estimatedWidth,
+      height: fontSize * 1.2,
+      angle: 0,
+      strokeColor: color,
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 1,
+      opacity: 100,
+      text: text,
+      fontSize: fontSize,
+      fontFamily: 1,
+      textAlign: 'left',
+      verticalAlign: 'top',
+      seed: Math.floor(Math.random() * 10000),
+      version: 1,
+      versionNonce: Math.floor(Math.random() * 1000)
+    };
+    
+    // 添加到画布
+    canvasData.elements.push(newText);
+    
+    // 写回文件
+    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2), 'utf8');
+    
+    console.error(`文本添加成功: ${filePath}`);
+    return `✅ 成功添加文本到画布 ${name}\n📝 内容: "${text}"\n📍 位置: (${x}, ${y})\n🎨 颜色: ${color}\n📊 字体大小: ${fontSize}\n🆔 元素ID: ${newText.id}`;
+  } catch (error) {
+    console.error(`添加文本失败: ${error.message}`);
+    return `❌ 添加文本失败: ${error.message}`;
+  }
+}
+
 // 添加参数描述
 createCanvas.description = '创建新的Excalidraw画布，可选择模板';
 createCanvas.parameters = {
@@ -705,23 +1327,7 @@ listCanvases.parameters = {
   }
 };
 
-switchTheme.description = '切换Excalidraw画布的主题';
-switchTheme.parameters = {
-  type: 'object',
-  properties: {
-    name: {
-      type: 'string',
-      description: '画布名称'
-    },
-    theme: {
-      type: 'string',
-      description: '主题名称: light, dark 或 auto'
-    }
-  },
-  required: ['name', 'theme']
-};
-
-exportCanvas.description = '将Excalidraw画布导出为图像格式';
+exportCanvas.description = '将Excalidraw画布导出为SVG格式';
 exportCanvas.parameters = {
   type: 'object',
   properties: {
@@ -731,11 +1337,19 @@ exportCanvas.parameters = {
     },
     format: {
       type: 'string',
-      description: '导出格式: svg 或 png'
+      description: '导出格式: svg'
     },
     withBackground: {
       type: 'boolean',
       description: '是否包含背景（默认为true）'
+    },
+    withDarkMode: {
+      type: 'boolean',
+      description: '是否使用暗色模式（默认为false）'
+    },
+    exportScale: {
+      type: 'number',
+      description: '导出缩放比例（默认为1）'
     }
   },
   required: ['name', 'format']
@@ -769,12 +1383,74 @@ addShape.parameters = {
   required: ['name', 'shapeType', 'x', 'y']
 };
 
+importLibrary.description = '导入Excalidraw公共库或从URL导入库';
+importLibrary.parameters = {
+  type: 'object',
+  properties: {
+    libraryUrl: {
+      type: 'string',
+      description: '库URL或识别符（如"rocket"、"charts"等公共库ID或完整URL）'
+    },
+    canvasName: {
+      type: 'string',
+      description: '可选：要导入到的画布名称。如不提供，将作为工作区库导入'
+    }
+  },
+  required: ['libraryUrl']
+};
+
+getCanvasDetails.description = '获取Excalidraw画布的详细信息';
+getCanvasDetails.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    }
+  },
+  required: ['name']
+};
+
+addText.description = '向Excalidraw画布添加文本';
+addText.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    text: {
+      type: 'string',
+      description: '文本内容'
+    },
+    x: {
+      type: 'number',
+      description: 'X坐标位置'
+    },
+    y: {
+      type: 'number',
+      description: 'Y坐标位置'
+    },
+    color: {
+      type: 'string',
+      description: '文本颜色，如 #000000 或 #ff0000 (可选，默认为黑色)'
+    },
+    fontSize: {
+      type: 'number',
+      description: '字体大小 (可选，默认为20)'
+    }
+  },
+  required: ['name', 'text', 'x', 'y']
+};
+
 // 注册工具
 mcp.tool()(createCanvas);
 mcp.tool()(listCanvases);
-mcp.tool()(switchTheme);
 mcp.tool()(exportCanvas);
 mcp.tool()(addShape);
+mcp.tool()(importLibrary);
+mcp.tool()(getCanvasDetails);
+mcp.tool()(addText);
 
 // 如果直接运行此文件
 if (process.argv[1] === __filename) {

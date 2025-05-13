@@ -169,9 +169,10 @@ function getZhipuAIHeaders() {
 /**
  * 连接到MCP服务器并列出可用工具
  * @param {string} serverScriptPath - 服务器脚本路径
+ * @param {string} workspaceDir - 工作区目录路径
  * @returns {Promise<void>}
  */
-async function connectToServer(serverScriptPath) {
+async function connectToServer(serverScriptPath, workspaceDir) {
     if (!serverScriptPath) return;
     
     const isPython = serverScriptPath.endsWith('.py');
@@ -183,8 +184,16 @@ async function connectToServer(serverScriptPath) {
     
     const command = isPython ? 'python' : 'node';
     
+    // 增加命令行参数，传递工作区目录
+    const args = [serverScriptPath];
+    if (workspaceDir) {
+        console.log(`传递工作区目录参数: ${workspaceDir}`);
+        args.push('--workspace');
+        args.push(workspaceDir);
+    }
+    
     // 启动服务器进程
-    serverProcess = spawn(command, [serverScriptPath]);
+    serverProcess = spawn(command, args);
     
     // 创建读写接口
     rl = readline.createInterface({

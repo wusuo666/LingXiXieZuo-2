@@ -1,11 +1,24 @@
-import axios from 'axios';
-// import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import fs from 'fs/promises';
-import path from 'path';
+const axios = require('axios');
+// const dotenv = require('dotenv');
+const { fileURLToPath } = require('url');
+const fs = require('fs').promises;
+const path = require('path');
+
 
 // 注释掉环境变量加载
 // dotenv.config();
+
+// 初始化全局变量存储Excalidraw目录路径
+let EXCALIDRAW_DIR = '';
+
+/**
+ * 设置Excalidraw目录路径
+ * @param {string} dirPath - Excalidraw目录路径
+ */
+function setExcalidrawDir(dirPath) {
+  console.error(`设置Excalidraw目录: ${dirPath}`);
+  EXCALIDRAW_DIR = dirPath;
+}
 
 /**
  * MCP 服务器类，管理JSON-RPC通信和工具
@@ -220,7 +233,7 @@ class FastMCP {
 const mcp = new FastMCP('ExcalidrawServer');
 
 // 模拟Excalidraw存储位置
-const EXCALIDRAW_DIR = path.join(process.cwd(), 'excalidraw_files');
+// const EXCALIDRAW_DIR = vscode.workspace.workspaceFolders[0].uri.path;
 const DEFAULT_TEMPLATES = {
   '空白画布': {
     type: 'excalidraw',
@@ -340,11 +353,40 @@ const DEFAULT_TEMPLATES = {
  */
 async function ensureExcalidrawDir() {
   try {
-    await fs.mkdir(EXCALIDRAW_DIR, { recursive: true });
-    console.error(`Excalidraw目录已确认: ${EXCALIDRAW_DIR}`);
+    // 如果目录路径为空，使用临时目录
+    if (!EXCALIDRAW_DIR || EXCALIDRAW_DIR.trim() === '') {
+      const tempDir = path.join(require('os').tmpdir(), 'excalidraw_files');
+      console.error(`EXCALIDRAW_DIR未设置，使用临时目录: ${tempDir}`);
+      EXCALIDRAW_DIR = tempDir;
+    }
+    
+    // 输出调试信息
+    console.error(`尝试创建目录: ${EXCALIDRAW_DIR}`);
+    
+    // 处理路径中的特殊字符
+    let dirToCreate = EXCALIDRAW_DIR;
+    if (dirToCreate.startsWith('/c%3A/')) {
+      // 替换Windows路径编码
+      dirToCreate = dirToCreate.replace('/c%3A/', 'C:/');
+      console.error(`处理后的路径: ${dirToCreate}`);
+    }
+    
+    // 创建目录（递归）
+    await fs.mkdir(dirToCreate, { recursive: true });
+    console.error(`Excalidraw目录已确认: ${dirToCreate}`);
   } catch (error) {
     console.error(`创建Excalidraw目录失败: ${error.message}`);
-    throw error;
+    // 尝试创建临时目录作为备选
+    try {
+      const backupDir = path.join(require('os').tmpdir(), 'excalidraw_backup');
+      console.error(`尝试使用备选临时目录: ${backupDir}`);
+      await fs.mkdir(backupDir, { recursive: true });
+      EXCALIDRAW_DIR = backupDir;
+      console.error(`已改用备选目录: ${EXCALIDRAW_DIR}`);
+    } catch (backupError) {
+      console.error(`创建备选目录也失败了: ${backupError.message}`);
+      throw error; // 如果备选方案也失败，抛出原始错误
+    }
   }
 }
 
@@ -735,7 +777,29 @@ mcp.tool()(exportCanvas);
 mcp.tool()(addShape);
 
 // 如果直接运行此文件
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] === __filename) {
+  // 解析命令行参数
+  let workspaceDir = '';
+  
+  for (let i = 2; i < process.argv.length; i++) {
+    if (process.argv[i] === '--workspace' && i + 1 < process.argv.length) {
+      workspaceDir = process.argv[i + 1];
+      i++; // 跳过下一个参数
+    }
+  }
+  
+  // 设置工作区目录（如果有提供）
+  if (workspaceDir) {
+    console.error(`从命令行参数设置工作区目录: ${workspaceDir}`);
+    setExcalidrawDir(workspaceDir);
+  }
+  
   // 以标准I/O方式运行MCP服务器
   mcp.run({ transport: 'stdio' });
 } 
+
+// 导出变量和函数给其他模块使用
+module.exports = {
+  setExcalidrawDir,
+  EXCALIDRAW_DIR
+}; 

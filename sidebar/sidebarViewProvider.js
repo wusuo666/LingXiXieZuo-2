@@ -980,8 +980,15 @@ class LingxiSidebarProvider {
                                 throw new Error(`服务器脚本文件不存在: ${serverPath}`);
                             }
                             
-                            // 启动MCP服务器
-                            await agentApi.connectToServer(serverPath);
+                            // 获取工作区目录
+                            let workspaceDir = '';
+                            if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                                workspaceDir = vscode.workspace.workspaceFolders[0].uri.fsPath;
+                                console.log(`为MCP服务器提供工作区目录: ${workspaceDir}`);
+                            }
+                            
+                            // 启动MCP服务器，传递工作区目录
+                            await agentApi.connectToServer(serverPath, workspaceDir);
                             
                             // 通知前端更新状态
                             this._webviewView.webview.postMessage({ 

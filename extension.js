@@ -7,6 +7,7 @@ const path = require('path');
 const agentApi = require('./agent/agentApi');
 const { startChatServer, stopChatServer, setSidebarProvider } = require('./chatroom/startServer');
 const { createAndOpenDrawio } = require('./createDrawio');
+const { setExcalidrawDir } = require('./agent/server.js');
 
 /**
  * 创建并打开Draw.io文件
@@ -37,6 +38,27 @@ async function activate(context) {
     // 输出调试信息，帮助诊断命令注册问题
     console.log('正在注册命令...');
     vscode.window.showInformationMessage('灵犀协作插件已激活，正在注册命令...');
+
+    // 检查是否有打开的工作区
+    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+        // 获取第一个工作区文件夹的路径
+        const workspaceFolder = vscode.workspace.workspaceFolders[0];
+        const workspacePath = workspaceFolder.uri.fsPath;
+        
+        // 添加调试输出
+        console.log(`设置Excalidraw目录: ${workspacePath}`);
+        
+        // 设置Excalidraw目录路径 - 使用fsPath代替path
+        const excalidrawDir = path.join(workspacePath, 'excalidraw_files');
+        console.log(`完整Excalidraw目录路径: ${excalidrawDir}`);
+        setExcalidrawDir(excalidrawDir);
+        
+        // 显示通知
+        vscode.window.showInformationMessage(`Excalidraw目录已设置: ${excalidrawDir}`);
+    } else {
+        console.log('未找到工作区，将使用默认目录');
+        vscode.window.showWarningMessage('未找到工作区，Excalidraw将使用默认目录');
+    }
 
     // 注册复制文本命令
     console.log('注册命令: lingxixiezuo.testCopyText');
@@ -277,7 +299,9 @@ async function activate(context) {
     vscode.window.showInformationMessage('灵犀协作插件命令注册完成');
 }
 
-function deactivate() {}
+function deactivate() {
+    console.log('灵犀协作插件已停用');
+}
 
 module.exports = {
     activate,

@@ -723,26 +723,27 @@ class LingxiSidebarProvider {
     }
 
     /**
-     * 初始化API配置，从secrets加载已存储的API Keys
-     * @returns {Promise<void>}
+     * 初始化API配置
      */
     async initializeApiConfiguration() {
         try {
             // 不再从secrets加载API Key，但仍保留状态通知功能
             
-            // 显式通知前端智谱AI API Key未设置
-            if (this._webviewView) {
-                this._webviewView.webview.postMessage({ 
-                    command: 'apiKeyStatus', 
-                    isSet: false 
-                });
-            }
+            // 获取当前配置状态
+            const config = agentApi.getConfig();
+            const isDeepSeekKeySet = !!(config && config.deepseekApiKey);
             
-            // 显式通知前端DeepSeek API Key未设置
+            // 通知前端DeepSeek API Key状态
             if (this._webviewView) {
                 this._webviewView.webview.postMessage({ 
                     command: 'deepseekApiKeyStatus', 
-                    isSet: false 
+                    isSet: isDeepSeekKeySet 
+                });
+                
+                // 同时通知常规状态
+                this._webviewView.webview.postMessage({ 
+                    command: 'apiKeyStatus', 
+                    isSet: isDeepSeekKeySet  // 使用相同的状态，保持兼容性
                 });
             }
         } catch (error) {
@@ -986,39 +987,35 @@ class LingxiSidebarProvider {
                     }
                     break;
                 case 'setAIProvider': // 处理AI提供商切换
-                    if (message.provider) {
-                        try {
-                            // 更新提供商配置
-                            const updateConfig = { provider: message.provider };
-                            
-                            // 如果同时传入了model，一并更新
-                            if (message.model) {
-                                if (message.provider === 'zhipuai') {
-                                    updateConfig.model = message.model;
-                                } else if (message.provider === 'deepseek') {
-                                    updateConfig.deepseekModel = message.model;
-                                }
-                            }
-                            
-                            // 更新配置
-                            agentApi.updateConfig(updateConfig);
-                            console.log(`已切换AI提供商至: ${message.provider}，模型: ${message.model || '默认'}`);
-                            vscode.window.showInformationMessage(`已切换至${message.provider === 'zhipuai' ? '智谱AI' : 'DeepSeek'}模型。`);
-                        } catch (error) {
-                            console.error('切换AI提供商失败:', error);
-                            vscode.window.showErrorMessage('切换AI提供商失败。');
+                    // 所有提供商均设置为deepseek
+                    try {
+                        // 更新提供商配置
+                        const updateConfig = { provider: 'deepseek' };
+                        
+                        // 如果同时传入了model，一并更新
+                        if (message.model) {
+                            updateConfig.deepseekModel = message.model;
                         }
+                        
+                        // 更新配置
+                        agentApi.updateConfig(updateConfig);
+                        console.log(`已设置为DeepSeek，模型: ${message.model || '默认'}`);
+                        vscode.window.showInformationMessage(`已设置为DeepSeek模型。`);
+                    } catch (error) {
+                        console.error('设置DeepSeek提供商失败:', error);
+                        vscode.window.showErrorMessage('设置DeepSeek提供商失败。');
                     }
                     break;
-                case 'setAIModel': // 处理智谱AI模型选择
+                case 'setAIModel': // 处理模型选择
+                    // 移除处理智谱AI模型选择，所有模型均设置为deepseek模型
                     if (message.model) {
                         try {
-                            agentApi.updateConfig({ model: message.model });
-                            console.log(`已切换智谱AI模型至: ${message.model}`);
-                            vscode.window.showInformationMessage(`已切换至智谱AI ${message.model} 模型。`);
+                            agentApi.updateConfig({ deepseekModel: message.model });
+                            console.log(`已切换DeepSeek模型至: ${message.model}`);
+                            vscode.window.showInformationMessage(`已切换至DeepSeek ${message.model} 模型。`);
                         } catch (error) {
-                            console.error('更新智谱AI模型失败:', error);
-                            vscode.window.showErrorMessage('更新智谱AI模型失败。');
+                            console.error('更新DeepSeek模型失败:', error);
+                            vscode.window.showErrorMessage('更新DeepSeek模型失败。');
                         }
                     }
                     break;
@@ -1034,19 +1031,19 @@ class LingxiSidebarProvider {
                         }
                     }
                     break;
-                case 'getApiKeyStatus': // 处理获取智谱AI API Key 状态的消息
-                    // 检查API Key是否已设置 - 直接检查config对象
+                case 'getApiKeyStatus': // 处理获取API Key状态的消息，重定向到DeepSeek
+                    // 重定向到DeepSeek API Key状态
                     try {
                         const config = agentApi.getConfig();
-                        console.log('检查智谱AI API Key状态:', config);
-                        const isZhipuKeySet = !!(config && config.zhipuApiKey);
-                        console.log('智谱AI API Key是否已设置:', isZhipuKeySet);
+                        console.log('检查DeepSeek API Key状态:', config);
+                        const isKeySet = !!(config && config.deepseekApiKey);
+                        console.log('DeepSeek API Key是否已设置:', isKeySet);
                         this._webviewView.webview.postMessage({ 
                             command: 'apiKeyStatus', 
-                            isSet: isZhipuKeySet 
+                            isSet: isKeySet 
                         });
                     } catch (error) {
-                        console.error('获取智谱AI API Key状态失败:', error);
+                        console.error('获取DeepSeek API Key状态失败:', error);
                         this._webviewView.webview.postMessage({ 
                             command: 'apiKeyStatus', 
                             isSet: false,

@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>灵犀协作侧边栏</title>
+    <!-- 添加marked.js库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
     <div class="tab-container">
@@ -101,7 +103,7 @@
                             <div class="agent-container live-share-style">
                                 <div class="agent-header">
                                     <h3>智能助手</h3>
-                                    <p>专业的AI助手，帮助完成编程任务</p>
+                                    <p>专业的AI助手，帮助完成画布任务</p>
                                     <div class="agent-help-icon" id="agent-help-btn" title="查看可用工具">?</div>
                                 </div>
                                 <div class="agent-content">
@@ -133,7 +135,7 @@
                                         </div>
                                     </div>
                                     <div class="agent-input-bar">
-                                        <input type="text" id="agent-input" class="chat-input" placeholder="向AI助手询问..." />
+                                        <textarea id="agent-input" class="chat-input" placeholder="向AI助手询问..." rows="1"></textarea>
                                         <button id="agent-send" class="chat-send">发送</button>
                                     </div>
                                 </div>
@@ -1710,6 +1712,110 @@
             from { opacity: 0; transform: translateY(-20px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* 添加Markdown内容的样式 */
+        .markdown-content {
+            line-height: 1.6;
+            word-break: break-word;
+        }
+        .markdown-content p {
+            margin: 0.5em 0;
+        }
+        .markdown-content code {
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .markdown-content pre {
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 0.8em 0;
+        }
+        .markdown-content pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .markdown-content h1, .markdown-content h2, .markdown-content h3, 
+        .markdown-content h4, .markdown-content h5, .markdown-content h6 {
+            margin: 0.8em 0 0.4em 0;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+        .markdown-content h1 { font-size: 1.5em; }
+        .markdown-content h2 { font-size: 1.3em; }
+        .markdown-content h3 { font-size: 1.1em; }
+        .markdown-content h4, .markdown-content h5, .markdown-content h6 { font-size: 1em; }
+        .markdown-content ul, .markdown-content ol {
+            margin: 0.5em 0;
+            padding-left: 1.5em;
+        }
+        .markdown-content li {
+            margin: 0.3em 0;
+        }
+        .markdown-content blockquote {
+            border-left: 3px solid #3794ff;
+            margin: 0.5em 0;
+            padding: 0.1em 0 0.1em 1em;
+            background: rgba(55, 148, 255, 0.1);
+        }
+        .markdown-content table {
+            border-collapse: collapse;
+            margin: 0.8em 0;
+            width: 100%;
+        }
+        .markdown-content table th, .markdown-content table td {
+            padding: 6px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .markdown-content table th {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .markdown-content a {
+            color: #3794ff;
+            text-decoration: none;
+        }
+        .markdown-content a:hover {
+            text-decoration: underline;
+        }
+        .markdown-content img {
+            max-width: 100%;
+            height: auto;
+        }
+        .markdown-content hr {
+            border: none;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 1em 0;
+        }
+
+        /* 修改输入框样式以支持多行 */
+        .agent-input-bar textarea.chat-input {
+            flex: 1;
+            min-width: 0;
+            background: #232323;
+            color: #fff;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 15px;
+            outline: none;
+            transition: border 0.2s, height 0.2s;
+            width: 100%;
+            box-sizing: border-box;
+            max-height: 150px;
+            min-height: 42px;
+            resize: none;
+            overflow-y: hidden; /* 默认隐藏滚动条 */
+            font-family: inherit;
+            line-height: 1.5;
+        }
+
+        .agent-input-bar textarea.chat-input:focus {
+            border: 1.5px solid #3794ff;
+        }
     </style>
     
     <script>
@@ -1841,11 +1947,14 @@
                 
                 // 检查结果是否存在且不为空
                 if (message.result) {
+                    // 使用marked.js将Markdown转换为HTML
+                    const formattedContent = marked.parse(message.result);
+                    
                     const assistantMessageHtml = `
                         <div class="agent-message agent-message-assistant">
                             <div class="agent-avatar">AI</div>
                             <div class="agent-message-bubble">
-                                <div class="agent-message-content">${message.result}</div>
+                                <div class="agent-message-content markdown-content">${formattedContent}</div>
                                 <div class="agent-message-time">${time}</div>
                             </div>
                         </div>
@@ -2343,8 +2452,25 @@
         // 添加Agent输入框回车键支持
         document.getElementById('agent-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                e.preventDefault();
-                document.getElementById('agent-send').click();
+                // 如果按下Shift键+Enter，则插入换行符
+                if (e.shiftKey) {
+                    // 不执行默认行为(提交表单)
+                    e.preventDefault();
+                    
+                    // 获取当前光标位置
+                    const start = this.selectionStart;
+                    const end = this.selectionEnd;
+                    
+                    // 在光标位置插入换行符
+                    this.value = this.value.substring(0, start) + '\n' + this.value.substring(end);
+                    
+                    // 将光标移到插入的换行符后面
+                    this.selectionStart = this.selectionEnd = start + 1;
+                } else {
+                    // 如果只按下Enter键，则发送消息
+                    e.preventDefault();
+                    document.getElementById('agent-send').click();
+                }
             }
         });
 
@@ -2446,6 +2572,64 @@
                     statusElement.style.color = '#f44336'; // 红色表示失败
                     toggleSwitch.checked = false;
                 }
+            }
+        });
+
+        // 调整输入框高度自适应
+        document.addEventListener('DOMContentLoaded', function() {
+            const textarea = document.getElementById('agent-input');
+            if (textarea) {
+                // 自动调整高度的函数
+                function adjustHeight() {
+                    // 保存当前滚动位置
+                    const scrollTop = textarea.scrollTop;
+                    
+                    // 重置高度以便正确计算
+                    textarea.style.height = 'auto';
+                    
+                    // 获取内容高度
+                    const contentHeight = textarea.scrollHeight;
+                    
+                    if (contentHeight <= 150) {
+                        // 如果内容不超过最大高度，设置为内容高度并隐藏滚动条
+                        textarea.style.height = contentHeight + 'px';
+                        textarea.style.overflowY = 'hidden';
+                    } else {
+                        // 如果内容超过最大高度，设置为最大高度并显示滚动条
+                        textarea.style.height = '150px';
+                        textarea.style.overflowY = 'auto';
+                    }
+                    
+                    // 恢复滚动位置
+                    textarea.scrollTop = scrollTop;
+                }
+
+                // 输入时自动调整高度
+                textarea.addEventListener('input', adjustHeight);
+                
+                // 处理Shift+Enter事件
+                textarea.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        // 如果按下Shift键+Enter，则插入换行符并调整高度
+                        if (e.shiftKey) {
+                            e.preventDefault();
+                            const start = this.selectionStart;
+                            const end = this.selectionEnd;
+                            this.value = this.value.substring(0, start) + '\n' + this.value.substring(end);
+                            this.selectionStart = this.selectionEnd = start + 1;
+                            
+                            // 手动触发高度调整
+                            setTimeout(adjustHeight, 0);
+                        } else {
+                            // 如果只按下Enter键，则发送消息
+                            e.preventDefault();
+                            document.getElementById('agent-send').click();
+                        }
+                    }
+                });
+
+                // 初始高度设置
+                setTimeout(adjustHeight, 0);
             }
         });
     </script>

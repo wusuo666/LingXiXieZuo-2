@@ -2028,8 +2028,9 @@ async function addText(name, text, x, y, color = '#000000', fontSize = 20) {
       canvasData.elements = [];
     }
     
-    // 计算文本宽度（简单估计）
-    const estimatedWidth = text.length * fontSize * 0.6;
+    // 计算文本宽度（增加宽度系数以确保足够空间）
+    const estimatedWidth = text.length * fontSize * 1;
+    console.error(`估算文本宽度: ${estimatedWidth}px (文本长度: ${text.length}, 字体大小: ${fontSize})`);
     
     // 创建新文本元素
     const newText = {
@@ -2038,7 +2039,7 @@ async function addText(name, text, x, y, color = '#000000', fontSize = 20) {
       x: parseInt(x),
       y: parseInt(y),
       width: estimatedWidth,
-      height: fontSize * 1.2,
+      height: fontSize * 1.5, // 增加高度以确保足够空间
       angle: 0,
       strokeColor: color,
       backgroundColor: 'transparent',

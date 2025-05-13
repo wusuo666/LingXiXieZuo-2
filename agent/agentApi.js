@@ -44,6 +44,10 @@ let serverProcess = null;
 let rl = null;
 let availableTools = [];
 
+// 添加对话历史管理
+let conversationHistory = {}; // 用于存储不同会话的对话历史
+let currentSessionId = 'default'; // 默认会话ID
+
 /**
  * 初始化OpenAI客户端
  * @returns {OpenAI} OpenAI客户端实例
@@ -310,11 +314,13 @@ async function callTool(toolName, args) {
 /**
  * 处理来自Agent的查询
  * @param {string} query 用户查询内容
+ * @param {string} sessionId 会话ID，默认使用currentSessionId
  * @returns {Promise<string>} 处理结果
  */
-async function handleAgentQuery(query) {
+async function handleAgentQuery(query, sessionId = currentSessionId) {
     console.log(`处理查询: ${query}`);
     console.log(`当前提供商: ${config.provider}`);
+    console.log(`当前会话ID: ${sessionId}`);
     
     // 打印当前配置状态
     if (config.provider === 'zhipuai') {
@@ -358,18 +364,30 @@ async function handleAgentQuery(query) {
             }
             
             const headers = getZhipuAIHeaders();
+            
+            // 获取历史对话
+            let messages = getConversationHistory(sessionId);
+            
+            // 如果历史为空，添加系统消息
+            if (messages.length === 0) {
+                messages.push({
+                    role: 'system',
+                    content: '你是一位专业的编程助手，擅长回答编程相关问题和解释代码。'
+                });
+            }
+            
+            // 添加当前用户消息
+            messages.push({
+                role: 'user',
+                content: query
+            });
+            
+            // 将用户消息添加到历史
+            addToConversationHistory(sessionId, 'user', query);
+            
             const requestData = {
                 model: config.zhipuModel,
-                messages: [
-                    {
-                        role: 'system',
-                        content: '你是一位专业的编程助手，擅长回答编程相关问题和解释代码。'
-                    },
-                    {
-                        role: 'user',
-                        content: query
-                    }
-                ],
+                messages: messages,
                 temperature: config.temperature,
                 top_p: config.topP,
                 max_tokens: config.maxTokens
@@ -379,7 +397,12 @@ async function handleAgentQuery(query) {
             const response = await axios.post(config.zhipuBaseUrl, requestData, { headers });
             
             if (response.data && response.data.choices && response.data.choices.length > 0) {
-                return response.data.choices[0].message.content;
+                const assistantResponse = response.data.choices[0].message.content;
+                
+                // 将助手回复添加到历史
+                addToConversationHistory(sessionId, 'assistant', assistantResponse);
+                
+                return assistantResponse;
             } else {
                 throw new Error('智谱AI响应格式错误');
             }
@@ -406,8 +429,25 @@ async function handleAgentQuery(query) {
             const modelName = config.provider === 'deepseek' ? config.deepseekModel : config.model;
             console.log(`向${config.provider}发送请求，使用模型: ${modelName}`);
             
-            // 初始消息
-            const messages = [{ role: 'user', content: query }];
+            // 获取对话历史
+            let messages = getConversationHistory(sessionId);
+            
+            // 如果历史为空且是新对话，添加系统消息
+            if (messages.length === 0) {
+                messages.push({
+                    role: 'system',
+                    content: '你是一位专业的编程助手，擅长回答编程相关问题和解释代码。'
+                });
+            }
+            
+            // 添加当前用户消息
+            messages.push({ role: 'user', content: query });
+            
+            // 将用户消息添加到历史
+            addToConversationHistory(sessionId, 'user', query);
+            
+            // 打印消息历史长度，用于调试
+            console.log(`发送请求前的消息历史长度: ${messages.length}`);
             
             // 检查是否有可用的工具
             if (availableTools && availableTools.length > 0) {
@@ -484,7 +524,12 @@ async function handleAgentQuery(query) {
                                 messages
                             });
                             
-                            return finalResponse.choices[0].message.content;
+                            const assistantResponse = finalResponse.choices[0].message.content;
+                            
+                            // 将助手回复添加到历史
+                            addToConversationHistory(sessionId, 'assistant', assistantResponse);
+                            
+                            return assistantResponse;
                         } catch (error) {
                             console.error(`最终响应错误: ${error.message}`);
                             return `生成最终回答时出错: ${error.message}`;
@@ -492,7 +537,12 @@ async function handleAgentQuery(query) {
                     } else {
                         // 模型直接回答，没有调用工具
                         console.log('模型直接回答，没有调用工具');
-                        return assistantMessage.content;
+                        const assistantResponse = assistantMessage.content;
+                        
+                        // 将助手回复添加到历史
+                        addToConversationHistory(sessionId, 'assistant', assistantResponse);
+                        
+                        return assistantResponse;
                     }
                 } catch (error) {
                     console.error('调用模型错误:', error);
@@ -502,15 +552,18 @@ async function handleAgentQuery(query) {
                 console.log('没有可用工具，直接调用大模型');
                 // 没有可用工具，直接调用大模型
                 try {
+                    // 使用完整的对话历史
                     const completion = await openaiClient.chat.completions.create({
-                        messages: [
-                            { role: "system", content: "你是一位专业的编程助手，擅长回答编程相关问题和解释代码。" },
-                            { role: "user", content: query }
-                        ],
+                        messages: messages,
                         model: modelName,
                     });
                     
-                    return completion.choices[0].message.content;
+                    const assistantResponse = completion.choices[0].message.content;
+                    
+                    // 将助手回复添加到历史
+                    addToConversationHistory(sessionId, 'assistant', assistantResponse);
+                    
+                    return assistantResponse;
                 } catch (error) {
                     console.error('调用模型错误:', error);
                     return `调用模型时出错: ${error.message}`;
@@ -548,6 +601,51 @@ function cleanup() {
     }
 }
 
+/**
+ * 管理对话历史
+ * @param {string} sessionId - 会话ID
+ * @param {string} role - 消息角色 ('user', 'assistant', 'system')
+ * @param {string} content - 消息内容
+ */
+function addToConversationHistory(sessionId, role, content) {
+    // 如果会话不存在，初始化一个新会话
+    if (!conversationHistory[sessionId]) {
+        conversationHistory[sessionId] = [];
+    }
+    
+    // 添加消息到历史记录
+    conversationHistory[sessionId].push({ role, content });
+    
+    console.log(`添加到会话[${sessionId}]历史: role=${role}, content长度=${content.length}`);
+}
+
+/**
+ * 获取指定会话的对话历史
+ * @param {string} sessionId - 会话ID
+ * @returns {Array} 对话历史消息数组
+ */
+function getConversationHistory(sessionId) {
+    return conversationHistory[sessionId] || [];
+}
+
+/**
+ * 清除指定会话的对话历史
+ * @param {string} sessionId - 会话ID
+ */
+function clearConversationHistory(sessionId) {
+    if (sessionId === 'all') {
+        // 清空所有会话历史
+        conversationHistory = {};
+        console.log('已清空所有会话历史');
+    } else {
+        // 清空指定会话历史
+        if (conversationHistory[sessionId]) {
+            delete conversationHistory[sessionId];
+            console.log(`已清空会话[${sessionId}]历史`);
+        }
+    }
+}
+
 // 导出模块接口
 module.exports = {
     updateConfig,
@@ -556,5 +654,9 @@ module.exports = {
     connectToServer,
     cleanup,
     listTools,  // 导出获取工具列表的函数
-    callTool    // 导出调用工具的函数
+    callTool,   // 导出调用工具的函数
+    addToConversationHistory,  // 导出对话历史管理函数
+    getConversationHistory,    // 导出获取对话历史函数
+    clearConversationHistory,  // 导出清除对话历史函数
+    setCurrentSessionId: (id) => { currentSessionId = id; }  // 设置当前会话ID的函数
 };

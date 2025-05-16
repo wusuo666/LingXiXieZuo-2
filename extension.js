@@ -7,6 +7,7 @@ const path = require('path');
 const agentApi = require('./agent/agentApi');
 const { startChatServer, stopChatServer, setSidebarProvider } = require('./chatroom/startServer');
 const { createAndOpenDrawio } = require('./createDrawio');
+const { runASR } = require('./pyyuyin/ifasr-nodejs');
 const { spawn } = require('child_process');
 
 /**
@@ -385,7 +386,76 @@ async function activate(context) {
 
     // 注册启动聊天室服务器命令
     console.log('注册命令: lingxixiezuo.startChatServer');
-    let startChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.startChatServer', startChatServer);
+    let startChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.startChatServer', () => {
+        startChatServer();
+    });
+
+    // 注册运行ASR测试命令
+    console.log('注册命令: lingxixiezuo.runAsrTest');
+    let runAsrTestDisposable = vscode.commands.registerCommand('lingxixiezuo.runAsrTest', async (params) => {
+        // 在VSCode终端显示进度信息
+        const terminal = vscode.window.createTerminal('ASR测试');
+        terminal.show();
+        terminal.sendText('echo 正在启动ASR语音识别...');
+        
+        // 默认使用音频目录下的测试文件
+        let audioFile = path.join(__dirname, 'pyyuyin', 'audio', 'lfasr_涉政.wav');
+        let outputPath = null;
+        
+        try {
+            // 获取用户工作区路径
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) {
+                throw new Error('请先打开一个工作区');
+            }
+            
+            // 处理输出文件参数
+            if (params && params.outputFile) {
+                // 创建统一的输出目录路径
+                const outputDir = path.join(workspaceFolders[0].uri.fsPath, 'yuyin', 'output');
+                outputPath = path.join(outputDir, params.outputFile);
+                
+                // 确保输出目录存在
+                if (!fs.existsSync(outputDir)) {
+                    fs.mkdirSync(outputDir, { recursive: true });
+                }
+                
+                console.log(`ASR输出目录: ${outputDir}`);
+                console.log(`ASR输出文件: ${outputPath}`);
+                terminal.sendText(`echo 输出文件将保存至: ${outputPath}`);
+            }
+            
+            // 在终端显示正在处理的文件
+            terminal.sendText(`echo 正在处理音频文件: ${audioFile}`);
+            
+            // 调用ASR模块进行语音识别
+            const result = await runASR({
+                audioFile: audioFile,
+                outputFile: outputPath
+            });
+            
+            // 处理结果
+            terminal.sendText('echo 语音识别处理完成!');
+            
+            if (outputPath) {
+                vscode.window.showInformationMessage(`ASR测试已完成，结果已保存到: ${params.outputFile}`);
+                
+                // 检查文件是否创建成功
+                if (fs.existsSync(outputPath)) {
+                    terminal.sendText(`echo 结果文件已生成: ${outputPath}`);
+                } else {
+                    terminal.sendText('echo 警告: 结果文件可能未生成，请检查终端输出');
+                    vscode.window.showWarningMessage('ASR结果文件可能未生成，请检查终端输出');
+                }
+            } else {
+                vscode.window.showInformationMessage('ASR测试已完成');
+            }
+        } catch (error) {
+            terminal.sendText(`echo 错误: ${error.message}`);
+            console.error('ASR执行失败:', error);
+            vscode.window.showErrorMessage(`ASR测试失败: ${error.message}`);
+        }
+    });
     
     // 注册停止聊天室服务器命令
     console.log('注册命令: lingxixiezuo.stopChatServer');
@@ -436,67 +506,77 @@ async function activate(context) {
     });
 
     // 注册创建Excalidraw画布的命令
-    context.subscriptions.push(
-        vscode.commands.registerCommand('lingxixiezuo.createExcalidraw', async () => {
-            try {
-                // 获取当前工作区路径
-                const workspaceFolders = vscode.workspace.workspaceFolders;
-                if (!workspaceFolders) {
-                    throw new Error('请先打开一个工作区');
-                }
-                const workspacePath = workspaceFolders[0].uri.fsPath;
-
-                // 创建新的Excalidraw文件
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const fileName = `画布_${timestamp}.excalidraw`;
-                const filePath = path.join(workspacePath, fileName);
-
-                // 创建基本的Excalidraw文件内容
-                const initialContent = {
-                    type: "excalidraw",
-                    version: 2,
-                    source: "vscode-lingxi",
-                    elements: [],
-                    appState: {
-                        viewBackgroundColor: "#ffffff",
-                        currentItemStrokeWidth: 1,
-                        currentItemFontFamily: 1
-                    },
-                    settings: {
-                        theme: "light",
-                        gridSize: 20
-                    }
-                };
-
-                // 写入文件
-                await vscode.workspace.fs.writeFile(
-                    vscode.Uri.file(filePath),
-                    Buffer.from(JSON.stringify(initialContent, null, 2), 'utf8')
-                );
-
-                // 显示成功消息
-                vscode.window.showInformationMessage('Excalidraw画布创建成功');
-
-                // 询问用户是否要打开画布
-                const openOptions = [
-                    { label: '是', description: '打开Excalidraw画布' },
-                    { label: '否', description: '稍后手动打开' }
-                ];
-
-                const selected = await vscode.window.showQuickPick(openOptions, {
-                    placeHolder: '是否立即打开画布？'
-                });
-
-                if (selected && selected.label === '是') {
-                    // 使用vscode.open命令打开文件
-                    const uri = vscode.Uri.file(filePath);
-                    await vscode.commands.executeCommand('vscode.open', uri);
-                }
-            } catch (error) {
-                vscode.window.showErrorMessage(`创建Excalidraw画布失败: ${error.message}`);
+    console.log('注册命令: lingxixiezuo.createExcalidraw');
+    let createExcalidrawDisposable = vscode.commands.registerCommand('lingxixiezuo.createExcalidraw', async () => {
+        try {
+            // 获取当前工作区路径
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) {
+                throw new Error('请先打开一个工作区');
             }
-        })
-    );
+            const workspacePath = workspaceFolders[0].uri.fsPath;
+
+            // 生成新的格式的文件名：年-月-日-时-分-秒-2位编号
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            const day = now.getDate();
+            const hour = now.getHours();
+            const minute = now.getMinutes();
+            const second = now.getSeconds();
+            
+            // 获取当前时间戳的最后两位作为编号
+            const timestamp = Date.now().toString();
+            const sequence = timestamp.slice(-2);
+            
+            const fileName = `画布_${year}-${month}-${day}-${hour}-${minute}-${second}-${sequence}.excalidraw`;
+            const filePath = path.join(workspacePath, fileName);
+
+            // 创建基本的Excalidraw文件内容
+            const initialContent = {
+                type: "excalidraw",
+                version: 2,
+                source: "vscode-lingxi",
+                elements: [],
+                appState: {
+                    viewBackgroundColor: "#ffffff",
+                    currentItemStrokeWidth: 1,
+                    currentItemFontFamily: 1
+                },
+                settings: {
+                    theme: "light",
+                    gridSize: 20
+                }
+            };
+
+            // 写入文件
+            await vscode.workspace.fs.writeFile(
+                vscode.Uri.file(filePath),
+                Buffer.from(JSON.stringify(initialContent, null, 2), 'utf8')
+            );
+
+            // 显示成功消息
+            vscode.window.showInformationMessage('Excalidraw画布创建成功');
+
+            // 询问用户是否要打开画布
+            const openOptions = [
+                { label: '是', description: '打开Excalidraw画布' },
+                { label: '否', description: '稍后手动打开' }
+            ];
+
+            const selected = await vscode.window.showQuickPick(openOptions, {
+                placeHolder: '是否立即打开画布？'
+            });
+
+            if (selected && selected.label === '是') {
+                // 使用vscode.open命令打开文件
+                const uri = vscode.Uri.file(filePath);
+                await vscode.commands.executeCommand('vscode.open', uri);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`创建Excalidraw画布失败: ${error.message}`);
+        }
+    });
     
     // 注册创建并打开Drawio命令
     console.log('注册命令: lingxixiezuo.createDrawio');
@@ -510,7 +590,9 @@ async function activate(context) {
         pasteSmartDisposable,
         viewProvider,
         startChatServerDisposable,
+        runAsrTestDisposable,
         stopChatServerDisposable,
+        createExcalidrawDisposable,
         createDrawioDisposable,
         recordAudioDisposable
     );

@@ -322,6 +322,9 @@ window.addEventListener('message', event => {
     }
 });
 
+// 全局音频上下文变量
+let globalAudioContext = null;
+
 // 语音会议相关变量
 let currentConference = null; // 当前会议ID
 let isInConference = false; // 是否正在会议中
@@ -329,6 +332,8 @@ let isMuted = false; // 是否静音
 let audioStreamProcess = null; // 音频流进程
 let conferenceParticipants = []; // 会议参与者
 let currentUserId = null; // 当前用户ID，初始为null
+// 音频播放相关变量
+let audioSourceNodes = new Map(); // 存储每个发送者的音频源节点
 
 // 初始化语音会议UI组件
 function initVoiceConference() {
@@ -468,53 +473,139 @@ function joinConference(conferenceId) {
 
 // 离开语音会议
 function leaveConference() {
-    if (!isInConference || !currentConference) {
+    if (!vscode) {
+        showErrorMessage('无法访问VSCode API');
         return;
     }
+    
+    if (!isInConference) {
+        showErrorMessage('您当前未在任何会议中');
+        return;
+    }
+    
+    // 停止音频流传输
+    stopAudioStream();
     
     // 发送离开会议请求
     vscode.postMessage({
         command: 'sendWebSocketMessage',
         message: JSON.stringify({
             type: 'voiceConference',
-            action: 'leave'
+            action: 'leave',
+            conferenceId: currentConference
         })
     });
     
-    // 停止音频流
-    stopAudioStream();
+    // 停止所有正在播放的音频
+    stopAllAudioPlayback();
     
     // 更新UI状态
     updateConferenceUI(false);
 }
 
+// 停止所有正在播放的音频
+function stopAllAudioPlayback() {
+    console.log('[调试-停止] 正在停止所有音频播放');
+    
+    // 停止所有的Web Audio源
+    if (audioSourceNodes && audioSourceNodes.size > 0) {
+        console.log(`[调试-停止] 停止 ${audioSourceNodes.size} 个Web Audio源`);
+        for (const [key, node] of audioSourceNodes.entries()) {
+            try {
+                if (node.source) {
+                    node.source.stop();
+                    console.log(`[调试-停止] 已停止音频源: ${key}`);
+                }
+            } catch (error) {
+                console.log(`[调试-停止] 停止音频源错误 (可能已经停止): ${key}`, error);
+            }
+        }
+        audioSourceNodes.clear();
+    }
+    
+    // 停止所有的Audio元素
+    if (window.audioElements && window.audioElements.size > 0) {
+        console.log(`[调试-停止] 停止 ${window.audioElements.size} 个Audio元素`);
+        for (const [key, audio] of window.audioElements.entries()) {
+            try {
+                audio.pause();
+                audio.currentTime = 0;
+                console.log(`[调试-停止] 已暂停音频元素: ${key}`);
+            } catch (error) {
+                console.log(`[调试-停止] 暂停音频元素错误: ${key}`, error);
+            }
+        }
+        window.audioElements.clear();
+    }
+    
+    // 如果有全局AudioContext，先暂停它（不要关闭，以便后续复用）
+    if (globalAudioContext) {
+        try {
+            if (globalAudioContext.state === 'running') {
+                console.log('[调试-停止] 暂停全局AudioContext');
+                globalAudioContext.suspend().then(() => {
+                    console.log('[调试-停止] 全局AudioContext已暂停');
+                });
+            }
+        } catch (error) {
+            console.error('[调试-停止] 暂停AudioContext错误:', error);
+        }
+    }
+}
+
 // 切换麦克风状态
 function toggleMicrophone() {
     if (!isInConference) {
+        showErrorMessage('您必须先加入会议才能使用麦克风');
         return;
     }
     
+    // 切换静音状态
     isMuted = !isMuted;
     
-    // 发送静音状态更新
-    vscode.postMessage({
-        command: 'sendWebSocketMessage',
-        message: JSON.stringify({
-            type: 'voiceConference',
-            action: 'mute',
-            muted: isMuted
-        })
-    });
-    
-    // 更新UI状态
-    updateMicrophoneUI();
-    
-    // 如果已经有音频流运行，需要停止或重启
     if (isMuted) {
+        // 停止音频流
         stopAudioStream();
-    } else if (currentConference) {
+        
+        console.log('[麦克风] 麦克风已静音');
+        
+        // 通知其他参与者此用户已静音
+        vscode.postMessage({
+            command: 'sendWebSocketMessage',
+            message: JSON.stringify({
+                type: 'voiceConference',
+                action: 'mute',
+                conferenceId: currentConference,
+                muted: true
+            })
+        });
+    } else {
+        console.log('[麦克风] 麦克风已取消静音');
+        
+        // 确保全局音频上下文是活跃的
+        if (globalAudioContext && globalAudioContext.state === 'suspended') {
+            globalAudioContext.resume().then(() => {
+                console.log('[麦克风] 全局AudioContext已恢复');
+            });
+        }
+        
+        // 启动音频流
         startAudioStream(currentConference);
+        
+        // 通知其他参与者此用户已取消静音
+        vscode.postMessage({
+            command: 'sendWebSocketMessage',
+            message: JSON.stringify({
+                type: 'voiceConference',
+                action: 'mute',
+                conferenceId: currentConference,
+                muted: false
+            })
+        });
     }
+    
+    // 更新UI
+    updateMicrophoneUI();
 }
 
 // 开始音频流传输
@@ -788,9 +879,17 @@ function playAudioStream(message) {
         const decodedSize = Math.ceil(message.audioData.length * 0.75); // Base64解码后大约是原大小的3/4
         console.log('[调试-播放] 预计解码后数据大小约为:', decodedSize, '字节');
         
-        // 直接使用WebAudio API播放，增强兼容性
-        console.log('[调试-播放] 使用WebAudio API播放...');
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        // 使用全局AudioContext，如果不存在则创建一个
+        if (!globalAudioContext) {
+            console.log('[调试-播放] 创建全局AudioContext');
+            globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } else {
+            console.log('[调试-播放] 使用现有的AudioContext');
+            // 如果AudioContext被暂停，则恢复它
+            if (globalAudioContext.state === 'suspended') {
+                globalAudioContext.resume();
+            }
+        }
         
         // 转换Base64为二进制数据
         const binaryString = atob(message.audioData);
@@ -894,31 +993,55 @@ function playAudioStream(message) {
         }
         
         // 解码音频数据
-        audioContext.decodeAudioData(
+        globalAudioContext.decodeAudioData(
             audioBuffer,
             function(buffer) {
                 console.log('[调试-播放] 音频解码成功, 样本率:', buffer.sampleRate);
                 
+                const senderId = message.senderId || 'unknown';
+                
                 // 创建音频源
-                const source = audioContext.createBufferSource();
+                const source = globalAudioContext.createBufferSource();
                 source.buffer = buffer;
                 
                 // 增加音量节点
-                const gainNode = audioContext.createGain();
+                const gainNode = globalAudioContext.createGain();
                 gainNode.gain.value = 3.0; // 增加音量到300%，使音频更容易听到
                 
                 // 连接节点
                 source.connect(gainNode);
-                gainNode.connect(audioContext.destination);
+                gainNode.connect(globalAudioContext.destination);
                 
                 // 播放音频
                 console.log('[调试-播放] 使用Web Audio API开始播放音频');
                 source.start(0);
                 
-                // 播放完成事件
+                // 保存音频源节点，以便后续可能的管理操作
+                audioSourceNodes.set(senderId + '_' + message.sequence, {
+                    source: source,
+                    gainNode: gainNode,
+                    startTime: Date.now()
+                });
+                
+                // 播放完成时从Map中移除
                 source.onended = function() {
-                    console.log('[调试-播放] 音频播放完成');
+                    console.log('[调试-播放] 音频片段播放完成');
+                    audioSourceNodes.delete(senderId + '_' + message.sequence);
                 };
+                
+                // 清理10秒前的音频节点，防止内存泄漏
+                const currentTime = Date.now();
+                for (const [key, node] of audioSourceNodes.entries()) {
+                    if (currentTime - node.startTime > 10000) {
+                        try {
+                            // 尝试停止可能仍在播放的节点
+                            node.source.stop();
+                        } catch (e) {
+                            // 节点可能已经停止，忽略错误
+                        }
+                        audioSourceNodes.delete(key);
+                    }
+                }
             },
             function(error) {
                 console.error('[调试-播放] Web Audio API解码失败，尝试使用备用方法:', error);
@@ -969,8 +1092,19 @@ function fallbackToAllMethods(audioData) {
 
 // 使用直接播放方法
 function fallbackToDirectPlay(audioData) {
+    console.log('[调试-直接播放] 使用Audio元素播放');
+    
+    // 使用全局变量存储Audio元素，确保不会被GC回收
+    if (!window.audioElements) {
+        window.audioElements = new Map();
+    }
+    
+    const audioId = Date.now().toString();
     const audio = new Audio(`data:audio/wav;base64,${audioData}`);
     audio.volume = 1.0; // 确保音量最大
+    
+    // 存储到全局Map中
+    window.audioElements.set(audioId, audio);
     
     audio.oncanplaythrough = () => {
         console.log('[调试-直接播放] 音频加载完成，准备播放');
@@ -979,9 +1113,23 @@ function fallbackToDirectPlay(audioData) {
             .catch(e => console.error('[调试-直接播放] 播放失败:', e));
     };
     
+    audio.onended = () => {
+        console.log('[调试-直接播放] 播放完成，移除音频元素');
+        window.audioElements.delete(audioId);
+    };
+    
     audio.onerror = (e) => {
         console.error('[调试-直接播放] 加载失败:', e);
+        window.audioElements.delete(audioId);
     };
+    
+    // 防止内存泄漏，20秒后自动清理
+    setTimeout(() => {
+        if (window.audioElements.has(audioId)) {
+            console.log('[调试-直接播放] 超时清理未完成的音频元素');
+            window.audioElements.delete(audioId);
+        }
+    }, 20000);
 }
 
 // 使用Web Audio API播放
@@ -1010,12 +1158,20 @@ function playWithWebAudio(base64AudioData) {
             });
         }
         
-        // 创建音频上下文
-        console.log('[调试-WebAudio] 创建AudioContext');
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        // 使用全局AudioContext，如果不存在则创建
+        if (!globalAudioContext) {
+            console.log('[调试-WebAudio] 创建全局AudioContext');
+            globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } else {
+            console.log('[调试-WebAudio] 使用现有的AudioContext');
+            // 如果AudioContext被暂停，则恢复它
+            if (globalAudioContext.state === 'suspended') {
+                globalAudioContext.resume();
+            }
+        }
         
         console.log('[调试-WebAudio] 音频数据长度:', len, '字节');
-        console.log('[调试-WebAudio] 音频上下文创建成功, 状态:', audioContext.state);
+        console.log('[调试-WebAudio] 音频上下文状态:', globalAudioContext.state);
         
         // 检查浏览器音频支持情况
         console.log('[调试-WebAudio] 浏览器音频支持情况:', {
@@ -1031,24 +1187,34 @@ function playWithWebAudio(base64AudioData) {
         
         // 解码音频数据
         console.log('[调试-WebAudio] 开始解码音频数据');
-        audioContext.decodeAudioData(
+        globalAudioContext.decodeAudioData(
             bytes.buffer,
             function(buffer) {
                 console.log('[调试-WebAudio] 音频解码成功, 样本率:', buffer.sampleRate);
                 console.log('[调试-WebAudio] 音频通道数:', buffer.numberOfChannels);
                 console.log('[调试-WebAudio] 音频长度:', buffer.duration, '秒');
                 
+                // 生成唯一ID
+                const audioId = 'backup_' + Date.now();
+                
                 // 创建音频源
-                const source = audioContext.createBufferSource();
+                const source = globalAudioContext.createBufferSource();
                 source.buffer = buffer;
                 
                 // 增加音量节点
-                const gainNode = audioContext.createGain();
+                const gainNode = globalAudioContext.createGain();
                 gainNode.gain.value = 1.5; // 增加音量到150%
                 
                 // 连接节点
                 source.connect(gainNode);
-                gainNode.connect(audioContext.destination);
+                gainNode.connect(globalAudioContext.destination);
+                
+                // 保存到全局变量
+                audioSourceNodes.set(audioId, {
+                    source: source,
+                    gainNode: gainNode,
+                    startTime: Date.now()
+                });
                 
                 // 播放音频
                 console.log('[调试-WebAudio] 开始播放音频');
@@ -1058,7 +1224,21 @@ function playWithWebAudio(base64AudioData) {
                 // 播放完成事件
                 source.onended = function() {
                     console.log('[调试-WebAudio] 音频播放完成');
+                    audioSourceNodes.delete(audioId);
                 };
+                
+                // 超时安全措施：20秒后清理，防止内存泄漏
+                setTimeout(() => {
+                    if (audioSourceNodes.has(audioId)) {
+                        console.log('[调试-WebAudio] 超时清理未完成的音频节点');
+                        try {
+                            audioSourceNodes.get(audioId).source.stop();
+                        } catch (e) {
+                            // 可能已经结束，忽略错误
+                        }
+                        audioSourceNodes.delete(audioId);
+                    }
+                }, 20000);
             },
             function(error) {
                 console.error('[调试-WebAudio] 解码音频数据失败:', error);
@@ -1076,6 +1256,11 @@ function playWithWebAudio(base64AudioData) {
 // 尝试多种格式播放
 function playAudioWithMultipleFormats(base64AudioData) {
     console.log('[调试-多格式] 尝试使用多种格式播放...');
+    
+    // 确保全局音频元素存储存在
+    if (!window.audioElements) {
+        window.audioElements = new Map();
+    }
     
     // 尝试不同的MIME类型
     const mimeTypes = [
@@ -1097,7 +1282,11 @@ function playAudioWithMultipleFormats(base64AudioData) {
         setTimeout(() => {
             try {
                 console.log(`[调试-多格式] 尝试使用 ${mimeType} 格式播放...`);
+                const audioId = `format_${mimeType}_${Date.now()}_${index}`;
                 const audio = new Audio(`data:${mimeType};base64,${base64AudioData}`);
+                
+                // 存储到全局Map中
+                window.audioElements.set(audioId, audio);
                 
                 // 添加加载事件监听
                 audio.addEventListener('loadstart', () => {
@@ -1106,6 +1295,7 @@ function playAudioWithMultipleFormats(base64AudioData) {
                 
                 audio.oncanplaythrough = () => {
                     console.log(`[调试-多格式] ${mimeType} 格式可以播放`);
+                    audio.play().catch(e => console.error(`[调试-多格式] ${mimeType} 播放失败:`, e));
                 };
                 
                 audio.onplay = () => {
@@ -1115,10 +1305,12 @@ function playAudioWithMultipleFormats(base64AudioData) {
                 
                 audio.onended = () => {
                     console.log(`[调试-多格式] ${mimeType} 格式播放完成`);
+                    window.audioElements.delete(audioId);
                 };
                 
                 audio.onerror = (e) => {
                     console.log(`[调试-多格式] ${mimeType} 格式播放失败:`, e.target.error);
+                    window.audioElements.delete(audioId);
                     failures++;
                     
                     // 如果所有格式都失败
@@ -1128,6 +1320,13 @@ function playAudioWithMultipleFormats(base64AudioData) {
                         // 最后的尝试：直接播放PCM数据
                         try {
                             console.log('[调试-多格式] 尝试使用原始PCM数据播放');
+                            // 使用全局AudioContext，如果不存在则创建
+                            if (!globalAudioContext) {
+                                globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+                            } else if (globalAudioContext.state === 'suspended') {
+                                globalAudioContext.resume();
+                            }
+                            
                             const rawPcmData = atob(base64AudioData);
                             const pcmBuffer = new ArrayBuffer(rawPcmData.length);
                             const view = new Uint8Array(pcmBuffer);
@@ -1135,8 +1334,7 @@ function playAudioWithMultipleFormats(base64AudioData) {
                                 view[i] = rawPcmData.charCodeAt(i);
                             }
                             
-                            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                            const buffer = audioContext.createBuffer(1, pcmBuffer.byteLength / 2, 44100);
+                            const buffer = globalAudioContext.createBuffer(1, pcmBuffer.byteLength / 2, 44100);
                             const channel = buffer.getChannelData(0);
                             
                             // 复制PCM数据到通道中
@@ -1145,11 +1343,38 @@ function playAudioWithMultipleFormats(base64AudioData) {
                                 channel[i] = dataView.getInt16(i * 2, true) / 32768.0;
                             }
                             
-                            const source = audioContext.createBufferSource();
+                            const pcmId = 'pcm_' + Date.now();
+                            const source = globalAudioContext.createBufferSource();
                             source.buffer = buffer;
-                            source.connect(audioContext.destination);
+                            source.connect(globalAudioContext.destination);
+                            
+                            // 保存到全局变量
+                            audioSourceNodes.set(pcmId, {
+                                source: source,
+                                startTime: Date.now()
+                            });
+                            
                             source.start(0);
                             console.log('[调试-多格式] 原始PCM数据播放已启动');
+                            
+                            // 播放完成时清理
+                            source.onended = function() {
+                                console.log('[调试-多格式] PCM音频播放完成');
+                                audioSourceNodes.delete(pcmId);
+                            };
+                            
+                            // 超时安全清理
+                            setTimeout(() => {
+                                if (audioSourceNodes.has(pcmId)) {
+                                    console.log('[调试-多格式] PCM超时清理');
+                                    try {
+                                        audioSourceNodes.get(pcmId).source.stop();
+                                    } catch (e) {
+                                        // 忽略错误
+                                    }
+                                    audioSourceNodes.delete(pcmId);
+                                }
+                            }, 20000);
                         } catch (pcmError) {
                             console.error('[调试-多格式] 原始PCM播放尝试失败:', pcmError);
                             vscode.postMessage({
@@ -1160,29 +1385,17 @@ function playAudioWithMultipleFormats(base64AudioData) {
                     }
                 };
                 
-                // 添加loadedmetadata事件监听
-                audio.addEventListener('loadedmetadata', () => {
-                    console.log(`[调试-多格式] ${mimeType} 元数据已加载，时长:`, audio.duration);
-                });
-                
-                // 尝试播放
-                audio.volume = 1.0; // 确保音量最大
-                const playPromise = audio.play();
-                
-                if (playPromise !== undefined) {
-                    playPromise
-                        .then(() => {
-                            console.log(`[调试-多格式] ${mimeType} 格式播放开始`);
-                        })
-                        .catch(e => {
-                            console.log(`[调试-多格式] ${mimeType} 格式播放失败:`, e);
-                            failures++;
-                        });
-                }
-            } catch (error) {
-                console.error(`[调试-多格式] ${mimeType} 格式尝试失败:`, error);
+                // 安全清理：20秒后移除音频元素，防止内存泄漏
+                setTimeout(() => {
+                    if (window.audioElements.has(audioId)) {
+                        console.log(`[调试-多格式] ${mimeType} 超时清理`);
+                        window.audioElements.delete(audioId);
+                    }
+                }, 20000);
+            } catch (e) {
+                console.error(`[调试-多格式] ${mimeType} 格式初始化失败:`, e);
                 failures++;
             }
-        }, index * 300); // 每种格式间隔300毫秒尝试，避免冲突
+        }, index * 100); // 每种格式间隔100ms尝试，避免浏览器过载
     });
 } 

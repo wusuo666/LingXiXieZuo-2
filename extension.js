@@ -7,6 +7,7 @@ const path = require('path');
 const agentApi = require('./agent/agentApi');
 const { startChatServer, stopChatServer, setSidebarProvider } = require('./chatroom/startServer');
 const { createAndOpenDrawio } = require('./createDrawio');
+const { spawn } = require('child_process');
 
 /**
  * 创建并打开Draw.io文件
@@ -22,6 +23,192 @@ async function createAndOpenDrawioCommand(filePath) {
         console.error('创建或打开Draw.io文件失败:', error);
         vscode.window.showErrorMessage(`创建或打开Draw.io文件失败: ${error.message}`);
     }
+}
+
+/**
+ * 处理外部录音命令
+ * 使用Node.js子进程调用外部录音脚本
+ * @param {number} duration 录音时长（秒）
+ * @returns {Promise<Object>} 返回包含base64编码音频数据和文件名的对象
+ */
+async function handleExternalAudioRecord(duration = 5) {
+    return new Promise((resolve, reject) => {
+        try {
+            // 检查录音脚本是否存在
+            const scriptPath = path.join(__dirname, 'chatroom', 'recordAudio.js');
+            if (!fs.existsSync(scriptPath)) {
+                throw new Error('录音脚本文件不存在: ' + scriptPath);
+            }
+            
+            // 设置录音脚本的执行权限（在Unix系统上）
+            if (process.platform !== 'win32') {
+                try {
+                    fs.chmodSync(scriptPath, '755');
+                } catch (err) {
+                    console.warn('设置脚本执行权限失败，可能需要手动设置: ', err);
+                }
+            }
+            
+            // 获取工作区路径
+            let workspacePath = '';
+            if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                workspacePath = vscode.workspace.workspaceFolders[0].uri.fsPath;
+                console.log('使用工作区路径:', workspacePath);
+            } else {
+                console.log('未找到工作区路径，将使用插件默认路径');
+            }
+            
+            // 确保recordings文件夹存在于工作区中
+            const workspaceRecordingsDir = path.join(workspacePath, 'recordings');
+            if (workspacePath && !fs.existsSync(workspaceRecordingsDir)) {
+                try {
+                    fs.mkdirSync(workspaceRecordingsDir, { recursive: true });
+                    console.log(`在工作区中创建recordings文件夹: ${workspaceRecordingsDir}`);
+                } catch (err) {
+                    console.warn(`在工作区中创建recordings文件夹失败: ${err.message}, 将使用插件默认路径`);
+                }
+            }
+            
+            // 显示录音中状态栏
+            const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);
+            statusBar.text = `$(record) 正在录音 (${duration}秒)...`;
+            statusBar.tooltip = '正在录制语音消息';
+            statusBar.show();
+            
+            // 执行录音脚本，传递工作区路径
+            const node = process.platform === 'win32' ? 'node.exe' : 'node';
+            const recordProcess = spawn(node, [scriptPath, duration.toString(), workspacePath]);
+            
+            let outputData = '';
+            let errorData = '';
+            
+            recordProcess.stdout.on('data', (data) => {
+                outputData += data.toString();
+            });
+            
+            recordProcess.stderr.on('data', (data) => {
+                errorData += data.toString();
+                console.log('录音脚本输出:', data.toString());
+            });
+            
+            recordProcess.on('close', (code) => {
+                statusBar.dispose(); // 隐藏状态栏
+                
+                if (code !== 0) {
+                    reject(new Error(`录音脚本退出，退出码 ${code}: ${errorData}`));
+                    return;
+                }
+                
+                if (!outputData) {
+                    reject(new Error('未获取到录音数据'));
+                    return;
+                }
+                
+                try {
+                    // 首先尝试识别是否有JSON输出
+                    // 查找JSON开始的花括号位置
+                    const jsonStartIndex = outputData.indexOf('{');
+                    if (jsonStartIndex >= 0) {
+                        // 提取JSON部分
+                        const jsonPart = outputData.substring(jsonStartIndex);
+                        // 尝试解析JSON输出
+                        const resultObject = JSON.parse(jsonPart);
+                        
+                        // 录音数据已经在recordAudio.js中直接保存到recordings文件夹
+                        console.log('录音完成, 文件名:', resultObject.filename);
+                        
+                        // 显示保存成功的通知
+                        vscode.window.showInformationMessage(`录音已保存: ${resultObject.filename}`);
+                        
+                        // 返回包含音频数据和文件名的对象
+                        resolve(resultObject);
+                    } else {
+                        // 没有找到JSON部分，记录错误
+                        console.error('录音脚本输出格式不正确，找不到JSON数据:', outputData);
+                        // 尝试从错误信息中提取文件名
+                        let filename = null;
+                        const filenameMatch = errorData.match(/将保存录音文件: (.+\.wav)/);
+                        if (filenameMatch && filenameMatch[1]) {
+                            filename = path.basename(filenameMatch[1]);
+                            console.log('从错误输出中提取到文件名:', filename);
+                        }
+                        
+                        // 检查录音是否完成的消息
+                        if (errorData.includes('录音已完成') && filename) {
+                            // 尝试读取保存的文件
+                            try {
+                                // 构建可能的文件路径
+                                const possibleFilePaths = [];
+                                if (workspacePath) {
+                                    possibleFilePaths.push(path.join(workspacePath, 'recordings', filename));
+                                }
+                                possibleFilePaths.push(path.join(__dirname, 'recordings', filename));
+                                possibleFilePaths.push(path.join(__dirname, '..', 'recordings', filename));
+                                
+                                // 尝试读取文件
+                                for (const filePath of possibleFilePaths) {
+                                    if (fs.existsSync(filePath)) {
+                                        const audioData = fs.readFileSync(filePath).toString('base64');
+                                        vscode.window.showInformationMessage(`录音已保存: ${filename}`);
+                                        resolve({ audioData, filename });
+                                        return;
+                                    }
+                                }
+                            } catch (readError) {
+                                console.error('读取录音文件失败:', readError);
+                            }
+                        }
+                        
+                        // 如果所有尝试都失败，则返回错误
+                        reject(new Error('录音脚本输出格式不正确，无法解析'));
+                    }
+                } catch (parseError) {
+                    console.error('解析录音脚本输出失败:', parseError, '原始输出:', outputData);
+                    
+                    // 检查是否包含文件保存信息
+                    const filenameMatch = errorData.match(/将保存录音文件: (.+\.wav)/);
+                    const completedMatch = errorData.match(/录音已完成，文件保存至: (.+\.wav)/);
+                    
+                    let audioFile = null;
+                    if (completedMatch && completedMatch[1]) {
+                        audioFile = completedMatch[1];
+                    } else if (filenameMatch && filenameMatch[1]) {
+                        audioFile = filenameMatch[1];
+                    }
+                    
+                    if (audioFile) {
+                        const filename = path.basename(audioFile);
+                        console.log('尝试读取录音文件:', audioFile);
+                        
+                        // 检查文件是否存在
+                        if (fs.existsSync(audioFile)) {
+                            try {
+                                // 读取文件并转换为base64
+                                const audioData = fs.readFileSync(audioFile).toString('base64');
+                                vscode.window.showInformationMessage(`录音已保存: ${filename}`);
+                                resolve({ audioData, filename });
+                                return;
+                            } catch (readError) {
+                                console.error('读取录音文件失败:', readError);
+                            }
+                        } else {
+                            console.error('录音文件不存在:', audioFile);
+                        }
+                    }
+                    
+                    // 如果所有尝试都失败，则返回错误
+                    reject(new Error(`解析录音脚本输出失败: ${parseError.message}`));
+                }
+            });
+            
+            recordProcess.on('error', (err) => {
+                statusBar.dispose();
+                reject(err);
+            });
+        } catch (error) {
+            reject(error);
+        }
+    });
 }
 
 /**
@@ -204,6 +391,50 @@ async function activate(context) {
     console.log('注册命令: lingxixiezuo.stopChatServer');
     let stopChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.stopChatServer', stopChatServer);
 
+    // 注册外部录音命令
+    console.log('注册命令: lingxixiezuo.recordAudio');
+    let recordAudioDisposable = vscode.commands.registerCommand('lingxixiezuo.recordAudio', async (duration) => {
+        try {
+            // 弹出询问录音时长的输入框
+            let recordDuration = duration;
+            if (!recordDuration) {
+                const durationInput = await vscode.window.showInputBox({
+                    prompt: '请输入录音时长(秒)',
+                    placeHolder: '5',
+                    value: '5',
+                    validateInput: (value) => {
+                        // 验证输入是否为有效数字
+                        if (!/^\d+$/.test(value) || parseInt(value) <= 0 || parseInt(value) > 60) {
+                            return '请输入1-60之间的整数';
+                        }
+                        return null; // 返回null表示验证通过
+                    }
+                });
+                
+                if (!durationInput) {
+                    // 用户取消了操作
+                    return null;
+                }
+                
+                recordDuration = parseInt(durationInput);
+            }
+            
+            // 显示开始录音的通知
+            vscode.window.showInformationMessage(`开始录音，时长${recordDuration}秒...`);
+            
+            // 调用外部录音脚本
+            const result = await handleExternalAudioRecord(recordDuration);
+            
+            // 录音完成通知
+            vscode.window.showInformationMessage('录音完成');
+            
+            return result;
+        } catch (error) {
+            vscode.window.showErrorMessage(`录音失败: ${error.message}`);
+            return null;
+        }
+    });
+
     // 注册创建Excalidraw画布的命令
     context.subscriptions.push(
         vscode.commands.registerCommand('lingxixiezuo.createExcalidraw', async () => {
@@ -280,7 +511,8 @@ async function activate(context) {
         viewProvider,
         startChatServerDisposable,
         stopChatServerDisposable,
-        createDrawioDisposable
+        createDrawioDisposable,
+        recordAudioDisposable
     );
     
     console.log('所有命令注册完成');

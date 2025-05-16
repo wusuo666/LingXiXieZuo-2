@@ -8,6 +8,8 @@ const agentApi = require('./agent/agentApi');
 const { startChatServer, stopChatServer, setSidebarProvider } = require('./chatroom/startServer');
 const { createAndOpenDrawio } = require('./createDrawio');
 const { setExcalidrawDir } = require('./agent/server.js');
+const { runASR } = require('./pyyuyin/ifasr-nodejs');
+const { spawn } = require('child_process');
 
 /**
  * 创建并打开Draw.io文件
@@ -23,6 +25,192 @@ async function createAndOpenDrawioCommand(filePath) {
         console.error('创建或打开Draw.io文件失败:', error);
         vscode.window.showErrorMessage(`创建或打开Draw.io文件失败: ${error.message}`);
     }
+}
+
+/**
+ * 处理外部录音命令
+ * 使用Node.js子进程调用外部录音脚本
+ * @param {number} duration 录音时长（秒）
+ * @returns {Promise<Object>} 返回包含base64编码音频数据和文件名的对象
+ */
+async function handleExternalAudioRecord(duration = 5) {
+    return new Promise((resolve, reject) => {
+        try {
+            // 检查录音脚本是否存在
+            const scriptPath = path.join(__dirname, 'chatroom', 'recordAudio.js');
+            if (!fs.existsSync(scriptPath)) {
+                throw new Error('录音脚本文件不存在: ' + scriptPath);
+            }
+            
+            // 设置录音脚本的执行权限（在Unix系统上）
+            if (process.platform !== 'win32') {
+                try {
+                    fs.chmodSync(scriptPath, '755');
+                } catch (err) {
+                    console.warn('设置脚本执行权限失败，可能需要手动设置: ', err);
+                }
+            }
+            
+            // 获取工作区路径
+            let workspacePath = '';
+            if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                workspacePath = vscode.workspace.workspaceFolders[0].uri.fsPath;
+                console.log('使用工作区路径:', workspacePath);
+            } else {
+                console.log('未找到工作区路径，将使用插件默认路径');
+            }
+            
+            // 确保recordings文件夹存在于工作区中
+            const workspaceRecordingsDir = path.join(workspacePath, 'recordings');
+            if (workspacePath && !fs.existsSync(workspaceRecordingsDir)) {
+                try {
+                    fs.mkdirSync(workspaceRecordingsDir, { recursive: true });
+                    console.log(`在工作区中创建recordings文件夹: ${workspaceRecordingsDir}`);
+                } catch (err) {
+                    console.warn(`在工作区中创建recordings文件夹失败: ${err.message}, 将使用插件默认路径`);
+                }
+            }
+            
+            // 显示录音中状态栏
+            const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);
+            statusBar.text = `$(record) 正在录音 (${duration}秒)...`;
+            statusBar.tooltip = '正在录制语音消息';
+            statusBar.show();
+            
+            // 执行录音脚本，传递工作区路径
+            const node = process.platform === 'win32' ? 'node.exe' : 'node';
+            const recordProcess = spawn(node, [scriptPath, duration.toString(), workspacePath]);
+            
+            let outputData = '';
+            let errorData = '';
+            
+            recordProcess.stdout.on('data', (data) => {
+                outputData += data.toString();
+            });
+            
+            recordProcess.stderr.on('data', (data) => {
+                errorData += data.toString();
+                console.log('录音脚本输出:', data.toString());
+            });
+            
+            recordProcess.on('close', (code) => {
+                statusBar.dispose(); // 隐藏状态栏
+                
+                if (code !== 0) {
+                    reject(new Error(`录音脚本退出，退出码 ${code}: ${errorData}`));
+                    return;
+                }
+                
+                if (!outputData) {
+                    reject(new Error('未获取到录音数据'));
+                    return;
+                }
+                
+                try {
+                    // 首先尝试识别是否有JSON输出
+                    // 查找JSON开始的花括号位置
+                    const jsonStartIndex = outputData.indexOf('{');
+                    if (jsonStartIndex >= 0) {
+                        // 提取JSON部分
+                        const jsonPart = outputData.substring(jsonStartIndex);
+                        // 尝试解析JSON输出
+                        const resultObject = JSON.parse(jsonPart);
+                        
+                        // 录音数据已经在recordAudio.js中直接保存到recordings文件夹
+                        console.log('录音完成, 文件名:', resultObject.filename);
+                        
+                        // 显示保存成功的通知
+                        vscode.window.showInformationMessage(`录音已保存: ${resultObject.filename}`);
+                        
+                        // 返回包含音频数据和文件名的对象
+                        resolve(resultObject);
+                    } else {
+                        // 没有找到JSON部分，记录错误
+                        console.error('录音脚本输出格式不正确，找不到JSON数据:', outputData);
+                        // 尝试从错误信息中提取文件名
+                        let filename = null;
+                        const filenameMatch = errorData.match(/将保存录音文件: (.+\.wav)/);
+                        if (filenameMatch && filenameMatch[1]) {
+                            filename = path.basename(filenameMatch[1]);
+                            console.log('从错误输出中提取到文件名:', filename);
+                        }
+                        
+                        // 检查录音是否完成的消息
+                        if (errorData.includes('录音已完成') && filename) {
+                            // 尝试读取保存的文件
+                            try {
+                                // 构建可能的文件路径
+                                const possibleFilePaths = [];
+                                if (workspacePath) {
+                                    possibleFilePaths.push(path.join(workspacePath, 'recordings', filename));
+                                }
+                                possibleFilePaths.push(path.join(__dirname, 'recordings', filename));
+                                possibleFilePaths.push(path.join(__dirname, '..', 'recordings', filename));
+                                
+                                // 尝试读取文件
+                                for (const filePath of possibleFilePaths) {
+                                    if (fs.existsSync(filePath)) {
+                                        const audioData = fs.readFileSync(filePath).toString('base64');
+                                        vscode.window.showInformationMessage(`录音已保存: ${filename}`);
+                                        resolve({ audioData, filename });
+                                        return;
+                                    }
+                                }
+                            } catch (readError) {
+                                console.error('读取录音文件失败:', readError);
+                            }
+                        }
+                        
+                        // 如果所有尝试都失败，则返回错误
+                        reject(new Error('录音脚本输出格式不正确，无法解析'));
+                    }
+                } catch (parseError) {
+                    console.error('解析录音脚本输出失败:', parseError, '原始输出:', outputData);
+                    
+                    // 检查是否包含文件保存信息
+                    const filenameMatch = errorData.match(/将保存录音文件: (.+\.wav)/);
+                    const completedMatch = errorData.match(/录音已完成，文件保存至: (.+\.wav)/);
+                    
+                    let audioFile = null;
+                    if (completedMatch && completedMatch[1]) {
+                        audioFile = completedMatch[1];
+                    } else if (filenameMatch && filenameMatch[1]) {
+                        audioFile = filenameMatch[1];
+                    }
+                    
+                    if (audioFile) {
+                        const filename = path.basename(audioFile);
+                        console.log('尝试读取录音文件:', audioFile);
+                        
+                        // 检查文件是否存在
+                        if (fs.existsSync(audioFile)) {
+                            try {
+                                // 读取文件并转换为base64
+                                const audioData = fs.readFileSync(audioFile).toString('base64');
+                                vscode.window.showInformationMessage(`录音已保存: ${filename}`);
+                                resolve({ audioData, filename });
+                                return;
+                            } catch (readError) {
+                                console.error('读取录音文件失败:', readError);
+                            }
+                        } else {
+                            console.error('录音文件不存在:', audioFile);
+                        }
+                    }
+                    
+                    // 如果所有尝试都失败，则返回错误
+                    reject(new Error(`解析录音脚本输出失败: ${parseError.message}`));
+                }
+            });
+            
+            recordProcess.on('error', (err) => {
+                statusBar.dispose();
+                reject(err);
+            });
+        } catch (error) {
+            reject(error);
+        }
+    });
 }
 
 /**
@@ -214,74 +402,197 @@ async function activate(context) {
 
     // 注册启动聊天室服务器命令
     console.log('注册命令: lingxixiezuo.startChatServer');
-    let startChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.startChatServer', startChatServer);
+    let startChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.startChatServer', () => {
+        startChatServer();
+    });
+
+    // 注册运行ASR测试命令
+    console.log('注册命令: lingxixiezuo.runAsrTest');
+    let runAsrTestDisposable = vscode.commands.registerCommand('lingxixiezuo.runAsrTest', async (params) => {
+        // 在VSCode终端显示进度信息
+        const terminal = vscode.window.createTerminal('ASR测试');
+        terminal.show();
+        terminal.sendText('echo 正在启动ASR语音识别...');
+        
+        // 默认使用音频目录下的测试文件
+        let audioFile = path.join(__dirname, 'pyyuyin', 'audio', 'lfasr_涉政.wav');
+        let outputPath = null;
+        
+        try {
+            // 获取用户工作区路径
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) {
+                throw new Error('请先打开一个工作区');
+            }
+            
+            // 处理输出文件参数
+            if (params && params.outputFile) {
+                // 创建统一的输出目录路径
+                const outputDir = path.join(workspaceFolders[0].uri.fsPath, 'yuyin', 'output');
+                outputPath = path.join(outputDir, params.outputFile);
+                
+                // 确保输出目录存在
+                if (!fs.existsSync(outputDir)) {
+                    fs.mkdirSync(outputDir, { recursive: true });
+                }
+                
+                console.log(`ASR输出目录: ${outputDir}`);
+                console.log(`ASR输出文件: ${outputPath}`);
+                terminal.sendText(`echo 输出文件将保存至: ${outputPath}`);
+            }
+            
+            // 在终端显示正在处理的文件
+            terminal.sendText(`echo 正在处理音频文件: ${audioFile}`);
+            
+            // 调用ASR模块进行语音识别
+            const result = await runASR({
+                audioFile: audioFile,
+                outputFile: outputPath
+            });
+            
+            // 处理结果
+            terminal.sendText('echo 语音识别处理完成!');
+            
+            if (outputPath) {
+                vscode.window.showInformationMessage(`ASR测试已完成，结果已保存到: ${params.outputFile}`);
+                
+                // 检查文件是否创建成功
+                if (fs.existsSync(outputPath)) {
+                    terminal.sendText(`echo 结果文件已生成: ${outputPath}`);
+                } else {
+                    terminal.sendText('echo 警告: 结果文件可能未生成，请检查终端输出');
+                    vscode.window.showWarningMessage('ASR结果文件可能未生成，请检查终端输出');
+                }
+            } else {
+                vscode.window.showInformationMessage('ASR测试已完成');
+            }
+        } catch (error) {
+            terminal.sendText(`echo 错误: ${error.message}`);
+            console.error('ASR执行失败:', error);
+            vscode.window.showErrorMessage(`ASR测试失败: ${error.message}`);
+        }
+    });
     
     // 注册停止聊天室服务器命令
     console.log('注册命令: lingxixiezuo.stopChatServer');
     let stopChatServerDisposable = vscode.commands.registerCommand('lingxixiezuo.stopChatServer', stopChatServer);
 
-    // 注册创建Excalidraw画布的命令
-    context.subscriptions.push(
-        vscode.commands.registerCommand('lingxixiezuo.createExcalidraw', async () => {
-            try {
-                // 获取当前工作区路径
-                const workspaceFolders = vscode.workspace.workspaceFolders;
-                if (!workspaceFolders) {
-                    throw new Error('请先打开一个工作区');
-                }
-                const workspacePath = workspaceFolders[0].uri.fsPath;
-
-                // 创建新的Excalidraw文件
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const fileName = `画布_${timestamp}.excalidraw`;
-                const filePath = path.join(workspacePath, fileName);
-
-                // 创建基本的Excalidraw文件内容
-                const initialContent = {
-                    type: "excalidraw",
-                    version: 2,
-                    source: "vscode-lingxi",
-                    elements: [],
-                    appState: {
-                        viewBackgroundColor: "#ffffff",
-                        currentItemStrokeWidth: 1,
-                        currentItemFontFamily: 1
-                    },
-                    settings: {
-                        theme: "light",
-                        gridSize: 20
+    // 注册外部录音命令
+    console.log('注册命令: lingxixiezuo.recordAudio');
+    let recordAudioDisposable = vscode.commands.registerCommand('lingxixiezuo.recordAudio', async (duration) => {
+        try {
+            // 弹出询问录音时长的输入框
+            let recordDuration = duration;
+            if (!recordDuration) {
+                const durationInput = await vscode.window.showInputBox({
+                    prompt: '请输入录音时长(秒)',
+                    placeHolder: '5',
+                    value: '5',
+                    validateInput: (value) => {
+                        // 验证输入是否为有效数字
+                        if (!/^\d+$/.test(value) || parseInt(value) <= 0 || parseInt(value) > 60) {
+                            return '请输入1-60之间的整数';
+                        }
+                        return null; // 返回null表示验证通过
                     }
-                };
-
-                // 写入文件
-                await vscode.workspace.fs.writeFile(
-                    vscode.Uri.file(filePath),
-                    Buffer.from(JSON.stringify(initialContent, null, 2), 'utf8')
-                );
-
-                // 显示成功消息
-                vscode.window.showInformationMessage('Excalidraw画布创建成功');
-
-                // 询问用户是否要打开画布
-                const openOptions = [
-                    { label: '是', description: '打开Excalidraw画布' },
-                    { label: '否', description: '稍后手动打开' }
-                ];
-
-                const selected = await vscode.window.showQuickPick(openOptions, {
-                    placeHolder: '是否立即打开画布？'
                 });
-
-                if (selected && selected.label === '是') {
-                    // 使用vscode.open命令打开文件
-                    const uri = vscode.Uri.file(filePath);
-                    await vscode.commands.executeCommand('vscode.open', uri);
+                
+                if (!durationInput) {
+                    // 用户取消了操作
+                    return null;
                 }
-            } catch (error) {
-                vscode.window.showErrorMessage(`创建Excalidraw画布失败: ${error.message}`);
+                
+                recordDuration = parseInt(durationInput);
             }
-        })
-    );
+            
+            // 显示开始录音的通知
+            vscode.window.showInformationMessage(`开始录音，时长${recordDuration}秒...`);
+            
+            // 调用外部录音脚本
+            const result = await handleExternalAudioRecord(recordDuration);
+            
+            // 录音完成通知
+            vscode.window.showInformationMessage('录音完成');
+            
+            return result;
+        } catch (error) {
+            vscode.window.showErrorMessage(`录音失败: ${error.message}`);
+            return null;
+        }
+    });
+
+    // 注册创建Excalidraw画布的命令
+    console.log('注册命令: lingxixiezuo.createExcalidraw');
+    let createExcalidrawDisposable = vscode.commands.registerCommand('lingxixiezuo.createExcalidraw', async () => {
+        try {
+            // 获取当前工作区路径
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) {
+                throw new Error('请先打开一个工作区');
+            }
+            const workspacePath = workspaceFolders[0].uri.fsPath;
+
+            // 生成新的格式的文件名：年-月-日-时-分-秒-2位编号
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            const day = now.getDate();
+            const hour = now.getHours();
+            const minute = now.getMinutes();
+            const second = now.getSeconds();
+            
+            // 获取当前时间戳的最后两位作为编号
+            const timestamp = Date.now().toString();
+            const sequence = timestamp.slice(-2);
+            
+            const fileName = `画布_${year}-${month}-${day}-${hour}-${minute}-${second}-${sequence}.excalidraw`;
+            const filePath = path.join(workspacePath, fileName);
+
+            // 创建基本的Excalidraw文件内容
+            const initialContent = {
+                type: "excalidraw",
+                version: 2,
+                source: "vscode-lingxi",
+                elements: [],
+                appState: {
+                    viewBackgroundColor: "#ffffff",
+                    currentItemStrokeWidth: 1,
+                    currentItemFontFamily: 1
+                },
+                settings: {
+                    theme: "light",
+                    gridSize: 20
+                }
+            };
+
+            // 写入文件
+            await vscode.workspace.fs.writeFile(
+                vscode.Uri.file(filePath),
+                Buffer.from(JSON.stringify(initialContent, null, 2), 'utf8')
+            );
+
+            // 显示成功消息
+            vscode.window.showInformationMessage('Excalidraw画布创建成功');
+
+            // 询问用户是否要打开画布
+            const openOptions = [
+                { label: '是', description: '打开Excalidraw画布' },
+                { label: '否', description: '稍后手动打开' }
+            ];
+
+            const selected = await vscode.window.showQuickPick(openOptions, {
+                placeHolder: '是否立即打开画布？'
+            });
+
+            if (selected && selected.label === '是') {
+                // 使用vscode.open命令打开文件
+                const uri = vscode.Uri.file(filePath);
+                await vscode.commands.executeCommand('vscode.open', uri);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`创建Excalidraw画布失败: ${error.message}`);
+        }
+    });
     
     // 注册创建并打开Drawio命令
     console.log('注册命令: lingxixiezuo.createDrawio');
@@ -295,8 +606,11 @@ async function activate(context) {
         pasteSmartDisposable,
         viewProvider,
         startChatServerDisposable,
+        runAsrTestDisposable,
         stopChatServerDisposable,
-        createDrawioDisposable
+        createExcalidrawDisposable,
+        createDrawioDisposable,
+        recordAudioDisposable
     );
     
     console.log('所有命令注册完成');

@@ -94,6 +94,7 @@
                     <div class="chat-input-bar">
                         <input type="text" id="chat-input" class="chat-input" placeholder="输入消息..." />
                         <button id="chat-send" class="chat-send">发送</button>
+                        <button id="run-asr-test" class="chat-send" title="运行语音识别测试">测试ASR</button>
                                 </div>
                             </div>
                         </div>
@@ -229,6 +230,10 @@
                             <button id="canvas-action-btn" class="canvas-button">
                                 <span class="button-icon">+</span>
                                 新建画布
+                            </button>
+                            <button id="add-memo-btn" class="canvas-button">
+                                <span class="button-icon">📝</span>
+                                添加纪要
                             </button>
                         </div>
                         <div class="canvas-list-container">
@@ -410,20 +415,25 @@
             border: 1.5px solid #3794ff;
         }
         .chat-send {
-            background: linear-gradient(135deg, #3794ff 60%, #4ec9b0 100%);
-            color: #fff;
+            background: #3794ff;
+            color: white;
             border: none;
-            border-radius: 8px;
-            padding: 10px 12px;
-            font-size: 15px;
+            border-radius: 4px;
+            padding: 6px 12px;
             cursor: pointer;
-            font-weight: 500;
             transition: background 0.2s;
-            white-space: nowrap;
-            flex-shrink: 0;
+            margin-left: 8px;
+            min-width: 60px;
         }
         .chat-send:hover {
-            background: #2176c7;
+            background: #2d7dd2;
+        }
+        
+        #run-asr-test {
+            background: #f59e0b;
+        }
+        #run-asr-test:hover {
+            background: #d97706;
         }
         .live-share-style {
             background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);
@@ -1408,6 +1418,15 @@
             }
         });
 
+        // 添加纪要按钮事件处理
+        document.getElementById('add-memo-btn').addEventListener('click', function() {
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'addMemoToCanvas'
+                });
+            }
+        });
+
         // 剪贴板历史记录相关
         let historyData = [];
 
@@ -1782,6 +1801,37 @@
             }
         });
 
+        // ASR测试按钮事件
+        document.getElementById('run-asr-test').addEventListener('click', function() {
+            if (vscode) {
+                // 生成当前时间作为文件名的一部分
+                const now = new Date();
+                const timestamp = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}${now.getSeconds().toString().padStart(2,'0')}`;
+                const outputFileName = `asr_result_${timestamp}.txt`;
+                
+                vscode.postMessage({
+                    command: 'runAsrTest',
+                    outputFile: outputFileName
+                });
+                
+                // 显示正在运行的提示
+                const messagesContainer = document.getElementById('chat-messages');
+                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
+                const systemMessageHtml = `
+                    <div class="chat-row system">
+                        <div class="system-message">
+                            <div class="system-message-content">正在运行语音识别测试...<br>结果将保存到文件: ${outputFileName}</div>
+                            <div class="chat-time">${time}</div>
+                        </div>
+                    </div>
+                `;
+                
+                messagesContainer.insertAdjacentHTML('beforeend', systemMessageHtml);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        });
+
         // 监听消息响应
         window.addEventListener('message', event => {
             const message = event.data;
@@ -1870,6 +1920,22 @@
                     connectionInfoDiv.style.display = 'none';
                     connectionUrlElement.textContent = '未连接';
                 }
+            } else if (message.command === 'asrTestStarted') {
+                // 处理ASR测试启动消息
+                const messagesContainer = document.getElementById('chat-messages');
+                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                
+                const systemMessageHtml = `
+                    <div class="chat-row system">
+                        <div class="system-message">
+                            <div class="system-message-content">ASR测试程序已在终端中启动${message.outputFile ? '<br>结果将保存到文件: ' + message.outputFile : ''}</div>
+                            <div class="chat-time">${time}</div>
+                        </div>
+                    </div>
+                `;
+                
+                messagesContainer.insertAdjacentHTML('beforeend', systemMessageHtml);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
             
             // 聊天消息响应

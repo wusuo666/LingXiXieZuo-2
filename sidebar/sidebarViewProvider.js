@@ -25,6 +25,18 @@ class LingxiSidebarProvider {
         this._userName = `User_${Date.now().toString().slice(-4)}`;
         this._roomId = 'default';
         
+        // 添加视图状态存储变量
+        this._viewState = {
+            activeTab: 'collab-area',
+            activeInnerTab: 'chat',
+            chatMessages: [],
+            agentMessages: [],
+            clipboardHistory: [],
+            canvasList: [],
+            mcpServerStatus: '未启动',
+            chatServerConnected: false
+        };
+        
         // 设置WebSocket消息处理
         this.setupWebSocketHandlers();
     }
@@ -595,37 +607,50 @@ class LingxiSidebarProvider {
      * @param {string} thinkingId 思考状态元素ID
      */
     async handleAgentQuery(query, thinkingId) {
-        console.log('收到Agent查询:', query);
-        
-        if (!this._webviewView) {
-            console.error('Webview 未初始化，无法处理Agent查询');
-            return;
-        }
-
-        // 添加实际的 API 调用逻辑
         try {
-            // 调用 agentApi 处理查询
-            const result = await agentApi.handleAgentQuery(query);
+            // 保存查询消息到状态
+            if (!this._viewState.agentMessages) {
+                this._viewState.agentMessages = [];
+            }
             
-            // 将结果发送回 Webview
-            this._webviewView.webview.postMessage({
-                command: 'agentResponse',
-                result: result,
-                status: 'success',
-                thinkingId: thinkingId // 将 thinkingId 传回，以便前端移除"思考中"提示
+            // 添加用户消息到状态
+            this._viewState.agentMessages.push({
+                role: 'user',
+                content: query,
+                timestamp: Date.now()
             });
-
+            
+            // 调用 agentApi 的 handleAgentQuery 方法处理查询
+            console.log('调用 agentApi.handleAgentQuery：', query);
+            const response = await agentApi.handleAgentQuery(query);
+            console.log('Agent响应:', response);
+            
+            // 将响应保存到状态
+            this._viewState.agentMessages.push({
+                role: 'assistant',
+                content: response,
+                timestamp: Date.now()
+            });
+            
+            // 发送响应到前端
+            if (this._webviewView) {
+                this._webviewView.webview.postMessage({
+                    command: 'agentResponse',
+                    thinkingId: thinkingId,
+                    result: response
+                });
+            }
         } catch (error) {
-            console.error('处理 Agent 查询时出错:', error);
-            // 将错误信息发送回 Webview
-            this._webviewView.webview.postMessage({
-                command: 'agentResponse',
-                result: `处理请求时出错: ${error.message}`,
-                status: 'error',
-                thinkingId: thinkingId
-            });
-            // 可以在这里添加更友好的错误提示给用户
-            vscode.window.showErrorMessage(`AI助手请求失败: ${error.message}`);
+            console.error('处理Agent查询失败:', error);
+            
+            // 出错时也需要通知前端
+            if (this._webviewView) {
+                this._webviewView.webview.postMessage({
+                    command: 'agentResponse',
+                    thinkingId: thinkingId,
+                    result: `错误: ${error.message || '未知错误'}`
+                });
+            }
         }
     }
 
@@ -638,18 +663,37 @@ class LingxiSidebarProvider {
         webviewView.webview.options = {
             enableScripts: true,
             // 允许加载本地资源
-            localResourceRoots: [vscode.Uri.joinPath(this._context.extensionUri, 'sidebar')]
+            localResourceRoots: [vscode.Uri.joinPath(this._context.extensionUri, 'sidebar')],
+            retainContextWhenHidden: true  // 添加这个选项以在隐藏时保留Webview内容
         };
         webviewView.webview.html = this.getHtmlForWebview();
         
+        // 监听Webview可见性变化
+        webviewView.onDidChangeVisibility(() => {
+            if (webviewView.visible) {
+                console.log('灵犀协作侧边栏变为可见，恢复状态');
+                this.restoreViewState();
+            }
+        });
+        
         // 监听Webview消息
-        this.setupMessageListeners();
+        this.setupMessageListeners(this._context);
+
+        // 初始化API配置并立即向前端发送状态
+        this.initializeApiConfiguration().then(() => {
+            // 已在initializeApiConfiguration中向前端传递状态
+        }).catch(error => {
+            console.error('初始化API配置失败:', error);
+        });
 
         // 监听 webview 消息，实现 clipboardHistory 同步
         webviewView.webview.onDidReceiveMessage(async (message) => {
             if (message.type === 'getClipboardHistory') {
                 this.sendClipboardHistory();
             } else if (message.command === 'switchTab') {
+                // 保存当前活动标签页状态
+                this._viewState.activeTab = message.tabId;
+                
                 if (message.tabId === 'history') {
                     // 切换到 History 标签页时刷新数据
                     this.sendClipboardHistory();
@@ -658,6 +702,9 @@ class LingxiSidebarProvider {
                     this.sendCanvasList();
                 }
                 this.handleTabSwitch(message.tabId);
+            } else if (message.command === 'switchInnerTab') {
+                // 保存当前活动内部标签页状态
+                this._viewState.activeInnerTab = message.innerTabId;
             } else if (message.type === 'getCanvasList') {
                 // 响应画布列表请求
                 this.sendCanvasList();
@@ -673,13 +720,36 @@ class LingxiSidebarProvider {
                 }
             }
         });
+    }
 
-        // 初始加载时主动发送一次剪贴板历史
-        setTimeout(() => {
-            this.sendClipboardHistory();
-            // 同时请求 API Key 状态
-            this._webviewView.webview.postMessage({ command: 'getApiKeyStatus' });
-        }, 500);
+    /**
+     * 初始化API配置
+     */
+    async initializeApiConfiguration() {
+        try {
+            // 不再从secrets加载API Key，但仍保留状态通知功能
+            
+            // 获取当前配置状态
+            const config = agentApi.getConfig();
+            const isDeepSeekKeySet = !!(config && config.deepseekApiKey);
+            
+            // 通知前端DeepSeek API Key状态
+            if (this._webviewView) {
+                this._webviewView.webview.postMessage({ 
+                    command: 'deepseekApiKeyStatus', 
+                    isSet: isDeepSeekKeySet 
+                });
+                
+                // 同时通知常规状态
+                this._webviewView.webview.postMessage({ 
+                    command: 'apiKeyStatus', 
+                    isSet: isDeepSeekKeySet  // 使用相同的状态，保持兼容性
+                });
+            }
+        } catch (error) {
+            console.error('初始化API配置失败:', error);
+            throw error; // 重新抛出错误以便上层捕获
+        }
     }
 
     /**
@@ -795,6 +865,16 @@ class LingxiSidebarProvider {
                     }
                     this.handleTabSwitch(message.tabId);
                     break;
+                case 'switchInnerTab':
+                    // 处理内部标签切换
+                    this.saveViewState('activeInnerTab', message.innerTabId);
+                    break;
+                case 'saveViewState':
+                    // 处理保存视图状态的请求
+                    if (message.key) {
+                        this.saveViewState(message.key, message.value);
+                    }
+                    break;
                 case 'createCanvas':
                     // 调用创建Excalidraw画布的命令
                     vscode.commands.executeCommand('lingxixiezuo.createExcalidraw');
@@ -850,27 +930,203 @@ class LingxiSidebarProvider {
                         this.handleAgentQuery(message.query, message.thinkingId);
                     }
                     break;
-                case 'updateApiKey': // 处理更新 API Key 的消息
+                case 'saveApiKey': // 处理更新智谱API Key的消息
                     if (message.apiKey) {
                         try {
-                            await context.secrets.store('lingxi.apiKey', message.apiKey);
-                            agentApi.updateConfig({ apiKey: message.apiKey }); // 更新 agentApi 配置
-                            vscode.window.showInformationMessage('智谱AI API Key 已保存。');
+                            // 不再持久化存储API Key到secrets
+                            // 只更新当前会话中的设置
+                            console.log('正在保存智谱AI API Key...');
+                            agentApi.updateConfig({ 
+                                zhipuApiKey: message.apiKey 
+                            }); // 直接使用zhipuApiKey参数而不是apiKey
+                            vscode.window.showInformationMessage('智谱AI API Key 已保存至当前会话。');
+                            
+                            // 获取最新配置并检查状态
+                            const config = agentApi.getConfig();
+                            console.log('保存后的智谱AI配置:', config);
+                            const isKeySet = !!(config && config.zhipuApiKey);
+                            
                             // 通知 Webview 更新状态
-                            this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: true });
+                            this._webviewView.webview.postMessage({ 
+                                command: 'apiKeyStatus', 
+                                isSet: isKeySet
+                            });
+                            console.log('已发送智谱AI API Key状态更新:', isKeySet);
                         } catch (error) {
-                            console.error('保存 API Key 失败:', error);
-                            vscode.window.showErrorMessage('保存 API Key 失败。');
+                            console.error('保存智谱API Key 失败:', error);
+                            vscode.window.showErrorMessage('保存智谱AI API Key 失败。');
                         }
                     }
                     break;
-                case 'getApiKeyStatus': // 处理获取 API Key 状态的消息
+                case 'saveDeepSeekApiKey': // 处理更新DeepSeek API Key的消息
+                    if (message.apiKey) {
+                        try {
+                            // 不再持久化存储API Key到secrets
+                            // 只更新当前会话中的设置
+                            console.log('正在保存DeepSeek API Key...');
+                            agentApi.updateConfig({ 
+                                deepseekApiKey: message.apiKey 
+                            }); // 更新 agentApi 配置
+                            vscode.window.showInformationMessage('DeepSeek API Key 已保存至当前会话。');
+                            
+                            // 获取最新配置并检查状态
+                            const config = agentApi.getConfig();
+                            console.log('保存后的DeepSeek配置:', config);
+                            const isKeySet = !!(config && config.deepseekApiKey);
+                            
+                            // 通知 Webview 更新状态
+                            this._webviewView.webview.postMessage({ 
+                                command: 'deepseekApiKeyStatus', 
+                                isSet: isKeySet
+                            });
+                            console.log('已发送DeepSeek API Key状态更新:', isKeySet);
+                        } catch (error) {
+                            console.error('保存DeepSeek API Key 失败:', error);
+                            vscode.window.showErrorMessage('保存DeepSeek API Key 失败。');
+                        }
+                    }
+                    break;
+                case 'setAIProvider': // 处理AI提供商切换
+                    // 所有提供商均设置为deepseek
                     try {
-                        const apiKey = await context.secrets.get('lingxi.apiKey');
-                        this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: !!apiKey });
+                        // 更新提供商配置
+                        const updateConfig = { provider: 'deepseek' };
+                        
+                        // 如果同时传入了model，一并更新
+                        if (message.model) {
+                            updateConfig.deepseekModel = message.model;
+                        }
+                        
+                        // 更新配置
+                        agentApi.updateConfig(updateConfig);
+                        console.log(`已设置为DeepSeek，模型: ${message.model || '默认'}`);
+                        vscode.window.showInformationMessage(`已设置为DeepSeek模型。`);
                     } catch (error) {
-                        console.error('读取 API Key 状态失败:', error);
-                        this._webviewView.webview.postMessage({ command: 'apiKeyStatus', isSet: false });
+                        console.error('设置DeepSeek提供商失败:', error);
+                        vscode.window.showErrorMessage('设置DeepSeek提供商失败。');
+                    }
+                    break;
+                case 'setAIModel': // 处理模型选择
+                    // 移除处理智谱AI模型选择，所有模型均设置为deepseek模型
+                    if (message.model) {
+                        try {
+                            agentApi.updateConfig({ deepseekModel: message.model });
+                            console.log(`已切换DeepSeek模型至: ${message.model}`);
+                            vscode.window.showInformationMessage(`已切换至DeepSeek ${message.model} 模型。`);
+                        } catch (error) {
+                            console.error('更新DeepSeek模型失败:', error);
+                            vscode.window.showErrorMessage('更新DeepSeek模型失败。');
+                        }
+                    }
+                    break;
+                case 'setDeepSeekModel': // 处理DeepSeek模型选择
+                    if (message.model) {
+                        try {
+                            agentApi.updateConfig({ deepseekModel: message.model });
+                            console.log(`已切换DeepSeek模型至: ${message.model}`);
+                            vscode.window.showInformationMessage(`已切换至DeepSeek ${message.model} 模型。`);
+                        } catch (error) {
+                            console.error('更新DeepSeek模型失败:', error);
+                            vscode.window.showErrorMessage('更新DeepSeek模型失败。');
+                        }
+                    }
+                    break;
+                case 'getApiKeyStatus': // 处理获取API Key状态的消息，重定向到DeepSeek
+                    // 重定向到DeepSeek API Key状态
+                    try {
+                        const config = agentApi.getConfig();
+                        console.log('检查DeepSeek API Key状态:', config);
+                        const isKeySet = !!(config && config.deepseekApiKey);
+                        console.log('DeepSeek API Key是否已设置:', isKeySet);
+                        this._webviewView.webview.postMessage({ 
+                            command: 'apiKeyStatus', 
+                            isSet: isKeySet 
+                        });
+                    } catch (error) {
+                        console.error('获取DeepSeek API Key状态失败:', error);
+                        this._webviewView.webview.postMessage({ 
+                            command: 'apiKeyStatus', 
+                            isSet: false,
+                            error: error.message
+                        });
+                    }
+                    break;
+                case 'getDeepSeekApiKeyStatus': // 处理获取DeepSeek API Key 状态的消息
+                    // 检查API Key是否已设置 - 直接检查config对象
+                    try {
+                        const config = agentApi.getConfig();
+                        console.log('检查DeepSeek API Key状态:', config);
+                        const isDeepSeekKeySet = !!(config && config.deepseekApiKey);
+                        console.log('DeepSeek API Key是否已设置:', isDeepSeekKeySet);
+                        this._webviewView.webview.postMessage({ 
+                            command: 'deepseekApiKeyStatus', 
+                            isSet: isDeepSeekKeySet 
+                        });
+                    } catch (error) {
+                        console.error('获取DeepSeek API Key状态失败:', error);
+                        this._webviewView.webview.postMessage({ 
+                            command: 'deepseekApiKeyStatus', 
+                            isSet: false,
+                            error: error.message
+                        });
+                    }
+                    break;
+                case 'toggleMcpServer': // 处理MCP服务器启用/禁用
+                    if (message.isEnabled) {
+                        try {
+                            // 使用扩展上下文路径找到服务器脚本
+                            // 构建服务器脚本的绝对路径
+                            const serverPath = path.join(this._context.extensionPath, 'agent', message.serverPath || 'server.js');
+                            
+                            console.log(`正在启动MCP服务器，脚本路径: ${serverPath}`);
+                            
+                            // 检查文件是否存在
+                            if (!fs.existsSync(serverPath)) {
+                                throw new Error(`服务器脚本文件不存在: ${serverPath}`);
+                            }
+                            
+                            // 获取工作区目录
+                            let workspaceDir = '';
+                            if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                                workspaceDir = vscode.workspace.workspaceFolders[0].uri.fsPath;
+                                console.log(`为MCP服务器提供工作区目录: ${workspaceDir}`);
+                            }
+                            
+                            // 启动MCP服务器，传递工作区目录
+                            await agentApi.connectToServer(serverPath, workspaceDir);
+                            
+                            // 通知前端更新状态
+                            this._webviewView.webview.postMessage({ 
+                                command: 'mcpServerStatus', 
+                                status: '运行中'
+                            });
+                            
+                            vscode.window.showInformationMessage('MCP服务器已启动');
+                        } catch (error) {
+                            console.error('启动MCP服务器失败:', error);
+                            this._webviewView.webview.postMessage({ 
+                                command: 'mcpServerStatus', 
+                                status: '启动失败'
+                            });
+                            vscode.window.showErrorMessage(`启动MCP服务器失败: ${error.message}`);
+                        }
+                    } else {
+                        try {
+                            // 停止MCP服务器
+                            console.log('正在停止MCP服务器');
+                            agentApi.cleanup();
+                            
+                            // 通知前端更新状态
+                            this._webviewView.webview.postMessage({ 
+                                command: 'mcpServerStatus', 
+                                status: '已停止'
+                            });
+                            
+                            vscode.window.showInformationMessage('MCP服务器已停止');
+                        } catch (error) {
+                            console.error('停止MCP服务器失败:', error);
+                            vscode.window.showErrorMessage(`停止MCP服务器失败: ${error.message}`);
+                        }
                     }
                     break;
                 case 'copyToClipboard':
@@ -904,6 +1160,10 @@ class LingxiSidebarProvider {
      * @param {string} tabId 要切换到的标签页ID
      */
     handleTabSwitch(tabId) {
+        // 保存当前活动的标签页
+        this.saveViewState('activeTab', tabId);
+        
+        // 通知前端更新标签页
         this._webviewView.webview.postMessage({
             command: 'updateTab',
             activeTab: tabId
@@ -1014,6 +1274,60 @@ class LingxiSidebarProvider {
         } catch (error) {
             console.error('处理画布列表时出错:', error);
             vscode.window.showErrorMessage(`处理画布列表失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 恢复视图状态
+     * 在Webview变为可见时调用以恢复之前的状态
+     */
+    restoreViewState() {
+        if (!this._webviewView) {
+            return;
+        }
+        
+        console.log('恢复视图状态', this._viewState);
+        
+        // 恢复活动标签页
+        this._webviewView.webview.postMessage({
+            command: 'restoreState',
+            state: this._viewState
+        });
+        
+        // 重新发送各种数据
+        this.sendClipboardHistory();
+        this.sendCanvasList();
+        
+        // 重新发送API密钥状态
+        this.initializeApiConfiguration().catch(err => {
+            console.error('恢复API配置状态失败:', err);
+        });
+        
+        // 如果之前连接了聊天服务器，恢复聊天服务器状态
+        if (this._viewState.chatServerConnected && this._chatClient) {
+            this._webviewView.webview.postMessage({
+                command: 'chatServerStatus',
+                status: 'connected',
+                port: 3000, // 使用默认端口，或者保存实际端口
+                ipAddress: 'localhost' // 使用默认地址，或者保存实际地址
+            });
+        }
+        
+        // 恢复MCP服务器状态
+        this._webviewView.webview.postMessage({
+            command: 'mcpServerStatus',
+            status: this._viewState.mcpServerStatus
+        });
+    }
+
+    /**
+     * 存储视图状态
+     * @param {string} key 状态键
+     * @param {any} value 状态值
+     */
+    saveViewState(key, value) {
+        if (this._viewState && key) {
+            this._viewState[key] = value;
         }
     }
 }

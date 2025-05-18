@@ -1397,6 +1397,7 @@
         .chat-send:hover {
             background: #2176c7;
         }
+        /* 语音录制按钮和计时器样式 */
         .voice-record-btn {
             background: none;
             color: #bbb;
@@ -1413,15 +1414,36 @@
             transition: all 0.2s;
             margin-right: 5px;
         }
+        
         .voice-record-btn:hover {
             color: #3794ff;
             background: rgba(55, 148, 255, 0.1);
         }
+        
         .voice-record-btn.recording {
             color: #ff3737;
             background: rgba(255, 55, 55, 0.1);
             animation: pulse 1.5s infinite;
         }
+        
+        .voice-record-timer {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 55, 55, 0.9);
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-family: monospace;
+            display: none;
+        }
+        
+        .voice-record-btn.recording + .voice-record-timer {
+            display: block;
+        }
+        
         @keyframes pulse {
             0% {
                 transform: scale(1);
@@ -1432,21 +1454,6 @@
             100% {
                 transform: scale(1);
             }
-        }
-        .voice-record-timer {
-            background: rgba(0, 0, 0, 0.6);
-            color: #fff;
-            border-radius: 12px;
-            padding: 2px 8px;
-            font-size: 12px;
-            position: absolute;
-            top: -30px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: none;
-        }
-        .voice-record-btn.recording + .voice-record-timer {
-            display: block;
         }
         .voice-message {
             display: flex;
@@ -1553,32 +1560,6 @@
             overflow: hidden;
         }
         
-        /* 语音录制计时器样式 */
-        .voice-record-timer {
-            position: absolute;
-            top: -25px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 55, 55, 0.9);
-            color: white;
-            font-size: 12px;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-family: monospace;
-            display: none;
-        }
-        
-        @keyframes pulse {
-            0%, 100% {
-                opacity: 0.5;
-                transform: scale(0.8);
-            }
-            50% {
-                opacity: 1;
-                transform: scale(1);
-            }
-        }
-
         /* 语音会议组件 */
         .voice-conference-container {
           margin: 15px 0;
@@ -2622,100 +2603,29 @@
             const icon = voiceMessage.querySelector('.voice-message-icon');
             if (icon) icon.textContent = '⏸️';
             
-            // 来源优先级:
-            // 1. 消息对象中的audioData
-            // 2. 元素dataset中的audio
-            // 3. 服务端查找
-
-            // 1. 优先使用消息对象中的音频数据
+            // 检查消息对象中的音频数据
             if (message && message.audioData) {
                 console.log('使用消息对象中的音频数据播放');
-                playAudio(message.audioData);
+                playAudio(message.audioData, message.mimeType);
                 return;
             }
             
-            // 2. 检查元素数据集中的音频数据
+            // 检查元素数据集中的音频数据
             if (voiceMessage.dataset && voiceMessage.dataset.audio) {
                 console.log('使用元素数据集中的音频数据播放');
-                playAudio(voiceMessage.dataset.audio);
+                playAudio(voiceMessage.dataset.audio, voiceMessage.dataset.mimeType);
                 return;
             }
             
-            // 3. 尝试从多个来源获取文件名进行服务端查找
-            let filename = null;
+            console.log('未找到音频数据，无法播放');
+            voiceMessage.classList.remove('playing');
+            if (icon) icon.textContent = '🔊';
             
-            // 尝试从消息对象中获取文件名
-            if (message && message.filename) {
-                filename = message.filename;
-                console.log('从消息对象获取文件名:', filename);
-            } 
-            // 尝试从元素数据集中获取文件名
-            else if (voiceMessage.dataset && voiceMessage.dataset.filename) {
-                filename = voiceMessage.dataset.filename;
-                console.log('从元素数据集获取文件名:', filename);
-            }
-            // 尝试通过消息ID获取文件名
-            else if (message && message.id && window.audioFileMap && window.audioFileMap[message.id]) {
-                filename = window.audioFileMap[message.id];
-                console.log('从audioFileMap获取文件名:', filename);
-            }
-            // 尝试通过时间戳生成文件名
-            else if (message && message.timestamp) {
-                // 使用时间戳创建文件名格式
-                const date = new Date(message.timestamp);
-                // 为了防止毫秒精度不同导致的不匹配，只保留分钟级别的精度
-                const dateString = date.toISOString().split(':')[0] + '-' + date.toISOString().split(':')[1];
-                // 构造一个类似于录音文件的前缀
-                filename = `recording_${dateString}`;
-                console.log('根据时间戳生成可能的文件名前缀:', filename);
-            }
-            
-            if (filename) {
-                console.log('尝试使用文件名向服务端请求音频:', filename);
-                
-                // 请求后端获取并播放音频文件
-                if (vscode) {
-                    vscode.postMessage({
-                        command: 'playAudioFile',
-                        filename: filename
-                    });
-                    
-                    // 记录当前播放的音频元素（仅用于UI状态）
-                    currentlyPlayingAudio = {
-                        pause: function() {
-                            // 重置UI状态
-                            voiceMessage.classList.remove('playing');
-                            const icon = voiceMessage.querySelector('.voice-message-icon');
-                            if (icon) icon.textContent = '🔊';
-                            currentlyPlayingAudio = null;
-                        },
-                        currentTime: 0
-                    };
-                    
-                    // 设置一个合理的超时时间自动重置播放图标
-                    const playDuration = message.duration ? (message.duration * 1000) : 5000;
-                    setTimeout(() => {
-                        if (currentlyPlayingAudio) {
-                            voiceMessage.classList.remove('playing');
-                            const icon = voiceMessage.querySelector('.voice-message-icon');
-                            if (icon) icon.textContent = '🔊';
-                            currentlyPlayingAudio = null;
-                        }
-                    }, playDuration);
-                    
-                    return;
-                }
-            } else {
-                console.log('未找到音频数据或文件名，无法播放');
-                voiceMessage.classList.remove('playing');
-                if (icon) icon.textContent = '🔊';
-                
-                if (vscode) {
-                    vscode.postMessage({
-                        command: 'showError',
-                        text: '播放失败：未找到语音数据'
-                    });
-                }
+            if (vscode) {
+                vscode.postMessage({
+                    command: 'showError',
+                    text: '播放失败：未找到语音数据'
+                });
             }
         }
         
@@ -2751,7 +2661,7 @@
                 
                 console.log('尝试播放音频，MIME类型:', mimeType);
                 
-                // 直接使用data URL创建音频元素，避免使用atob
+                // 直接使用data URL创建音频元素
                 const audio = new Audio();
                 audio.src = `data:${mimeType};base64,${base64AudioData}`;
                 

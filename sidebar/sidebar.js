@@ -11,6 +11,8 @@ let recordingTimer = null;
 let isRecording = false;
 let currentAudio = null; // 当前播放的音频元素
 
+
+
 // 初始化语音录制按钮和定时器显示
 const voiceRecordBtn = document.getElementById('voice-record-btn');
 let voiceRecordTimer = document.querySelector('.voice-record-timer');
@@ -47,16 +49,13 @@ async function startVoiceRecording() {
         });
         
     } catch (error) {
-        console.error('启动语音录制失败:', error);
+        console.error('启动录音失败:', error);
+        isRecording = false;
         voiceRecordBtn.classList.remove('recording');
         voiceRecordTimer.style.display = 'none';
-        isRecording = false;
-        
-        if (vscode) {
-            vscode.postMessage({
-                command: 'showError',
-                text: `语音录制失败: ${error.message}`
-            });
+        if (recordingTimer) {
+            clearInterval(recordingTimer);
+            recordingTimer = null;
         }
     }
 }
@@ -335,82 +334,136 @@ let currentUserId = null; // 当前用户ID，初始为null
 // 音频播放相关变量
 let audioSourceNodes = new Map(); // 存储每个发送者的音频源节点
 
-// 初始化语音会议UI组件
-function initVoiceConference() {
-    // 获取DOM元素
-    const createBtn = document.getElementById('create-conference-btn');
-    const joinBtn = document.getElementById('join-conference-btn');
-    const leaveBtn = document.getElementById('leave-conference-btn');
+// 使用事件委托，直接在document级别监听所有点击事件
+document.addEventListener('click', handleMeetingClick);
+    
+if (voiceRecordBtn && voiceRecordTimer) {
+        // 初始化语音录制元素状态
+        voiceRecordTimer.style.display = 'none';
+    }
+
+
+// 会议点击事件处理函数
+function handleMeetingClick(event) {
+    const target = event.target;
+    
+    // 检查目标元素是否是会议相关按钮
+    if (!isConferenceButton(target.id)) {
+        return;
+    }
+
+    // 使用switch语句处理不同按钮的点击事件
+    switch(target.id) {
+        case 'create-conference-btn':
+            handleCreateConference();
+            break;
+        case 'join-conference-btn':
+            handleJoinConference();
+            break;
+        case 'confirm-join-btn':
+            handleConfirmJoin();
+            break;
+        case 'cancel-join-btn':
+            handleCancelJoin();
+            break;
+        case 'leave-conference-btn':
+            handleLeaveConference();
+            break;
+        case 'toggle-mic-btn':
+            handleToggleMicrophone();
+            break;
+    }
+}
+
+// 检查是否是会议相关按钮
+function isConferenceButton(id) {
+    const conferenceButtonIds = [
+        'create-conference-btn',
+        'join-conference-btn',
+        'confirm-join-btn',
+        'cancel-join-btn',
+        'leave-conference-btn',
+        'toggle-mic-btn'
+    ];
+    return conferenceButtonIds.includes(id);
+}
+
+// 创建会议处理函数
+function handleCreateConference() {
+    if (isInConference) {
+        showErrorMessage('您已经在会议中');
+        return;
+    }
+    
+    // 生成唯一会议ID
+    const conferenceId = `conference_${Date.now()}`;
+    createConference(conferenceId);
+}
+
+// 加入会议处理函数
+function handleJoinConference() {
+    if (isInConference) {
+        showErrorMessage('您已经在会议中');
+        return;
+    }
+    
+    // 显示加入会议表单
     const joinForm = document.querySelector('.conference-join-form');
     const conferenceIdInput = document.getElementById('conference-id-input');
-    const confirmJoinBtn = document.getElementById('confirm-join-btn');
-    const cancelJoinBtn = document.getElementById('cancel-join-btn');
-    const toggleMicBtn = document.getElementById('toggle-mic-btn');
-    const conferenceStatus = document.querySelector('.voice-conference-status');
-    const activeConferenceInfo = document.querySelector('.active-conference-info');
-    const currentConferenceIdSpan = document.getElementById('current-conference-id');
-    const micStatus = document.querySelector('.mic-status');
-    
-    // 创建会议按钮点击事件
-    createBtn.addEventListener('click', () => {
-        if (isInConference) {
-            showErrorMessage('您已经在会议中');
-            return;
-        }
-        
-        // 生成唯一会议ID
-        const conferenceId = `conference_${Date.now()}`;
-        createConference(conferenceId);
-    });
-    
-    // 加入会议按钮点击事件
-    joinBtn.addEventListener('click', () => {
-        if (isInConference) {
-            showErrorMessage('您已经在会议中');
-            return;
-        }
-        
-        // 显示加入会议表单
+    if (joinForm && conferenceIdInput) {
         joinForm.style.display = 'flex';
         conferenceIdInput.focus();
-    });
+    }
+}
+
+// 确认加入会议处理函数
+function handleConfirmJoin() {
+    const conferenceIdInput = document.getElementById('conference-id-input');
+    const joinForm = document.querySelector('.conference-join-form');
     
-    // 确认加入会议
-    confirmJoinBtn.addEventListener('click', () => {
-        const conferenceId = conferenceIdInput.value.trim();
-        if (!conferenceId) {
-            showErrorMessage('请输入会议ID');
-            return;
-        }
-        
-        joinConference(conferenceId);
+    if (!conferenceIdInput || !joinForm) {
+        console.error('找不到会议加入表单元素');
+        return;
+    }
+
+    const conferenceId = conferenceIdInput.value.trim();
+    if (!conferenceId) {
+        showErrorMessage('请输入会议ID');
+        return;
+    }
+    
+    joinConference(conferenceId);
+    joinForm.style.display = 'none';
+    conferenceIdInput.value = '';
+}
+
+// 取消加入会议处理函数
+function handleCancelJoin() {
+    const joinForm = document.querySelector('.conference-join-form');
+    const conferenceIdInput = document.getElementById('conference-id-input');
+    
+    if (joinForm && conferenceIdInput) {
         joinForm.style.display = 'none';
         conferenceIdInput.value = '';
-    });
+    }
+}
+
+// 离开会议处理函数
+function handleLeaveConference() {
+    if (!isInConference) {
+        return;
+    }
     
-    // 取消加入会议
-    cancelJoinBtn.addEventListener('click', () => {
-        joinForm.style.display = 'none';
-        conferenceIdInput.value = '';
-    });
+    leaveConference();
+}
+
+// 切换麦克风处理函数
+function handleToggleMicrophone() {
+    if (!isInConference) {
+        return;
+    }
     
-    // 离开会议按钮点击事件
-    leaveBtn.addEventListener('click', () => {
-        if (!isInConference) {
-            return;
-        }
-        
-        leaveConference();
-    });
-    
-    // 麦克风开关按钮点击事件
-    toggleMicBtn.addEventListener('click', () => {
-        if (!isInConference) {
-            return;
-        }
-        
-        toggleMicrophone();
-    });
+    toggleMicrophone();
 }
 
 // 创建语音会议
@@ -781,11 +834,6 @@ function handleConferenceMessage(message) {
             break;
     }
 }
-
-// 初始化语音会议组件
-document.addEventListener('DOMContentLoaded', () => {
-    initVoiceConference();
-});
 
 // 扩展原有的消息处理函数，处理会议相关消息
 window.addEventListener('message', event => {

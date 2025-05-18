@@ -1437,228 +1437,27 @@ class LingxiSidebarProvider {
                             break;
                         case 'playAudioFile':
                             // 处理播放音频文件请求
-                            if (message.filename) {
+                            if (message.audioData) {
                                 try {
-                                    const fs = require('fs');
-                                    const path = require('path');
-                                    
-                                    // 获取工作区路径
-                                    let workspacePath = '';
-                                    let workspaceRecordingsDir = null;
-                                    try {
-                                        const workspaceFolders = vscode.workspace.workspaceFolders;
-                                        if (workspaceFolders && workspaceFolders.length > 0) {
-                                            workspacePath = workspaceFolders[0].uri.fsPath;
-                                            workspaceRecordingsDir = path.join(workspacePath, 'recordings');
-                                            console.log('工作区recordings路径:', workspaceRecordingsDir);
-                                        }
-                                    } catch (error) {
-                                        console.error('获取工作区路径失败:', error);
-                                    }
-                                    
-                                    // 构建音频文件路径 - 使用相对路径
-                                    const rootPath = path.resolve(__dirname, '..');
-                                    const recordingsDir = path.join(rootPath, 'recordings');
-                                    
-                                    // 首先尝试工作区路径
-                                    let fullPath = workspaceRecordingsDir ? 
-                                        path.join(workspaceRecordingsDir, message.filename) : 
-                                        path.join(recordingsDir, message.filename);
-                                    
-                                    console.log('尝试播放音频文件:', fullPath);
-                                    
-                                    // 检查文件是否存在
-                                    if (fs.existsSync(fullPath)) {
-                                        // 读取文件并转为base64
-                                        const audioData = fs.readFileSync(fullPath);
-                                        const base64Data = audioData.toString('base64');
-                                        
-                                        console.log(`成功读取音频文件，大小: ${audioData.length} 字节，base64大小: ${base64Data.length} 字符`);
-                                        
-                                        // 创建一个临时的audio元素在Node.js环境播放
-                                        // 这里需要使用前端的Audio API，所以我们把数据发回前端
-                                        this._webviewView.webview.postMessage({
-                                            command: 'playAudioData',
-                                            audioData: base64Data,
-                                            filename: message.filename,  // 添加文件名
-                                            mimeType: 'audio/wav'  // 提供MIME类型
-                                        });
-                                    } else {
-                                        console.error('音频文件不存在:', fullPath);
-                                        
-                                        // 尝试查找音频文件的其他位置
-                                        console.log('尝试查找音频文件的其他位置');
-                                        
-                                        // 检查输入的文件名是否包含完整路径
-                                        const cleanFilename = path.basename(message.filename);
-                                        console.log('提取的文件名:', cleanFilename);
-                                        
-                                        // 尝试列出recordings文件夹内容查找类似文件名
-                                        try {
-                                            // 优先尝试工作区recordings目录
-                                            let recordingsFiles = [];
-                                            let searchedDir = '';
-                                            
-                                            if (workspaceRecordingsDir && fs.existsSync(workspaceRecordingsDir)) {
-                                                recordingsFiles = fs.readdirSync(workspaceRecordingsDir);
-                                                searchedDir = workspaceRecordingsDir;
-                                                console.log('工作区recordings文件夹中的文件列表:', recordingsFiles);
-                                            }
-                                            
-                                            // 如果工作区中没有找到文件，尝试插件目录
-                                            if (recordingsFiles.length === 0 && fs.existsSync(recordingsDir)) {
-                                                recordingsFiles = fs.readdirSync(recordingsDir);
-                                                searchedDir = recordingsDir;
-                                                console.log('插件目录recordings文件夹中的文件列表:', recordingsFiles);
-                                            }
-                                            
-                                            // 提取时间戳部分进行模糊匹配
-                                            if (cleanFilename.startsWith('recording_') && cleanFilename.includes('-')) {
-                                                const timestampParts = cleanFilename.replace('recording_', '').split('.')[0];
-                                                // 只取日期部分进行匹配，忽略毫秒部分
-                                                const datePartToMatch = timestampParts.substring(0, 16); // "2025-05-14T15-57" 格式
-                                                console.log('尝试匹配的日期部分:', datePartToMatch);
-                                                
-                                                // 查找文件名中包含此日期部分的文件
-                                                const matchingFiles = recordingsFiles.filter(file => 
-                                                    file.startsWith('recording_') && 
-                                                    file.includes(datePartToMatch)
-                                                );
-                                                
-                                                console.log('匹配到的文件:', matchingFiles);
-                                                
-                                                if (matchingFiles.length > 0) {
-                                                    // 使用第一个匹配的文件
-                                                    const matchedFile = matchingFiles[0];
-                                                    const matchedPath = path.join(searchedDir, matchedFile);
-                                                    
-                                                    try {
-                                                        console.log('找到匹配的文件:', matchedPath);
-                                                        const audioData = fs.readFileSync(matchedPath);
-                                                        const base64Data = audioData.toString('base64');
-                                                        
-                                                        console.log(`成功读取匹配的音频文件，大小: ${audioData.length} 字节`);
-                                                        
-                                                        // 确定文件的MIME类型
-                                                        let mimeType = 'audio/wav'; // 默认
-                                                        if (matchedPath.toLowerCase().endsWith('.mp3')) {
-                                                            mimeType = 'audio/mpeg';
-                                                        } else if (matchedPath.toLowerCase().endsWith('.m4a')) {
-                                                            mimeType = 'audio/mp4';
-                                                        } else if (matchedPath.toLowerCase().endsWith('.ogg')) {
-                                                            mimeType = 'audio/ogg';
-                                                        } else if (matchedPath.toLowerCase().endsWith('.aac')) {
-                                                            mimeType = 'audio/aac';
-                                                        }
-                                                        
-                                                        this._webviewView.webview.postMessage({
-                                                            command: 'playAudioData',
-                                                            audioData: base64Data,
-                                                            filename: matchedFile,
-                                                            mimeType: mimeType
-                                                        });
-                                                        
-                                                        fileFound = true;
-                                                        return;
-                                                    } catch (error) {
-                                                        console.error('读取音频文件失败:', error);
-                                                        this._webviewView.webview.postMessage({
-                                                            command: 'showError',
-                                                            text: `读取音频文件失败: ${error.message}`
-                                                        });
-                                                    }
-                                                }
-                                            }
-                                        } catch (dirError) {
-                                            console.error('列出recordings目录内容失败:', dirError);
-                                        }
-                                        
-                                        // 尝试多种路径组合
-                                        const potentialPaths = [];
-                                        
-                                        // 1. 工作区相关路径
-                                        if (workspaceRecordingsDir) {
-                                            potentialPaths.push(
-                                                path.join(workspaceRecordingsDir, cleanFilename),
-                                                // 考虑工作区中可能的子文件夹
-                                                path.join(workspacePath, 'recordings', 'audio', cleanFilename),
-                                                path.join(workspacePath, 'audio', cleanFilename)
-                                            );
-                                        }
-                                        
-                                        // 2. 插件相关路径
-                                        potentialPaths.push(
-                                            path.join('./recordings', cleanFilename),
-                                            path.join(process.cwd(), 'recordings', cleanFilename),
-                                            path.join(__dirname, '../recordings', cleanFilename),
-                                            path.join(rootPath, 'recordings', cleanFilename),
-                                            path.join(process.cwd(), '../recordings', cleanFilename),
-                                            path.join(rootPath, 'LingXiXieZuo-2-main', 'recordings', cleanFilename)
-                                        );
-                                        
-                                        // 3. 相对于工作区的可能路径
-                                        if (vscode.workspace.rootPath) {
-                                            potentialPaths.push(
-                                                path.join(vscode.workspace.rootPath, 'recordings', cleanFilename)
-                                            );
-                                        }
-                                        
-                                        let fileFound = false;
-                                        
-                                        for (const potentialPath of potentialPaths) {
-                                            console.log('尝试路径:', potentialPath);
-                                            
-                                            if (fs.existsSync(potentialPath)) {
-                                                console.log('在路径中找到文件:', potentialPath);
-                                                
-                                                try {
-                                                    const audioData = fs.readFileSync(potentialPath);
-                                                    const base64Data = audioData.toString('base64');
-                                                    
-                                                    console.log(`成功读取备选路径音频文件，大小: ${audioData.length} 字节`);
-                                                    
-                                                    // 确定文件的MIME类型
-                                                    let mimeType = 'audio/wav'; // 默认
-                                                    if (potentialPath.toLowerCase().endsWith('.mp3')) {
-                                                        mimeType = 'audio/mpeg';
-                                                    } else if (potentialPath.toLowerCase().endsWith('.m4a')) {
-                                                        mimeType = 'audio/mp4';
-                                                    } else if (potentialPath.toLowerCase().endsWith('.ogg')) {
-                                                        mimeType = 'audio/ogg';
-                                                    } else if (potentialPath.toLowerCase().endsWith('.aac')) {
-                                                        mimeType = 'audio/aac';
-                                                    }
-                                                    
-                                                    this._webviewView.webview.postMessage({
-                                                        command: 'playAudioData',
-                                                        audioData: base64Data,
-                                                        filename: cleanFilename,  // 添加文件名
-                                                        mimeType: mimeType
-                                                    });
-                                                    
-                                                    fileFound = true;
-                                                    break;
-                                                } catch (readError) {
-                                                    console.error('读取备选路径文件失败:', readError);
-                                                }
-                                            }
-                                        }
-                                        
-                                        if (!fileFound) {
-                                            console.error('在任何路径下都未找到音频文件:', cleanFilename);
-                                            this._webviewView.webview.postMessage({
-                                                command: 'audioPlaybackError',
-                                                error: '音频文件不存在，已尝试多个路径但无法找到'
-                                            });
-                                        }
-                                    }
+                                    // 直接使用提供的音频数据
+                                    this._webviewView.webview.postMessage({
+                                        command: 'playAudioData',
+                                        audioData: message.audioData,
+                                        mimeType: message.mimeType || 'audio/wav'
+                                    });
                                 } catch (error) {
-                                    console.error('播放音频文件失败:', error);
+                                    console.error('播放音频数据失败:', error);
                                     this._webviewView.webview.postMessage({
                                         command: 'audioPlaybackError',
                                         error: error.message
                                     });
                                 }
+                            } else {
+                                console.error('未提供音频数据');
+                                this._webviewView.webview.postMessage({
+                                    command: 'audioPlaybackError',
+                                    error: '未提供音频数据'
+                                });
                             }
                             break;
                         case 'executeStreamCommand':

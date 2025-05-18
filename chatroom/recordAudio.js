@@ -2,8 +2,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
-const os = require('os');
 const Mic = require('node-microphone');
 const WebSocket = require('ws');
 

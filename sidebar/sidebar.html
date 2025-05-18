@@ -93,8 +93,44 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- 语音会议组件 -->
+                    <div class="voice-conference-container">
+                        <div class="voice-conference-header">
+                            <h3>语音会议</h3>
+                            <div class="voice-conference-status">未连接</div>
+                        </div>
+                        
+                        <div class="voice-conference-controls">
+                            <button id="create-conference-btn" class="conference-btn">创建会议</button>
+                            <button id="join-conference-btn" class="conference-btn">加入会议</button>
+                            <button id="leave-conference-btn" class="conference-btn" disabled>离开会议</button>
+                        </div>
+                        
+                        <div class="conference-join-form" style="display: none;">
+                            <input type="text" id="conference-id-input" placeholder="输入会议ID">
+                            <button id="confirm-join-btn">确认加入</button>
+                            <button id="cancel-join-btn">取消</button>
+                        </div>
+                        
+                        <div class="active-conference-info" style="display: none;">
+                            <div class="conference-id-display">会议ID: <span id="current-conference-id"></span></div>
+                            <div class="mic-control">
+                                <button id="toggle-mic-btn">静音</button>
+                                <div class="mic-status">麦克风已开启</div>
+                            </div>
+                        </div>
+                        
+                        <div class="conference-participants">
+                            <h4>参与者</h4>
+                            <ul id="participants-list"></ul>
+                        </div>
+                    </div>
+
                     <div class="chat-input-bar">
                         <input type="text" id="chat-input" class="chat-input" placeholder="输入消息..." />
+                        <div class="voice-record-timer">00:00</div>
+                        <button id="voice-record-btn" class="voice-record-btn" title="录制语音消息">🎤</button>
                         <button id="chat-send" class="chat-send">发送</button>
                                 </div>
                             </div>
@@ -747,6 +783,7 @@
             display: flex;
             flex-direction: column;
             min-height: 0;
+            overflow: hidden;
         }
         .canvas-container {
             flex: 1 1 auto;
@@ -1815,6 +1852,281 @@
 
         .agent-input-bar textarea.chat-input:focus {
             border: 1.5px solid #3794ff;
+        }
+
+        /* 语音会议组件 */
+        .voice-conference-container {
+          margin: 15px 0;
+          padding: 10px;
+          border: 1px solid #444;
+          border-radius: 5px;
+          background-color: #2a2a2a;
+        }
+        
+        .voice-conference-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 10px;
+        }
+        
+        .voice-conference-header h3 {
+          margin: 0;
+          font-size: 16px;
+        }
+        
+        .voice-conference-status {
+          font-size: 12px;
+          color: #aaa;
+        }
+        
+        .voice-conference-controls {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 10px;
+        }
+        
+        .conference-btn {
+          padding: 6px 12px;
+          background-color: #0e639c;
+          color: #fff;
+          border: none;
+          border-radius: 3px;
+          cursor: pointer;
+        }
+        
+        .conference-btn:hover {
+          background-color: #1177bb;
+        }
+        
+        .conference-btn:disabled {
+          background-color: #666;
+          cursor: not-allowed;
+        }
+        
+        .conference-join-form {
+          margin: 10px 0;
+          display: flex;
+          gap: 5px;
+        }
+        
+        #conference-id-input {
+          flex: 1;
+          padding: 5px;
+          background-color: #3c3c3c;
+          color: #fff;
+          border: 1px solid #555;
+          border-radius: 3px;
+        }
+        
+        .active-conference-info {
+          margin: 10px 0;
+          padding: 8px;
+          background-color: #333;
+          border-radius: 3px;
+        }
+        
+        .conference-id-display {
+          margin-bottom: 8px;
+          font-size: 13px;
+        }
+        
+        .mic-control {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        
+        #toggle-mic-btn {
+          padding: 4px 8px;
+          background-color: #cc3333;
+          color: #fff;
+          border: none;
+          border-radius: 3px;
+          cursor: pointer;
+        }
+        
+        #toggle-mic-btn.muted {
+          background-color: #555;
+        }
+        
+        .mic-status {
+          font-size: 12px;
+        }
+        
+        .conference-participants {
+          margin-top: 15px;
+        }
+        
+        .conference-participants h4 {
+          margin: 0 0 8px 0;
+          font-size: 14px;
+          color: #ccc;
+        }
+        
+        #participants-list {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+        }
+        
+        #participants-list li {
+          padding: 5px;
+          border-bottom: 1px solid #444;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        
+        #participants-list li:last-child {
+          border-bottom: none;
+        }
+        
+        .participant-name {
+          flex: 1;
+        }
+        
+        .participant-status {
+          font-size: 12px;
+          color: #aaa;
+        }
+        
+        .speaking-indicator {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background-color: #4CAF50;
+          margin-right: 5px;
+        }
+
+        /* 系统消息样式 */
+        .chat-system-message {
+            text-align: center;
+            margin: 10px 0;
+            padding: 5px 10px;
+            width: 100%;
+        }
+        .system-message-content {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            color: #bbb;
+            font-size: 12px;
+            padding: 5px 10px;
+            border-radius: 12px;
+        }
+        .system-message-time {
+            font-size: 10px;
+            color: #777;
+            margin-top: 2px;
+        }
+
+        /* 语音录制按钮和计时器样式 */
+        .voice-record-btn {
+            background: none;
+            color: #bbb;
+            border: none;
+            border-radius: 50%;
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            margin-right: 5px;
+        }
+        
+        .voice-record-btn:hover {
+            color: #3794ff;
+            background: rgba(55, 148, 255, 0.1);
+        }
+        
+        .voice-record-btn.recording {
+            color: #ff3737;
+            background: rgba(255, 55, 55, 0.1);
+            animation: pulse 1.5s infinite;
+        }
+        
+        .voice-record-timer {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 55, 55, 0.9);
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-family: monospace;
+            display: none;
+        }
+        
+        .voice-record-btn.recording + .voice-record-timer {
+            display: block;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+        .voice-message {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(55, 148, 255, 0.1);
+            border-radius: 12px;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .voice-message:hover {
+            background: rgba(55, 148, 255, 0.2);
+        }
+        
+        .voice-message.playing .voice-message-line {
+            background: linear-gradient(90deg, 
+                rgba(55, 148, 255, 0.8) 0%, 
+                rgba(55, 148, 255, 0.1) 100%);
+            animation: sound-wave 1.5s infinite ease-in-out;
+        }
+        
+        @keyframes sound-wave {
+            0%, 100% {
+                opacity: 0.3;
+                transform: scaleY(0.8);
+            }
+            50% {
+                opacity: 1;
+                transform: scaleY(1.2);
+            }
+        }
+        
+        .voice-message-icon {
+            font-size: 18px;
+        }
+        
+        .voice-message-duration {
+            color: #bbb;
+            font-size: 13px;
+        }
+        
+        .voice-message-line {
+            flex: 1;
+            height: 2px;
+            background: linear-gradient(90deg, 
+                rgba(55, 148, 255, 0.8) 0%, 
+                rgba(55, 148, 255, 0.1) 100%);
+            border-radius: 2px;
         }
     </style>
     

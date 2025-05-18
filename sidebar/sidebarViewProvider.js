@@ -50,7 +50,7 @@ class LingxiSidebarProvider {
             this._chatClient.onclose = () => {
                 console.log('WebSocket连接已关闭，尝试重连...');
                 setTimeout(() => {
-                    if (this._chatClient.readyState === WebSocket.CLOSED) {
+                    if (this._chatClient && this._chatClient.readyState === WebSocket.CLOSED) {
                         this.reconnectWebSocket();
                     }
                 }, 3000);
@@ -66,24 +66,108 @@ class LingxiSidebarProvider {
                     const message = JSON.parse(event.data);
                     console.log('收到WebSocket消息:', message);
                     
-                    if (message.type === 'canvas') {
-                        console.log('处理画布消息:', message);
-                        if (message.action === 'list' && message.canvasList) {
-                            console.log('收到画布列表:', message.canvasList);
-                            await this.handleCanvasList(message.canvasList);
-                        } else {
-                            await this.handleCanvasMessage(message);
-                        }
-                    } else if (message.type === 'message' && message.canvasData) {
-                        if (this._webviewView) {
-                            this._webviewView.webview.postMessage({
-                                command: 'chatResponse',
-                                sender: message.sender.name,
-                                content: message.content,
-                                time: new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
-                                canvasData: message.canvasData
+                    // 处理不同类型的消息
+                    switch (message.type) {
+                        case 'canvas':
+                            console.log('处理画布消息:', message);
+                            if (message.action === 'list' && message.canvasList) {
+                                console.log('收到画布列表:', message.canvasList);
+                                await this.handleCanvasList(message.canvasList);
+                            } else {
+                                await this.handleCanvasMessage(message);
+                            }
+                            break;
+                            
+                        case 'message':
+                            this.handleChatMessage(message);
+                            break;
+                            
+                        case 'system':
+                            // 处理系统消息(如用户加入/离开)
+                            if (this._webviewView) {
+                                this._webviewView.webview.postMessage({
+                                    command: 'addSystemMessage',
+                                    message: message
+                                });
+                            }
+                            break;
+                            
+                        case 'audioMessage':
+                            // 处理语音消息
+                            if (this._webviewView) {
+                                this._webviewView.webview.postMessage({
+                                    command: 'addAudioMessage',
+                                    message: message
+                                });
+                            }
+                            break;
+                            
+                        case 'privateMessage':
+                            // 处理私聊消息
+                            if (this._webviewView) {
+                                this._webviewView.webview.postMessage({
+                                    command: 'addPrivateMessage',
+                                    message: message
+                                });
+                            }
+                            break;
+                            
+                        case 'privateAudioMessage':
+                            // 处理私聊语音消息
+                            if (this._webviewView) {
+                                this._webviewView.webview.postMessage({
+                                    command: 'addPrivateAudioMessage',
+                                    message: message
+                                });
+                            }
+                            break;
+                            
+                        case 'voiceConference':
+                            // 转发语音会议消息到前端
+                            console.log('收到会议消息, 转发到前端:', message);
+                            if (this._webviewView) {
+                                this._webviewView.webview.postMessage({
+                                    command: 'forwardWebSocketMessage',
+                                    wsMessage: message
+                                });
+                            }
+                            break;
+                            
+                        case 'audioStream':
+                            // 转发音频流消息到前端
+                            console.log('收到音频流消息, 转发到前端:', {
+                                序列号: message.sequence,
+                                会议ID: message.conferenceId, 
+                                发送者: message.senderId,
+                                发送者名称: message.senderName,
+                                数据长度: message.audioData ? message.audioData.length : 0,
+                                当前用户ID: this._userId,
+                                是否WAV格式: message.format?.isWav || false
                             });
-                        }
+                            
+                            // 检查该消息是否是自己发送的
+                            const isSelfMessage = message.senderId === this._userId;
+                            if (isSelfMessage) {
+                                console.log('音频流消息来自自己，但仍转发到前端以让前端决定是否播放');
+                            }
+                            
+                            if (this._webviewView) {
+                                try {
+                                    this._webviewView.webview.postMessage({
+                                        command: 'forwardWebSocketMessage',
+                                        wsMessage: message
+                                    });
+                                    console.log('音频流消息已成功转发到前端, 序列号:', message.sequence);
+                                } catch (err) {
+                                    console.error('转发音频流消息到前端失败:', err);
+                                }
+                            } else {
+                                console.error('无法转发音频流消息: webviewView未初始化');
+                            }
+                            break;
+                            
+                        default:
+                            console.log('未处理的消息类型:', message.type);
                     }
                 } catch (error) {
                     console.error('处理WebSocket消息时出错:', error);
@@ -582,22 +666,36 @@ class LingxiSidebarProvider {
      * @param {string} message 消息内容
      */
     handleChatMessage(message) {
-        console.log('收到聊天消息:', message);
+        if (!this._webviewView || !message) return;
         
-        // 使用isConnected函数检查连接状态
-        if (isConnected()) {
-            // 使用聊天室客户端发送消息
-            sendMessage(message);
-        } else {
-            // 如果客户端未连接，提示用户启动聊天室服务
-            if (this._webviewView) {
+        try {
+            if (message.type === 'message' || message.type === 'system') {
                 this._webviewView.webview.postMessage({
-                    command: 'chatResponse',
-                    sender: '系统提示',
-                    content: '聊天室服务未启动，请点击"启动聊天室"按钮启动服务，或在从机模式下连接到现有服务器。',
-                    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
+                    command: 'addChatMessage',
+                    message
                 });
+            } else if (message.type === 'privateMessage') {
+                this._webviewView.webview.postMessage({
+                    command: 'addPrivateMessage',
+                    message
+                });
+            } else if (message.type === 'audioMessage') {
+                // 处理语音消息
+                this._webviewView.webview.postMessage({
+                    command: 'addAudioMessage',
+                    message
+                });
+            } else if (message.type === 'privateAudioMessage') {
+                // 处理私聊语音消息
+                this._webviewView.webview.postMessage({
+                    command: 'addPrivateAudioMessage',
+                    message
+                });
+            } else if (message.type === 'canvas') {
+                this.handleCanvasMessage(message);
             }
+        } catch (error) {
+            console.error('处理聊天消息失败:', error);
         }
     }
 
@@ -766,57 +864,65 @@ class LingxiSidebarProvider {
      * @param {string} ipAddress IP地址，默认为localhost
      */
     connectToChatServer(port = 3000, ipAddress = 'localhost') {
-        if (this._chatClient) {
-            console.log('已连接到聊天室，无需重新连接');
-            return;
-        }
-        
         try {
+            console.log(`正在连接到聊天服务器 ${ipAddress}:${port}...`);
+            
+            const { connectToServer } = require('../chatroom/client');
+            
+            // 生成一个唯一的用户ID
+            const userId = `vscode_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+            this._userId = userId; // 在类实例中保存，确保可以在多个地方访问
+            
             this._chatClient = connectToServer(
-                port, 
-                this._roomId, 
-                `vscode_${Date.now()}`, 
+                port,
+                this._roomId,
+                userId, // 使用生成的一致ID
                 this._userName,
                 ipAddress
             );
             
-            // 添加消息处理
-            const originalOnMessage = this._chatClient.onmessage;
-            this._chatClient.onmessage = (event) => {
-                // 调用原始处理函数
-                if (originalOnMessage) {
-                    originalOnMessage(event);
-                }
+            console.log('已连接到聊天服务器，用户ID:', userId);
+            
+            // 设置WebSocket消息处理
+            this.setupWebSocketHandlers();
+            
+            // 将用户ID通知前端，这对语音会议功能很重要
+            if (this._webviewView) {
+                this._webviewView.webview.postMessage({
+                    command: 'updateCurrentUser',
+                    userId: userId
+                });
                 
-                // 添加我们自己的处理逻辑
-                try {
-                    const message = JSON.parse(event.data);
-                    // 将消息发送到前端
+                // 多发送一次确保接收到
+                setTimeout(() => {
                     if (this._webviewView) {
                         this._webviewView.webview.postMessage({
-                            command: 'chatResponse',
-                            sender: typeof message.sender === 'object' ? message.sender.name : (message.sender || '其他用户'),
-                            content: message.content,
-                            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
+                            command: 'updateCurrentUser',
+                            userId: userId
                         });
                     }
-                } catch (error) {
-                    console.error('处理聊天消息时出错:', error);
-                }
-            };
+                }, 1000);
+            }
             
-            // 通知前端连接成功
+            // 更新服务器状态
             if (this._webviewView) {
                 this._webviewView.webview.postMessage({
                     command: 'chatServerStatus',
                     status: 'connected',
+                    ipAddress: ipAddress,
                     port: port,
-                    ipAddress: ipAddress
+                    roomId: this._roomId,
+                    userId: userId // 也在这里包含用户ID
                 });
             }
             
+            vscode.window.showInformationMessage(`已连接到聊天服务器: ${ipAddress}:${port}`);
+            
+            return this._chatClient;
         } catch (error) {
-            console.error('连接到聊天室服务器失败:', error);
+            console.error('连接聊天服务器失败:', error);
+            vscode.window.showErrorMessage(`连接失败: ${error.message}`);
+            
             if (this._webviewView) {
                 this._webviewView.webview.postMessage({
                     command: 'chatServerStatus',
@@ -824,6 +930,8 @@ class LingxiSidebarProvider {
                     error: error.message
                 });
             }
+            
+            return null;
         }
     }
     
@@ -897,9 +1005,19 @@ class LingxiSidebarProvider {
                     }
                     break;
                 case 'sendChatMessage':
-                    // 处理聊天消息
-                    if (message.message) {
-                        this.handleChatMessage(message.message);
+                    // 通过WebSocket发送消息
+                    if (this._chatClient && this._chatClient.readyState === WebSocket.OPEN) {
+                        try {
+                            const chatMsg = {
+                                type: 'message',
+                                content: message.message
+                            };
+                            this._chatClient.send(JSON.stringify(chatMsg));
+                        } catch (error) {
+                            console.error('发送聊天消息失败:', error);
+                        }
+                    } else {
+                        vscode.window.showErrorMessage('未连接到聊天服务器，无法发送消息');
                     }
                     break;
                 case 'startChatServer':
@@ -1151,6 +1269,424 @@ class LingxiSidebarProvider {
                 case 'showCanvasContextMenu':
                     this.showCanvasContextMenu(message.path, message.name);
                     break;
+                case 'executeCommand':
+                    // 执行VSCode命令
+                    if (message.commandId) {
+                        try {
+                            // 执行命令
+                            const result = await vscode.commands.executeCommand(message.commandId, message.args);
+                            
+                            // 如果是录音命令，处理录音结果
+                            if (message.commandId === 'lingxixiezuo.recordAudio') {
+                                if (result) {
+                                    // 成功获取到录音数据
+                                    this._webviewView.webview.postMessage({
+                                        command: 'audioRecordResult',
+                                        success: true,
+                                        audioData: result.audioData,
+                                        audioFilename: result.filename,
+                                        duration: message.args?.duration || 5 // 默认5秒
+                                    });
+                                } else {
+                                    // 录音被取消或失败
+                                    this._webviewView.webview.postMessage({
+                                        command: 'audioRecordResult',
+                                        success: false,
+                                        error: '录音被取消或失败'
+                                    });
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`执行命令 ${message.commandId} 失败:`, error);
+                            // 通知前端执行失败
+                            this._webviewView.webview.postMessage({
+                                command: 'commandResult',
+                                commandId: message.commandId,
+                                success: false,
+                                error: error.message
+                            });
+                            
+                            // 如果是录音命令，还需要发送特定的录音失败消息
+                            if (message.commandId === 'lingxixiezuo.recordAudio') {
+                                this._webviewView.webview.postMessage({
+                                    command: 'audioRecordResult',
+                                    success: false,
+                                    error: error.message
+                                });
+                            }
+                        }
+                    }
+                    break;
+                case 'showError':
+                    // 显示错误消息
+                    if (message.text) {
+                        vscode.window.showErrorMessage(message.text);
+                    }
+                    break;
+                case 'sendAudioMessage':
+                    // 处理发送语音消息
+                    if (this._chatClient && this._chatClient.readyState === WebSocket.OPEN) {
+                        try {
+                            const { audioData, duration, audioFilename, messageId } = message;
+                            // 使用chatroom/client.js中的函数发送语音消息
+                            const chatClient = require('../chatroom/client');
+                            const success = await chatClient.sendAudioMessage(audioData, duration, audioFilename, messageId);
+                            
+                            console.log('语音消息已发送，使用ID:', messageId, '文件名:', audioFilename);
+                            
+                            // 直接在前端显示消息
+                            if (success) {
+                                // 构建一个本地消息对象，模拟从服务器返回的消息
+                                const localMessage = {
+                                    type: 'audioMessage',
+                                    userId: this._chatClient._userId || 'unknown_user',
+                                    sender: {
+                                        id: this._chatClient._userId,
+                                        name: this._userName
+                                    },
+                                    audioData: audioData,
+                                    duration: duration || 0,
+                                    id: messageId,
+                                    audioFilename: audioFilename,
+                                    timestamp: Date.now(),
+                                    isLocalMessage: true // 标记为本地发送的消息
+                                };
+                                
+                                // 给前端发送消息
+                                this._webviewView.webview.postMessage({
+                                    command: 'addAudioMessage',
+                                    message: localMessage
+                                });
+                            }
+                            
+                            this._webviewView.webview.postMessage({
+                                command: 'audioMessageSent',
+                                success: true,
+                                messageId: messageId
+                            });
+                        } catch (error) {
+                            console.error('发送语音消息失败:', error);
+                            this._webviewView.webview.postMessage({
+                                command: 'audioMessageSent',
+                                success: false,
+                                error: error.message
+                            });
+                        }
+                    } else {
+                        vscode.window.showErrorMessage('未连接到聊天服务器，无法发送语音消息');
+                        this._webviewView.webview.postMessage({
+                            command: 'audioMessageSent',
+                            success: false,
+                            error: '未连接到聊天服务器'
+                        });
+                    }
+                    break;
+                
+                case 'sendPrivateAudioMessage':
+                    // 处理发送私聊语音消息
+                    if (this._chatClient && this._chatClient.readyState === WebSocket.OPEN) {
+                        try {
+                            const { targetId, audioData, duration } = message;
+                            // 使用chatroom/client.js中的函数发送私聊语音消息
+                            const chatClient = require('../chatroom/client');
+                            await chatClient.sendPrivateAudioMessage(targetId, audioData, duration);
+                            
+                            console.log('私聊语音消息已发送给', targetId);
+                            this._webviewView.webview.postMessage({
+                                command: 'privateAudioMessageSent',
+                                success: true,
+                                targetId
+                            });
+                        } catch (error) {
+                            console.error('发送私聊语音消息失败:', error);
+                            this._webviewView.webview.postMessage({
+                                command: 'privateAudioMessageSent',
+                                success: false,
+                                error: error.message
+                            });
+                        }
+                    } else {
+                        vscode.window.showErrorMessage('未连接到聊天服务器，无法发送私聊语音消息');
+                        this._webviewView.webview.postMessage({
+                            command: 'privateAudioMessageSent',
+                            success: false,
+                            error: '未连接到聊天服务器'
+                        });
+                    }
+                    break;
+                case 'openAudioFile':
+                    // 处理使用系统播放器打开音频文件的请求
+                    if (message.filename) {
+                        try {
+                            const fs = require('fs');
+                            const path = require('path');
+                            
+                            // 构建音频文件路径 - 使用多种可能的路径
+                            const rootPath = path.resolve(__dirname, '..');
+                            const recordingsDir = path.join(rootPath, 'recordings');
+                            
+                            // 获取工作区路径
+                            let workspacePath = '';
+                            let workspaceRecordingsDir = null;
+                            try {
+                                const workspaceFolders = vscode.workspace.workspaceFolders;
+                                if (workspaceFolders && workspaceFolders.length > 0) {
+                                    workspacePath = workspaceFolders[0].uri.fsPath;
+                                    workspaceRecordingsDir = path.join(workspacePath, 'recordings');
+                                    console.log('工作区recordings路径:', workspaceRecordingsDir);
+                                }
+                            } catch (error) {
+                                console.error('获取工作区路径失败:', error);
+                            }
+                            
+                            // 首先尝试工作区路径
+                            let fullPath = workspaceRecordingsDir ? 
+                                path.join(workspaceRecordingsDir, message.filename) : 
+                                path.join(recordingsDir, message.filename);
+                            
+                            console.log('尝试播放音频文件:', fullPath);
+                            
+                            // 检查文件是否存在
+                            if (fs.existsSync(fullPath)) {
+                                // 读取文件并转为base64
+                                const audioData = fs.readFileSync(fullPath);
+                                const base64Data = audioData.toString('base64');
+                                
+                                console.log(`成功读取音频文件，大小: ${audioData.length} 字节，base64大小: ${base64Data.length} 字符`);
+                                
+                                // 创建一个临时的audio元素在Node.js环境播放
+                                // 这里需要使用前端的Audio API，所以我们把数据发回前端
+                                this._webviewView.webview.postMessage({
+                                    command: 'playAudioData',
+                                    audioData: base64Data,
+                                    filename: message.filename,  // 添加文件名
+                                    mimeType: 'audio/wav'  // 提供MIME类型
+                                });
+                            } else {
+                                console.error('音频文件不存在:', fullPath);
+                                
+                                // 尝试查找音频文件的其他位置
+                                console.log('尝试查找音频文件的其他位置');
+                                
+                                // 检查输入的文件名是否包含完整路径
+                                const cleanFilename = path.basename(message.filename);
+                                console.log('提取的文件名:', cleanFilename);
+                                
+                                // 尝试列出recordings文件夹内容查找类似文件名
+                                try {
+                                    // 优先尝试工作区recordings目录
+                                    let recordingsFiles = [];
+                                    let searchedDir = '';
+                                    
+                                    if (workspaceRecordingsDir && fs.existsSync(workspaceRecordingsDir)) {
+                                        recordingsFiles = fs.readdirSync(workspaceRecordingsDir);
+                                        searchedDir = workspaceRecordingsDir;
+                                        console.log('工作区recordings文件夹中的文件列表:', recordingsFiles);
+                                    }
+                                    
+                                    // 如果工作区中没有找到文件，尝试插件目录
+                                    if (recordingsFiles.length === 0 && fs.existsSync(recordingsDir)) {
+                                        recordingsFiles = fs.readdirSync(recordingsDir);
+                                        searchedDir = recordingsDir;
+                                        console.log('插件目录recordings文件夹中的文件列表:', recordingsFiles);
+                                    }
+                                    
+                                    // 提取时间戳部分进行模糊匹配
+                                    if (cleanFilename.startsWith('recording_') && cleanFilename.includes('-')) {
+                                        const timestampParts = cleanFilename.replace('recording_', '').split('.')[0];
+                                        // 只取日期部分进行匹配，忽略毫秒部分
+                                        const datePartToMatch = timestampParts.substring(0, 16); // "2025-05-14T15-57" 格式
+                                        console.log('尝试匹配的日期部分:', datePartToMatch);
+                                        
+                                        // 查找文件名中包含此日期部分的文件
+                                        const matchingFiles = recordingsFiles.filter(file => 
+                                            file.startsWith('recording_') && 
+                                            file.includes(datePartToMatch)
+                                        );
+                                        
+                                        console.log('匹配到的文件:', matchingFiles);
+                                        
+                                        if (matchingFiles.length > 0) {
+                                            // 使用第一个匹配的文件
+                                            const matchedFile = matchingFiles[0];
+                                            const matchedPath = path.join(searchedDir, matchedFile);
+                                            
+                                            try {
+                                                console.log('找到匹配的文件:', matchedPath);
+                                                const audioData = fs.readFileSync(matchedPath);
+                                                const base64Data = audioData.toString('base64');
+                                                
+                                                console.log(`成功读取匹配的音频文件，大小: ${audioData.length} 字节`);
+                                                
+                                                // 确定文件的MIME类型
+                                                let mimeType = 'audio/wav'; // 默认
+                                                if (matchedPath.toLowerCase().endsWith('.mp3')) {
+                                                    mimeType = 'audio/mpeg';
+                                                } else if (matchedPath.toLowerCase().endsWith('.m4a')) {
+                                                    mimeType = 'audio/mp4';
+                                                } else if (matchedPath.toLowerCase().endsWith('.ogg')) {
+                                                    mimeType = 'audio/ogg';
+                                                } else if (matchedPath.toLowerCase().endsWith('.aac')) {
+                                                    mimeType = 'audio/aac';
+                                                }
+                                                
+                                                this._webviewView.webview.postMessage({
+                                                    command: 'playAudioData',
+                                                    audioData: base64Data,
+                                                    filename: matchedFile,
+                                                    mimeType: mimeType
+                                                });
+                                                
+                                                fileFound = true;
+                                                return;
+                                            } catch (error) {
+                                                console.error('读取音频文件失败:', error);
+                                                this._webviewView.webview.postMessage({
+                                                    command: 'showError',
+                                                    text: `读取音频文件失败: ${error.message}`
+                                                });
+                                            }
+                                        }
+                                    }
+                                } catch (dirError) {
+                                    console.error('列出recordings目录内容失败:', dirError);
+                                }
+                                
+                                // 尝试多种路径组合
+                                const potentialPaths = [];
+                                
+                                // 1. 工作区相关路径
+                                if (workspaceRecordingsDir) {
+                                    potentialPaths.push(
+                                        path.join(workspaceRecordingsDir, cleanFilename),
+                                        // 考虑工作区中可能的子文件夹
+                                        path.join(workspacePath, 'recordings', 'audio', cleanFilename),
+                                        path.join(workspacePath, 'audio', cleanFilename)
+                                    );
+                                }
+                                
+                                // 2. 插件相关路径
+                                potentialPaths.push(
+                                    path.join('./recordings', cleanFilename),
+                                    path.join(process.cwd(), 'recordings', cleanFilename),
+                                    path.join(__dirname, '../recordings', cleanFilename),
+                                    path.join(rootPath, 'recordings', cleanFilename),
+                                    path.join(process.cwd(), '../recordings', cleanFilename),
+                                    path.join(rootPath, 'LingXiXieZuo-2-main', 'recordings', cleanFilename)
+                                );
+                                
+                                // 3. 相对于工作区的可能路径
+                                if (vscode.workspace.rootPath) {
+                                    potentialPaths.push(
+                                        path.join(vscode.workspace.rootPath, 'recordings', cleanFilename)
+                                    );
+                                }
+                                
+                                let fileFound = false;
+                                
+                                for (const potentialPath of potentialPaths) {
+                                    console.log('尝试路径:', potentialPath);
+                                    
+                                    if (fs.existsSync(potentialPath)) {
+                                        console.log('在路径中找到文件:', potentialPath);
+                                        
+                                        try {
+                                            const audioData = fs.readFileSync(potentialPath);
+                                            const base64Data = audioData.toString('base64');
+                                            
+                                            console.log(`成功读取备选路径音频文件，大小: ${audioData.length} 字节`);
+                                            
+                                            // 确定文件的MIME类型
+                                            let mimeType = 'audio/wav'; // 默认
+                                            if (potentialPath.toLowerCase().endsWith('.mp3')) {
+                                                mimeType = 'audio/mpeg';
+                                            } else if (potentialPath.toLowerCase().endsWith('.m4a')) {
+                                                mimeType = 'audio/mp4';
+                                            } else if (potentialPath.toLowerCase().endsWith('.ogg')) {
+                                                mimeType = 'audio/ogg';
+                                            } else if (potentialPath.toLowerCase().endsWith('.aac')) {
+                                                mimeType = 'audio/aac';
+                                            }
+                                            
+                                            this._webviewView.webview.postMessage({
+                                                command: 'playAudioData',
+                                                audioData: base64Data,
+                                                filename: cleanFilename,  // 添加文件名
+                                                mimeType: mimeType
+                                            });
+                                            
+                                            fileFound = true;
+                                            break;
+                                        } catch (readError) {
+                                            console.error('读取备选路径文件失败:', readError);
+                                        }
+                                    }
+                                }
+                                
+                                if (!fileFound) {
+                                    console.error('在任何路径下都未找到音频文件:', cleanFilename);
+                                    this._webviewView.webview.postMessage({
+                                        command: 'audioPlaybackError',
+                                        error: '音频文件不存在，已尝试多个路径但无法找到'
+                                    });
+                                }
+                            }
+                        } catch (error) {
+                            console.error('打开音频文件失败:', error);
+                            this._webviewView.webview.postMessage({
+                                command: 'showError',
+                                text: `打开音频文件失败: ${error.message}`
+                            });
+                        }
+                    }
+                    break;
+                    
+                case 'stopAudioPlayback':
+                    // 处理停止音频播放请求
+                    // 由于音频播放实际上在前端进行，所以这里只需要通知前端停止播放
+                    this._webviewView.webview.postMessage({
+                        command: 'stopAudioPlayback'
+                    });
+                    break;
+                case 'playAudioFile':
+                    // 处理播放音频文件请求
+                    if (message.audioData) {
+                        try {
+                            // 直接使用提供的音频数据
+                            this._webviewView.webview.postMessage({
+                                command: 'playAudioData',
+                                audioData: message.audioData,
+                                mimeType: message.mimeType || 'audio/wav'
+                            });
+                        } catch (error) {
+                            console.error('播放音频数据失败:', error);
+                            this._webviewView.webview.postMessage({
+                                command: 'audioPlaybackError',
+                                error: error.message
+                            });
+                        }
+                    } else {
+                        console.error('未提供音频数据');
+                        this._webviewView.webview.postMessage({
+                            command: 'audioPlaybackError',
+                            error: '未提供音频数据'
+                        });
+                    }
+                    break;
+                case 'executeStreamCommand':
+                    // 执行音频流命令
+                    this.executeAudioStreamCommand(message.script, message.args || []);
+                    break;
+                
+                case 'terminateStreamProcess':
+                    // 终止音频流进程
+                    this.terminateAudioStreamProcess();
+                    break;
+                
+                case 'sendWebSocketMessage':
+                    // 发送WebSocket消息到服务器
+                    this.sendWebSocketMessage(message.message);
+                    break;
             }
         });
     }
@@ -1328,6 +1864,260 @@ class LingxiSidebarProvider {
     saveViewState(key, value) {
         if (this._viewState && key) {
             this._viewState[key] = value;
+        }
+    }
+
+    /**
+     * 音频流进程引用
+     * @type {import('child_process').ChildProcess}
+     */
+    _audioStreamProcess = null;
+    
+    /**
+     * 执行音频流命令
+     * @param {string} script 脚本路径
+     * @param {string[]} args 命令参数
+     */
+    executeAudioStreamCommand(script, args) {
+        try {
+            const argStr = args.join(' '); // 用于日志显示
+            console.log(`执行音频流命令: ${script} ${argStr}`);
+            
+            // 终止之前的进程
+            this.terminateAudioStreamProcess();
+            
+            // 获取扩展目录
+            const extensionPath = this._context.extensionPath;
+            
+            // 脚本路径可以是相对于扩展目录的路径，也可以是相对于工作区的路径
+            // 首先检查相对于工作区的路径
+            let scriptPath = '';
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            let workspacePath = '';
+            
+            if (workspaceFolders && workspaceFolders.length > 0) {
+                workspacePath = workspaceFolders[0].uri.fsPath;
+                scriptPath = path.join(workspacePath, script);
+                
+                // 如果文件不存在，则尝试相对于扩展目录的路径
+                if (!fs.existsSync(scriptPath)) {
+                    scriptPath = path.join(extensionPath, script);
+                }
+            } else {
+                // 如果没有打开工作区，则使用相对于扩展目录的路径
+                scriptPath = path.join(extensionPath, script);
+            }
+            
+            // 检查脚本文件是否存在
+            if (!fs.existsSync(scriptPath)) {
+                throw new Error(`脚本文件不存在: ${scriptPath}`);
+            }
+            
+            console.log(`找到脚本文件: ${scriptPath}`);
+            
+            // 创建录音目录（如果不存在）
+            const recordingsDir = path.join(workspacePath || extensionPath, 'recordings');
+            if (!fs.existsSync(recordingsDir)) {
+                fs.mkdirSync(recordingsDir, { recursive: true });
+                console.log(`已创建录音目录: ${recordingsDir}`);
+            }
+            
+            // 添加工作区路径参数，确保recordAudio.js能找到正确的recordings目录
+            if (workspacePath) {
+                args.push('-workspace', workspacePath);
+            }
+            
+            // 使用Node.js子进程执行命令
+            const { spawn } = require('child_process');
+            this._audioStreamProcess = spawn('node', [scriptPath, ...args], {
+                cwd: workspacePath || extensionPath,
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
+            
+            // 添加命令行调试输出
+            console.log(`启动命令: node ${scriptPath} ${args.join(' ')}`);
+            console.log(`工作目录: ${workspacePath || extensionPath}`);
+            
+            // 处理进程输出
+            this._audioStreamProcess.stdout.on('data', (data) => {
+                console.log(`音频流输出: ${data}`);
+            });
+            
+            this._audioStreamProcess.stderr.on('data', (data) => {
+                console.log(`音频流信息: ${data}`);
+            });
+            
+            // 处理进程结束
+            this._audioStreamProcess.on('close', (code) => {
+                console.log(`音频流进程已结束，退出码: ${code}`);
+                this._audioStreamProcess = null;
+                
+                // 通知前端进程已结束
+                if (this._webviewView) {
+                    this._webviewView.webview.postMessage({
+                        command: 'audioStreamEnded',
+                        exitCode: code
+                    });
+                }
+            });
+            
+            console.log('音频流进程已启动');
+        } catch (error) {
+            console.error('启动音频流失败:', error);
+            vscode.window.showErrorMessage(`启动音频流失败: ${error.message}`);
+            
+            // 通知前端启动失败
+            if (this._webviewView) {
+                this._webviewView.webview.postMessage({
+                    command: 'audioStreamError',
+                    error: error.message
+                });
+            }
+        }
+    }
+    
+    /**
+     * 终止音频流进程
+     */
+    terminateAudioStreamProcess() {
+        if (this._audioStreamProcess) {
+            try {
+                console.log('正在终止音频流进程...');
+                
+                // 终止进程
+                if (process.platform === 'win32') {
+                    // Windows下使用taskkill强制终止进程树
+                    const { execSync } = require('child_process');
+                    execSync(`taskkill /pid ${this._audioStreamProcess.pid} /f /t`);
+                } else {
+                    // 其他平台使用kill信号
+                    this._audioStreamProcess.kill('SIGTERM');
+                }
+                
+                // 重置进程引用
+                this._audioStreamProcess = null;
+                console.log('音频流进程已终止');
+                
+                // 通知前端进程已终止
+                if (this._webviewView) {
+                    this._webviewView.webview.postMessage({
+                        command: 'audioStreamTerminated'
+                    });
+                }
+            } catch (error) {
+                console.error('终止音频流进程时出错:', error);
+            }
+        }
+    }
+    
+    /**
+     * 发送WebSocket消息到服务器
+     * @param {string} message JSON格式的消息
+     */
+    sendWebSocketMessage(message) {
+        try {
+            // 检查WebSocket连接状态
+            if (!this._chatClient) {
+                console.error('[WebSocket调试] 未创建WebSocket连接');
+                throw new Error('未连接到聊天服务器');
+            }
+            
+            // 输出WebSocket连接状态
+            const states = {
+                0: 'CONNECTING',
+                1: 'OPEN',
+                2: 'CLOSING',
+                3: 'CLOSED'
+            };
+            
+            console.log('[WebSocket调试] 当前连接状态:', states[this._chatClient.readyState], `(${this._chatClient.readyState})`);
+            
+            if (this._chatClient.readyState !== WebSocket.OPEN) {
+                throw new Error('WebSocket连接未就绪，当前状态: ' + states[this._chatClient.readyState]);
+            }
+            
+            // 尝试解析消息，检查格式是否正确
+            let messageObj;
+            try {
+                messageObj = JSON.parse(message);
+                console.log('[WebSocket调试] 消息解析成功:', {
+                    类型: messageObj.type,
+                    动作: messageObj.action,
+                    会议ID: messageObj.conferenceId,
+                    音频数据长度: messageObj.audioData ? messageObj.audioData.length : 0
+                });
+            } catch (parseError) {
+                console.error('[WebSocket调试] 消息解析失败:', parseError);
+                // 即使解析失败也继续发送，因为可能是特殊格式
+            }
+            
+            // 发送消息
+            this._chatClient.send(message);
+            console.log('[WebSocket调试] 消息已发送，大小:', message.length, '字节');
+            
+            // 针对音频流和会议消息的特殊处理
+            if (messageObj) {
+                if (messageObj.type === 'audioStream') {
+                    console.log('[WebSocket调试] 已发送音频流数据，序列号:', messageObj.sequence);
+                } else if (messageObj.type === 'voiceConference') {
+                    console.log('[WebSocket调试] 已发送会议消息:', {
+                        动作: messageObj.action,
+                        会议ID: messageObj.conferenceId,
+                        静音状态: messageObj.muted
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('[WebSocket调试] 发送WebSocket消息失败:', error);
+            vscode.window.showErrorMessage(`发送消息失败: ${error.message}`);
+            
+            // 通知前端发送失败
+            if (this._webviewView) {
+                this._webviewView.webview.postMessage({
+                    command: 'webSocketError',
+                    error: error.message
+                });
+            }
+        }
+    }
+
+    // 接收WebSocket消息并转发到前端的处理函数
+    onWebSocketMessage(ws, message) {
+        try {
+            // 将消息解析为对象
+            const messageObj = JSON.parse(message);
+            const messageType = messageObj.type;
+            
+            console.log(`[WebSocket] 收到消息类型: ${messageType}`);
+            
+            // 处理音频流消息
+            if (messageType === 'audioStream') {
+                console.log(`[WebSocket] 收到音频流数据, 序列号: ${messageObj.sequence}, 数据长度: ${messageObj.audioData ? messageObj.audioData.length : 0} 字节`);
+                
+                // 直接转发音频流消息到前端
+                if (this._webviewView) {
+                    this._webviewView.webview.postMessage({
+                        command: 'forwardWebSocketMessage',
+                        wsMessage: messageObj
+                    });
+                }
+            }
+            
+            // 处理其它类型的消息...
+            else if (messageType === 'voiceConference') {
+                // 转发会议相关消息
+                if (this._webviewView) {
+                    this._webviewView.webview.postMessage({
+                        command: 'forwardWebSocketMessage',
+                        wsMessage: messageObj
+                    });
+                }
+            }
+            
+            // ... 处理其他消息类型 ...
+            
+        } catch (error) {
+            console.error('[WebSocket] 处理消息时出错:', error);
         }
     }
 }

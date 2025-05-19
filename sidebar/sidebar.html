@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>灵犀协作侧边栏</title>
+    <!-- 添加marked.js库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
     <div class="tab-container">
@@ -91,9 +93,46 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- 语音会议组件 -->
+                    <div class="voice-conference-container">
+                        <div class="voice-conference-header">
+                            <h3>语音会议</h3>
+                            <div class="voice-conference-status">未连接</div>
+                        </div>
+                        
+                        <div class="voice-conference-controls">
+                            <button id="create-conference-btn" class="conference-btn">创建会议</button>
+                            <button id="join-conference-btn" class="conference-btn">加入会议</button>
+                            <button id="leave-conference-btn" class="conference-btn" disabled>离开会议</button>
+                        </div>
+                        
+                        <div class="conference-join-form" style="display: none;">
+                            <input type="text" id="conference-id-input" placeholder="输入会议ID">
+                            <button id="confirm-join-btn">确认加入</button>
+                            <button id="cancel-join-btn">取消</button>
+                        </div>
+                        
+                        <div class="active-conference-info" style="display: none;">
+                            <div class="conference-id-display">会议ID: <span id="current-conference-id"></span></div>
+                            <div class="mic-control">
+                                <button id="toggle-mic-btn">静音</button>
+                                <div class="mic-status">麦克风已开启</div>
+                            </div>
+                        </div>
+                        
+                        <div class="conference-participants">
+                            <h4>参与者</h4>
+                            <ul id="participants-list"></ul>
+                        </div>
+                    </div>
+
                     <div class="chat-input-bar">
                         <input type="text" id="chat-input" class="chat-input" placeholder="输入消息..." />
+                        <div class="voice-record-timer">00:00</div>
+                        <button id="voice-record-btn" class="voice-record-btn" title="录制语音消息">🎤</button>
                         <button id="chat-send" class="chat-send">发送</button>
+                        <button id="run-asr-test" class="chat-send" title="运行语音识别测试">测试ASR</button>
                                 </div>
                             </div>
                         </div>
@@ -101,39 +140,186 @@
                             <div class="agent-container live-share-style">
                                 <div class="agent-header">
                                     <h3>智能助手</h3>
-                                    <p>专业的AI助手，帮助完成编程任务</p>
+                                    <p>专业的AI助手，帮助完成画布任务</p>
+                                    <div class="agent-help-icon" id="agent-help-btn" title="查看可用工具">?</div>
                                 </div>
                                 <div class="agent-content">
                                     <div class="agent-tools">
                                         <div class="agent-tool-item">
-                                            <div class="agent-tool-icon">🔍</div>
-                                            <div class="agent-tool-name">代码搜索</div>
-                                        </div>
-                                        <div class="agent-tool-item">
                                             <div class="agent-tool-icon">📝</div>
-                                            <div class="agent-tool-name">代码生成</div>
+                                            <div class="agent-tool-name">创建画布</div>
                                         </div>
                                         <div class="agent-tool-item">
-                                            <div class="agent-tool-icon">🐞</div>
-                                            <div class="agent-tool-name">Bug修复</div>
+                                            <div class="agent-tool-icon">🔳</div>
+                                            <div class="agent-tool-name">添加形状</div>
                                         </div>
                                         <div class="agent-tool-item">
-                                            <div class="agent-tool-icon">📚</div>
-                                            <div class="agent-tool-name">代码解释</div>
+                                            <div class="agent-tool-icon">📄</div>
+                                            <div class="agent-tool-name">添加文本</div>
+                                        </div>
+                                        <div class="agent-tool-item">
+                                            <div class="agent-tool-icon">🔍</div>
+                                            <div class="agent-tool-name">查看画布</div>
                                         </div>
                                     </div>
                                     <div class="agent-messages" id="agent-messages">
                                         <div class="agent-welcome">
                                             <div class="agent-welcome-icon">🤖</div>
                                             <div class="agent-welcome-text">
-                                                <h4>AI编程助手</h4>
-                                                <p>我可以帮助你搜索代码、生成函数、修复Bug或解释代码。请在下方输入你的问题或选择上方工具。</p>
+                                                <h4>AI绘图助手</h4>
+                                                <p>我可以帮助你创建画布、添加形状、添加文本或查看画布信息等。请在下方输入你的问题或选择上方工具。</p>
                                             </div>
                                         </div>
                                     </div>
                                     <div class="agent-input-bar">
-                                        <input type="text" id="agent-input" class="chat-input" placeholder="向AI助手询问..." />
+                                        <textarea id="agent-input" class="chat-input" placeholder="向AI助手询问..." rows="1"></textarea>
                                         <button id="agent-send" class="chat-send">发送</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 工具说明弹出层 -->
+                            <div id="tools-modal" class="tools-modal">
+                                <div class="tools-modal-content">
+                                    <div class="tools-modal-header">
+                                        <h3>可用工具列表</h3>
+                                        <span class="tools-modal-close">&times;</span>
+                                    </div>
+                                    <div class="tools-modal-body">
+                                        <div class="tool-item">
+                                            <h4>创建画布 (createCanvas)</h4>
+                                            <p>创建新的Excalidraw画布，可选择模板</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称（不需要包含.excalidraw扩展名）</div>
+                                                <div class="param"><span class="param-name">template</span>: 可选的模板名称，可用模板: 空白画布, 基础图形, 流程图, 思维导图, 组织结构图</div>
+                                            </div>
+                                            <div class="tool-example">例如: 创建一个名为flowchart的画布，使用流程图模板</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>列出画布 (listCanvases)</h4>
+                                            <p>列出所有已创建的Excalidraw画布</p>
+                                            <div class="tool-example">例如: 列出所有画布</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>导出画布 (exportCanvas)</h4>
+                                            <p>将Excalidraw画布导出为SVG格式</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">format</span>: 导出格式: svg</div>
+                                                <div class="param"><span class="param-name">withBackground</span>: 是否包含背景（默认为true）</div>
+                                                <div class="param"><span class="param-name">withDarkMode</span>: 是否使用暗色模式（默认为false）</div>
+                                                <div class="param"><span class="param-name">exportScale</span>: 导出缩放比例（默认为1）</div>
+                                            </div>
+                                            <div class="tool-example">例如: 将flowchart画布导出为SVG格式，无背景</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>添加形状 (addShape)</h4>
+                                            <p>向Excalidraw画布添加基本形状</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">shapeType</span>: 形状类型: rectangle, ellipse, diamond, line, arrow, text</div>
+                                                <div class="param"><span class="param-name">x</span>: X坐标位置</div>
+                                                <div class="param"><span class="param-name">y</span>: Y坐标位置</div>
+                                                <div class="param"><span class="param-name">color</span>: 颜色代码，如 #000000 或 #ff0000</div>
+                                            </div>
+                                            <div class="tool-example">例如: 在flowchart画布上添加一个矩形，位置(100,100)，颜色蓝色</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>添加文本 (addText)</h4>
+                                            <p>向Excalidraw画布添加文本</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">text</span>: 文本内容</div>
+                                                <div class="param"><span class="param-name">x</span>: X坐标位置</div>
+                                                <div class="param"><span class="param-name">y</span>: Y坐标位置</div>
+                                                <div class="param"><span class="param-name">color</span>: 文本颜色（可选，默认为黑色）</div>
+                                                <div class="param"><span class="param-name">fontSize</span>: 字体大小（可选，默认为20）</div>
+                                            </div>
+                                            <div class="tool-example">例如: 在flowchart画布上添加文本"开始"，位置(150,150)</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>获取画布详情 (getCanvasDetails)</h4>
+                                            <p>获取Excalidraw画布的详细信息</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                            </div>
+                                            <div class="tool-example">例如: 获取flowchart画布的详细信息</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>导入库 (importLibrary)</h4>
+                                            <p>导入Excalidraw公共库或从URL导入库</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">libraryUrl</span>: 库URL或识别符（如"rocket"、"charts"等公共库ID或完整URL）</div>
+                                                <div class="param"><span class="param-name">canvasName</span>: 可选：要导入到的画布名称。如不提供，将作为工作区库导入</div>
+                                            </div>
+                                            <div class="tool-example">例如: 导入"rocket"库到flowchart画布</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>删除元素 (deleteElement)</h4>
+                                            <p>从Excalidraw画布中删除指定元素</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">elementId</span>: 要删除的元素ID</div>
+                                            </div>
+                                            <div class="tool-example">例如: 从flowchart画布中删除ID为"rectangle1"的元素</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>画框工具 (createFrame)</h4>
+                                            <p>在画布中创建一个框架用于分组元素</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">x</span>: 框架X坐标位置</div>
+                                                <div class="param"><span class="param-name">y</span>: 框架Y坐标位置</div>
+                                                <div class="param"><span class="param-name">width</span>: 框架宽度</div>
+                                                <div class="param"><span class="param-name">height</span>: 框架高度</div>
+                                                <div class="param"><span class="param-name">label</span>: 框架标签文本（默认为"框架"）</div>
+                                                <div class="param"><span class="param-name">color</span>: 框架颜色代码（默认为蓝色）</div>
+                                            </div>
+                                            <div class="tool-example">例如: 在flowchart画布上创建一个标签为"模块A"的框架，位置(200, 200)，尺寸300x200</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>嵌入网页 (embedWebpage)</h4>
+                                            <p>在画布中嵌入网页链接</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">url</span>: 要嵌入的网页URL</div>
+                                                <div class="param"><span class="param-name">x</span>: X坐标位置</div>
+                                                <div class="param"><span class="param-name">y</span>: Y坐标位置</div>
+                                                <div class="param"><span class="param-name">width</span>: 宽度（默认为320）</div>
+                                                <div class="param"><span class="param-name">height</span>: 高度（默认为180）</div>
+                                            </div>
+                                            <div class="tool-example">例如: 在flowchart画布上嵌入网页 https://github.com，位置(100, 300)</div>
+                                        </div>
+                                        
+                                        <div class="tool-item">
+                                            <h4>调整元素样式 (updateElementStyle)</h4>
+                                            <p>调整画布中元素的样式属性</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">elementId</span>: 要调整样式的元素ID</div>
+                                                <div class="param"><span class="param-name">styleOptions</span>: 样式选项对象，可包含以下属性:
+                                                    <div style="margin-left: 10px;">
+                                                        <div><span class="param-name">strokeColor</span>: 线条颜色</div>
+                                                        <div><span class="param-name">backgroundColor</span>: 背景颜色</div>
+                                                        <div><span class="param-name">fillStyle</span>: 填充样式(solid, hachure, cross-hatch等)</div>
+                                                        <div><span class="param-name">strokeWidth</span>: 线条宽度</div>
+                                                        <div><span class="param-name">strokeStyle</span>: 线条样式(solid, dashed等)</div>
+                                                        <div><span class="param-name">opacity</span>: 不透明度(0-100)</div>
+                                                        <div><span class="param-name">fontSize</span>: 字体大小(文本元素)</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="tool-example">例如: 更新flowchart画布中ID为"rect1"的矩形样式，将背景色改为红色，线条宽度改为2</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -165,31 +351,69 @@
                                             </div>
                                         </div>
                                     </div>
+                                    
+                                    <!-- 添加MCP服务设置 -->
+                                    <div class="settings-group">
+                                        <div class="settings-title">MCP服务</div>
+                                        <div class="settings-item">
+                                            <div class="settings-label">启用MCP服务器</div>
+                                            <div class="settings-control">
+                                                <label class="switch">
+                                                    <input type="checkbox" id="enable-mcp-server">
+                                                    <span class="slider round"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="settings-item" id="mcp-server-status-container">
+                                            <div class="settings-label">服务器状态</div>
+                                            <div class="settings-control">
+                                                <span id="mcp-server-status" class="api-key-status-text">未启动</span>
+                                            </div>
+                                        </div>
+                                        <!-- 移除服务器路径输入框 -->
+                                    </div>
+                                    
                                     <div class="settings-group">
                                         <div class="settings-title">AI助手设置</div>
                                         <div class="settings-item">
-                                            <div class="settings-label">API Key</div>
-                                            <div class="settings-control api-key-control">
-                                                <input type="password" id="api-key-input" class="settings-input" placeholder="输入你的 ZhipuAI API Key">
-                                                <button id="save-api-key-btn" class="settings-button">保存</button>
-                                            </div>
-                                        </div>
-                                        <div class="settings-item">
-                                            <div class="settings-label">API Key 状态</div>
+                                            <div class="settings-label">AI提供商</div>
                                             <div class="settings-control">
-                                                <span id="api-key-status" class="api-key-status-text">未设置</span>
-                                            </div>
-                                        </div>
-                                        <div class="settings-item">
-                                            <div class="settings-label">AI模型</div>
-                                            <div class="settings-control">
-                                                <select class="settings-select">
-                                                    <option>glm-4</option>
-                                                    <option selected>glm-4-flash</option> 
-                                                    <option>glm-3-turbo</option>
+                                                <select id="ai-provider-select" class="settings-select" disabled>
+                                                    <option value="deepseek" selected>DeepSeek</option>
                                                 </select>
                                             </div>
                                         </div>
+                                        
+                                        <div id="provider-settings-container">
+                                            <!-- 移除智谱AI设置 -->
+                                            
+                                            <!-- DeepSeek设置 -->
+                                            <div id="deepseek-settings" class="model-settings">
+                                                <div class="settings-item" id="deepseek-container">
+                                                    <div class="settings-label">DeepSeek API Key</div>
+                                                    <div class="settings-control api-key-control">
+                                                        <input type="password" id="deepseek-api-key-input" class="settings-input" placeholder="输入你的 DeepSeek API Key">
+                                                        <button id="save-deepseek-api-key-btn" class="settings-button">保存</button>
+                                                    </div>
+                                                </div>
+                                                <div class="settings-item" id="deepseek-status-container">
+                                                    <div class="settings-label">API Key 状态</div>
+                                                    <div class="settings-control">
+                                                        <span id="deepseek-api-key-status" class="api-key-status-text">未设置</span>
+                                                    </div>
+                                                </div>
+                                                <div class="settings-item" id="deepseek-model-container">
+                                                    <div class="settings-label">模型选择</div>
+                                                    <div class="settings-control">
+                                                        <select id="deepseek-model-select" class="settings-select">
+                                                            <option value="deepseek-chat">DeepSeek Chat (默认)</option>
+                                                            <option value="deepseek-coder">DeepSeek Coder</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
                                         <div class="settings-item">
                                             <div class="settings-label">代码生成语言</div>
                                             <div class="settings-control">
@@ -229,6 +453,10 @@
                             <button id="canvas-action-btn" class="canvas-button">
                                 <span class="button-icon">+</span>
                                 新建画布
+                            </button>
+                            <button id="add-memo-btn" class="canvas-button">
+                                <span class="button-icon">📝</span>
+                                添加纪要
                             </button>
                         </div>
                         <div class="canvas-list-container">
@@ -424,6 +652,12 @@
         }
         .chat-send:hover {
             background: #2176c7;
+        }
+        #run-asr-test {
+            background: #f59e0b;
+        }
+        #run-asr-test:hover {
+            background: #d97706;
         }
         .live-share-style {
             background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);
@@ -842,6 +1076,7 @@
             padding: 0;
         }
         .agent-header {
+            position: relative;
             padding: 12px 14px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
@@ -1104,8 +1339,8 @@
             border-radius: 4px;
             padding: 6px 8px;
             font-size: 14px;
-            flex-grow: 1;
-            margin-right: 8px;
+            width: 100%;
+            box-sizing: border-box;
         }
         .settings-button {
             background: #3794ff;
@@ -1116,12 +1351,16 @@
             font-size: 13px;
             cursor: pointer;
             transition: background 0.2s;
+            align-self: flex-end;
         }
         .settings-button:hover {
             background: #2176c7;
         }
         .api-key-control {
-            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
         }
         .api-key-status-text {
             font-style: italic;
@@ -1358,649 +1597,550 @@
         .connection-actions .action-button:last-child {
             margin-right: 0;
         }
+        
+        .model-settings {
+            border-left: 2px solid #444;
+            margin-left: 10px;
+            padding-left: 10px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+        
+        /* 当侧边栏很窄时的样式 */
+        @media (max-width: 250px) {
+            .api-key-control {
+                flex-direction: column;
+                width: 100%;
+            }
+            .settings-input {
+                width: 100%;
+                margin-right: 0;
+                margin-bottom: 8px;
+            }
+            .settings-button {
+                width: auto;
+                align-self: flex-end;
+            }
+        }
+        /* 添加问号图标样式 */
+        .agent-help-icon {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        
+        .agent-help-icon:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.1);
+        }
+        
+        /* 工具说明弹出层样式 */
+        .tools-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+        
+        .tools-modal-content {
+            position: relative;
+            background: #1e1e1e;
+            margin: 5% auto;
+            padding: 0;
+            width: 90%;
+            max-width: 800px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            animation: modalFadeIn 0.3s;
+        }
+        
+        .tools-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .tools-modal-header h3 {
+            margin: 0;
+            color: #fff;
+            font-size: 18px;
+            font-weight: 500;
+        }
+        
+        .tools-modal-close {
+            color: #aaa;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        
+        .tools-modal-close:hover {
+            color: #fff;
+        }
+        
+        .tools-modal-body {
+            padding: 20px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        
+        .tool-item {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .tool-item:last-child {
+            border-bottom: none;
+        }
+        
+        .tool-item h4 {
+            margin: 0 0 10px 0;
+            color: #3794ff;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        .tool-item p {
+            margin: 0 0 12px 0;
+            color: #ddd;
+            font-size: 14px;
+        }
+        
+        .tool-params {
+            margin-bottom: 12px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+        }
+        
+        .param {
+            margin-bottom: 6px;
+            color: #bbb;
+            font-size: 13px;
+        }
+        
+        .param:last-child {
+            margin-bottom: 0;
+        }
+        
+        .param-name {
+            color: #4ec9b0;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        
+        .tool-example {
+            font-style: italic;
+            color: #888;
+            font-size: 13px;
+        }
+        
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 添加Markdown内容的样式 */
+        .markdown-content {
+            line-height: 1.6;
+            word-break: break-word;
+        }
+        .markdown-content p {
+            margin: 0.5em 0;
+        }
+        .markdown-content code {
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .markdown-content pre {
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 0.8em 0;
+        }
+        .markdown-content pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .markdown-content h1, .markdown-content h2, .markdown-content h3, 
+        .markdown-content h4, .markdown-content h5, .markdown-content h6 {
+            margin: 0.8em 0 0.4em 0;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+        .markdown-content h1 { font-size: 1.5em; }
+        .markdown-content h2 { font-size: 1.3em; }
+        .markdown-content h3 { font-size: 1.1em; }
+        .markdown-content h4, .markdown-content h5, .markdown-content h6 { font-size: 1em; }
+        .markdown-content ul, .markdown-content ol {
+            margin: 0.5em 0;
+            padding-left: 1.5em;
+        }
+        .markdown-content li {
+            margin: 0.3em 0;
+        }
+        .markdown-content blockquote {
+            border-left: 3px solid #3794ff;
+            margin: 0.5em 0;
+            padding: 0.1em 0 0.1em 1em;
+            background: rgba(55, 148, 255, 0.1);
+        }
+        .markdown-content table {
+            border-collapse: collapse;
+            margin: 0.8em 0;
+            width: 100%;
+        }
+        .markdown-content table th, .markdown-content table td {
+            padding: 6px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .markdown-content table th {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .markdown-content a {
+            color: #3794ff;
+            text-decoration: none;
+        }
+        .markdown-content a:hover {
+            text-decoration: underline;
+        }
+        .markdown-content img {
+            max-width: 100%;
+            height: auto;
+        }
+        .markdown-content hr {
+            border: none;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 1em 0;
+        }
+
+        /* 修改输入框样式以支持多行 */
+        .agent-input-bar textarea.chat-input {
+            flex: 1;
+            min-width: 0;
+            background: #232323;
+            color: #fff;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 15px;
+            outline: none;
+            transition: border 0.2s, height 0.2s;
+            width: 100%;
+            box-sizing: border-box;
+            max-height: 150px;
+            min-height: 42px;
+            resize: none;
+            overflow-y: hidden; /* 默认隐藏滚动条 */
+            font-family: inherit;
+            line-height: 1.5;
+        }
+
+        .agent-input-bar textarea.chat-input:focus {
+            border: 1.5px solid #3794ff;
+        }
+
+        /* 语音会议组件 */
+        .voice-conference-container {
+          margin: 15px 0;
+          padding: 10px;
+          border: 1px solid #444;
+          border-radius: 5px;
+          background-color: #2a2a2a;
+        }
+        
+        .voice-conference-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 10px;
+        }
+        
+        .voice-conference-header h3 {
+          margin: 0;
+          font-size: 16px;
+        }
+        
+        .voice-conference-status {
+          font-size: 12px;
+          color: #aaa;
+        }
+        
+        .voice-conference-controls {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 10px;
+        }
+        
+        .conference-btn {
+          padding: 6px 12px;
+          background-color: #0e639c;
+          color: #fff;
+          border: none;
+          border-radius: 3px;
+          cursor: pointer;
+        }
+        
+        .conference-btn:hover {
+          background-color: #1177bb;
+        }
+        
+        .conference-btn:disabled {
+          background-color: #666;
+          cursor: not-allowed;
+        }
+        
+        .conference-join-form {
+          margin: 10px 0;
+          display: flex;
+          gap: 5px;
+        }
+        
+        #conference-id-input {
+          flex: 1;
+          padding: 5px;
+          background-color: #3c3c3c;
+          color: #fff;
+          border: 1px solid #555;
+          border-radius: 3px;
+        }
+        
+        .active-conference-info {
+          margin: 10px 0;
+          padding: 8px;
+          background-color: #333;
+          border-radius: 3px;
+        }
+        
+        .conference-id-display {
+          margin-bottom: 8px;
+          font-size: 13px;
+        }
+        
+        .mic-control {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        
+        #toggle-mic-btn {
+          padding: 4px 8px;
+          background-color: #cc3333;
+          color: #fff;
+          border: none;
+          border-radius: 3px;
+          cursor: pointer;
+        }
+        
+        #toggle-mic-btn.muted {
+          background-color: #555;
+        }
+        
+        .mic-status {
+          font-size: 12px;
+        }
+        
+        .conference-participants {
+          margin-top: 15px;
+        }
+        
+        .conference-participants h4 {
+          margin: 0 0 8px 0;
+          font-size: 14px;
+          color: #ccc;
+        }
+        
+        #participants-list {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+        }
+        
+        #participants-list li {
+          padding: 5px;
+          border-bottom: 1px solid #444;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        
+        #participants-list li:last-child {
+          border-bottom: none;
+        }
+        
+        .participant-name {
+          flex: 1;
+        }
+        
+        .participant-status {
+          font-size: 12px;
+          color: #aaa;
+        }
+        
+        .speaking-indicator {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background-color: #4CAF50;
+          margin-right: 5px;
+        }
+
+        /* 系统消息样式 */
+        .chat-system-message {
+            text-align: center;
+            margin: 10px 0;
+            padding: 5px 10px;
+            width: 100%;
+        }
+        .system-message-content {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            color: #bbb;
+            font-size: 12px;
+            padding: 5px 10px;
+            border-radius: 12px;
+        }
+        .system-message-time {
+            font-size: 10px;
+            color: #777;
+            margin-top: 2px;
+        }
+
+        /* 语音录制按钮和计时器样式 */
+        .voice-record-btn {
+            background: none;
+            color: #bbb;
+            border: none;
+            border-radius: 50%;
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            margin-right: 5px;
+        }
+        
+        .voice-record-btn:hover {
+            color: #3794ff;
+            background: rgba(55, 148, 255, 0.1);
+        }
+        
+        .voice-record-btn.recording {
+            color: #ff3737;
+            background: rgba(255, 55, 55, 0.1);
+            animation: pulse 1.5s infinite;
+        }
+        
+        .voice-record-timer {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 55, 55, 0.9);
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-family: monospace;
+            display: none;
+        }
+        
+        .voice-record-btn.recording + .voice-record-timer {
+            display: block;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+        .voice-message {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(55, 148, 255, 0.1);
+            border-radius: 12px;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .voice-message:hover {
+            background: rgba(55, 148, 255, 0.2);
+        }
+        
+        .voice-message.playing .voice-message-line {
+            background: linear-gradient(90deg, 
+                rgba(55, 148, 255, 0.8) 0%, 
+                rgba(55, 148, 255, 0.1) 100%);
+            animation: sound-wave 1.5s infinite ease-in-out;
+        }
+        
+        @keyframes sound-wave {
+            0%, 100% {
+                opacity: 0.3;
+                transform: scaleY(0.8);
+            }
+            50% {
+                opacity: 1;
+                transform: scaleY(1.2);
+            }
+        }
+        
+        .voice-message-icon {
+            font-size: 18px;
+        }
+        
+        .voice-message-duration {
+            color: #bbb;
+            font-size: 13px;
+        }
+        
+        .voice-message-line {
+            flex: 1;
+            height: 2px;
+            background: linear-gradient(90deg, 
+                rgba(55, 148, 255, 0.8) 0%, 
+                rgba(55, 148, 255, 0.1) 100%);
+            border-radius: 2px;
+        }
     </style>
     
-    <script>
-        document.querySelectorAll('.tab-button').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const tabId = this.dataset.tab;
-                
-                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-                
-                document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-                document.getElementById(tabId).classList.add('active');
-                
-                // 通知主进程标签切换
-                if (vscode) {
-                    vscode.postMessage({
-                        command: 'switchTab',
-                        tabId: tabId
-                    });
-                }
-                
-                // 如果切换到 history 标签，主动请求最新历史记录
-                if (tabId === 'history' && vscode) {
-                    vscode.postMessage({ type: 'getClipboardHistory' });
-                }
-            });
-        });
-
-        document.querySelectorAll('.inner-tab-button').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const tabId = this.dataset.innerTab;
-                
-                document.querySelectorAll('.inner-tab-button').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-                
-                document.querySelectorAll('.inner-tab-pane').forEach(pane => pane.classList.remove('active'));
-                document.getElementById(tabId).classList.add('active');
-            });
-        });
-
-        const vscode = window.acquireVsCodeApi ? window.acquireVsCodeApi() : null;
-
-        document.getElementById('canvas-action-btn').addEventListener('click', function() {
-            if (vscode) {
-                vscode.postMessage({
-                    command: 'createCanvas'
-                });
-            }
-        });
-
-        // 剪贴板历史记录相关
-        let historyData = [];
-
-        window.addEventListener('message', event => {
-            const message = event.data;
-            console.log('收到消息:', message); // 添加日志
-            
-            if (message.type === 'clipboardHistory') {
-                historyData = message.data || [];
-                renderHistoryList(historyData);
-            } else if (message.type === 'canvasList') {
-                canvasListData = message.data || [];
-                renderCanvasList(canvasListData);
-            }
-        });
-
-        const listEl = document.getElementById('clip-history-list');
-        const previewEl = document.getElementById('clip-preview');
-        const previewContentEl = previewEl.querySelector('.preview-content');
-        const previewPlaceholderEl = previewEl.querySelector('.preview-placeholder');
-
-        function getTypeIcon(type) {
-            switch(type) {
-                case 'code': return '📝';
-                case 'text': return '📄';
-                case 'image': return '🖼️';
-                default: return '❓';
-            }
-        }
-
-        function renderHistoryList(history) {
-            listEl.innerHTML = '';
-            
-            if (!history || history.length === 0) {
-                listEl.innerHTML = '<div class="empty-history">暂无历史记录</div>';
-                previewContentEl.textContent = '';
-                previewContentEl.classList.remove('active');
-                previewPlaceholderEl.style.display = 'block';
-                return;
-            }
-            
-            history.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'clip-history-item';
-                div.title = item.content;
-                div.innerHTML = `
-                    <span class="clip-type">${getTypeIcon(item.type)}</span>
-                    <span class="clip-content">${item.content.length > 30 ? item.content.slice(0, 30) + '...' : item.content}</span>
-                    <span class="clip-time">${item.time || ''}</span>
-                `;
-                div.onclick = function() {
-                    document.querySelectorAll('.clip-history-item').forEach(i => i.classList.remove('selected'));
-                    div.classList.add('selected');
-                    
-                    previewContentEl.textContent = item.content;
-                    previewContentEl.classList.add('active');
-                    previewPlaceholderEl.style.display = 'none';
-                };
-                listEl.appendChild(div);
-            });
-        }
-
-        // 页面加载后请求剪贴板历史数据
-        if (vscode) {
-            vscode.postMessage({ type: 'getClipboardHistory' });
-        }
-        
-        // 画布列表相关
-        let canvasListData = [];
-        
-        const canvasListEl = document.querySelector('.canvas-list');
-        
-        function renderCanvasList(canvasList) {
-            canvasListEl.innerHTML = '';
-            
-            if (!canvasList || canvasList.length === 0) {
-                canvasListEl.innerHTML = '<div class="canvas-list-empty">暂无画布文件，点击"新建画布"创建</div>';
-                return;
-            }
-            
-            canvasList.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'canvas-item';
-                div.title = item.fullPath || item.path;
-                div.innerHTML = `
-                    <div class="canvas-item-icon">📊</div>
-                    <div class="canvas-item-content">
-                        <div class="canvas-item-title">${item.name}</div>
-                        <div class="canvas-item-path">${item.path}</div>
-                    </div>
-                `;
-                div.onclick = function() {
-                    if (vscode) {
-                        vscode.postMessage({
-                            command: 'openCanvas',
-                            path: item.fullPath
-                        });
-                    }
-                };
-                // 添加右键菜单
-                div.oncontextmenu = function(e) {
-                    e.preventDefault();
-                    if (vscode) {
-                        vscode.postMessage({
-                            command: 'showCanvasContextMenu',
-                            path: item.fullPath,
-                            name: item.name
-                        });
-                    }
-                };
-                canvasListEl.appendChild(div);
-            });
-        }
-        
-        // 打开Canvas标签时请求画布列表
-        document.querySelector('.tab-button[data-tab="canvas"]').addEventListener('click', function() {
-            if (vscode) {
-                vscode.postMessage({ type: 'getCanvasList' });
-            }
-        });
-
-        // 设置Agent标签页工具项点击事件
-        document.querySelectorAll('.agent-tool-item').forEach(item => {
-            item.addEventListener('click', function() {
-                const toolName = this.querySelector('.agent-tool-name').textContent;
-                const agentInput = document.getElementById('agent-input');
-                
-                // 根据不同工具预填充不同的提示词
-                switch(toolName) {
-                    case '代码搜索':
-                        agentInput.value = '搜索: ';
-                        break;
-                    case '代码生成':
-                        agentInput.value = '生成一个函数用于: ';
-                        break;
-                    case 'Bug修复':
-                        agentInput.value = '修复这段代码: ';
-                        break;
-                    case '代码解释':
-                        agentInput.value = '解释这段代码: ';
-                        break;
-                }
-                
-                agentInput.focus();
-            });
-        });
-
-        // Agent输入处理
-        document.getElementById('agent-send').addEventListener('click', function() {
-            const input = document.getElementById('agent-input');
-            if (input.value.trim() && vscode) {
-                const query = input.value.trim();
-                
-                // 添加用户消息到Agent界面
-                const agentMessagesContainer = document.getElementById('agent-messages');
-                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-                
-                const userMessageHtml = `
-                    <div class="agent-message agent-message-user">
-                        <div class="agent-avatar">我</div>
-                        <div class="agent-message-bubble">
-                            <div class="agent-message-content">${query}</div>
-                            <div class="agent-message-time">${time}</div>
-                        </div>
-                    </div>
-                `;
-                
-                agentMessagesContainer.insertAdjacentHTML('beforeend', userMessageHtml);
-                
-                // 添加思考中提示
-                const thinkingId = 'thinking-' + Date.now();
-                const thinkingHtml = `
-                    <div class="agent-thinking" id="${thinkingId}">
-                        <span>AI助手思考中</span>
-                        <div class="agent-thinking-dots">
-                            <div class="agent-thinking-dot"></div>
-                            <div class="agent-thinking-dot"></div>
-                            <div class="agent-thinking-dot"></div>
-                        </div>
-                    </div>
-                `;
-                
-                agentMessagesContainer.insertAdjacentHTML('beforeend', thinkingHtml);
-                agentMessagesContainer.scrollTop = agentMessagesContainer.scrollHeight;
-                
-                // 发送查询到扩展
-                vscode.postMessage({
-                    command: 'agentQuery',
-                    query: query,
-                    thinkingId: thinkingId
-                });
-                
-                input.value = '';
-            }
-        });
-
-        // 聊天输入处理
-        document.getElementById('chat-send').addEventListener('click', function() {
-            const input = document.getElementById('chat-input');
-            if (input.value.trim() && vscode) {
-                const message = input.value.trim();
-                
-                // 添加用户消息到聊天界面
-                const messagesContainer = document.querySelector('.chat-messages');
-                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-                
-                // 获取用户名
-                const userName = document.getElementById('user-name').value.trim() || '我';
-                
-                const userMessageHtml = `
-                    <div class="chat-row right">
-                        <div class="chat-avatar-group">
-                            <div class="avatar">我</div>
-                            <div class="sender">${userName}</div>
-                        </div>
-                        <div class="chat-bubble-group">
-                            <div class="chat-bubble right">${message}</div>
-                            <div class="chat-time">${time}</div>
-                        </div>
-                    </div>
-                `;
-                
-                messagesContainer.insertAdjacentHTML('beforeend', userMessageHtml);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                
-                // 发送消息到扩展
-                vscode.postMessage({
-                    command: 'sendChatMessage',
-                    message: message
-                });
-                
-                input.value = '';
-            }
-        });
-
-        // 聊天室服务器控制
-        document.getElementById('start-chat-server').addEventListener('click', function() {
-            if (vscode) {
-                vscode.postMessage({
-                    command: 'startChatServer'
-                });
-            }
-        });
-
-        document.getElementById('stop-chat-server').addEventListener('click', function() {
-            if (vscode) {
-                vscode.postMessage({
-                    command: 'stopChatServer'
-                });
-            }
-        });
-
-        // 切换主机/从机模式
-        document.getElementById('host-mode-btn').addEventListener('click', function() {
-            // 切换到主机模式
-            document.getElementById('host-mode-btn').classList.add('active');
-            document.getElementById('client-mode-btn').classList.remove('active');
-            document.getElementById('host-mode-panel').style.display = 'flex';
-            document.getElementById('client-mode-panel').style.display = 'none';
-        });
-
-        document.getElementById('client-mode-btn').addEventListener('click', function() {
-            // 切换到从机模式
-            document.getElementById('client-mode-btn').classList.add('active');
-            document.getElementById('host-mode-btn').classList.remove('active');
-            document.getElementById('client-mode-panel').style.display = 'flex';
-            document.getElementById('host-mode-panel').style.display = 'none';
-        });
-
-        // 从机模式:连接到服务器
-        document.getElementById('connect-to-server').addEventListener('click', function() {
-            const serverAddress = document.getElementById('server-address').value.trim();
-            const serverPort = document.getElementById('server-port').value.trim();
-            
-            if (!serverAddress) {
-                // 如果服务器地址为空，显示错误
-                const statusElement = document.getElementById('chat-server-status');
-                statusElement.textContent = '错误: 请输入服务器地址';
-                statusElement.className = 'status-offline';
-                return;
-            }
-            
-            const port = parseInt(serverPort, 10);
-            if (isNaN(port) || port < 1 || port > 65535) {
-                // 如果端口无效，显示错误
-                const statusElement = document.getElementById('chat-server-status');
-                statusElement.textContent = '错误: 请输入有效端口 (1-65535)';
-                statusElement.className = 'status-offline';
-                return;
-            }
-            
-            // 发送连接请求
-            if (vscode) {
-                vscode.postMessage({
-                    command: 'connectToChatServer',
-                    ipAddress: serverAddress,
-                    port: port
-                });
-                
-                // 更新UI状态
-                document.getElementById('connect-to-server').disabled = true;
-                document.getElementById('disconnect-from-server').disabled = false;
-                
-                const statusElement = document.getElementById('chat-server-status');
-                statusElement.textContent = '正在连接...';
-                statusElement.className = 'status-online';
-            }
-        });
-
-        // 从机模式:断开连接
-        document.getElementById('disconnect-from-server').addEventListener('click', function() {
-            if (vscode) {
-                vscode.postMessage({
-                    command: 'disconnectFromChatServer'
-                });
-                
-                // 更新UI状态
-                document.getElementById('connect-to-server').disabled = false;
-                document.getElementById('disconnect-from-server').disabled = true;
-                document.getElementById('room-control').style.display = 'none';
-            }
-        });
-
-        // 从机模式:离开聊天室
-        document.getElementById('leave-room').addEventListener('click', function() {
-            if (vscode) {
-                vscode.postMessage({
-                    command: 'leaveRoom'
-                });
-                
-                // 隐藏房间控制界面
-                document.getElementById('room-control').style.display = 'none';
-            }
-        });
-
-        // 复制连接信息按钮
-        document.getElementById('copy-connection').addEventListener('click', function() {
-            const connectionUrl = document.getElementById('server-connection-url').textContent;
-            if (connectionUrl && connectionUrl !== '未连接') {
-                // 使用VSCode API复制文本
-                vscode.postMessage({
-                    command: 'copyToClipboard',
-                    text: `灵犀协作聊天室连接信息: ${connectionUrl}`
-                });
-                
-                // 变更按钮文本显示已复制，然后还原
-                const copyBtn = document.getElementById('copy-connection');
-                const originalText = copyBtn.textContent;
-                copyBtn.textContent = '已复制!';
-                setTimeout(() => {
-                    copyBtn.textContent = originalText;
-                }, 2000);
-            }
-        });
-
-        // 设置用户名
-        document.getElementById('set-username').addEventListener('click', function() {
-            const userNameInput = document.getElementById('user-name');
-            const userName = userNameInput.value.trim();
-            
-            if (userName && vscode) {
-                vscode.postMessage({
-                    command: 'setUserName',
-                    userName: userName
-                });
-                
-                // 更新用户显示
-                const userDisplayElements = document.querySelectorAll('.chat-row.right .sender');
-                userDisplayElements.forEach(element => {
-                    element.textContent = userName;
-                });
-            }
-        });
-
-        // 监听消息响应
-        window.addEventListener('message', event => {
-            const message = event.data;
-            
-            // 聊天室服务器状态响应
-            if (message.command === 'chatServerStatus') {
-                const statusElement = document.getElementById('chat-server-status');
-                const startButton = document.getElementById('start-chat-server');
-                const stopButton = document.getElementById('stop-chat-server');
-                const connectButton = document.getElementById('connect-to-server');
-                const disconnectButton = document.getElementById('disconnect-from-server');
-                const connectionInfoDiv = document.getElementById('server-connection-info');
-                const connectionUrlElement = document.getElementById('server-connection-url');
-                const roomControlDiv = document.getElementById('room-control');
-                const currentRoomElement = document.getElementById('current-room-id');
-                
-                if (message.status === 'running' || message.status === 'connected') {
-                    statusElement.textContent = message.status === 'connected' ? '已连接' : '运行中';
-                    statusElement.className = 'status-online';
-                    
-                    // 主机模式下的UI状态
-                    startButton.disabled = true;
-                    stopButton.disabled = false;
-                    
-                    // 从机模式下的UI状态
-                    connectButton.disabled = true;
-                    disconnectButton.disabled = false;
-                    
-                    // 显示房间信息
-                    if (message.roomId) {
-                        roomControlDiv.style.display = 'flex';
-                        currentRoomElement.textContent = message.roomId;
-                    }
-                    
-                    // 显示连接信息
-                    if (message.port) {
-                        // 获取本机IP地址
-                        connectionInfoDiv.style.display = 'flex';
-                        // 使用localhost或IP地址
-                        const ipAddress = message.ipAddress || 'localhost';
-                        connectionUrlElement.textContent = `ws://${ipAddress}:${message.port}`;
-                    }
-                    
-                    // 如果服务器运行中但客户端未连接，自动连接
-                    if (message.status === 'running' && message.port) {
-                        vscode.postMessage({
-                            command: 'connectToChatServer',
-                            port: message.port,
-                            ipAddress: message.ipAddress || 'localhost'
-                        });
-                    }
-                } else if (message.status === 'stopped' || message.status === 'disconnected') {
-                    statusElement.textContent = '离线';
-                    statusElement.className = 'status-offline';
-                    
-                    // 主机模式下的UI状态
-                    startButton.disabled = false;
-                    stopButton.disabled = true;
-                    
-                    // 从机模式下的UI状态
-                    connectButton.disabled = false;
-                    disconnectButton.disabled = true;
-                    
-                    // 隐藏房间控制界面
-                    roomControlDiv.style.display = 'none';
-                    
-                    // 隐藏连接信息
-                    connectionInfoDiv.style.display = 'none';
-                    connectionUrlElement.textContent = '未连接';
-                } else if (message.status === 'error') {
-                    statusElement.textContent = '错误: ' + (message.error || '未知错误');
-                    statusElement.className = 'status-offline';
-                    
-                    // 主机模式下的UI状态
-                    startButton.disabled = false;
-                    stopButton.disabled = true;
-                    
-                    // 从机模式下的UI状态
-                    connectButton.disabled = false;
-                    disconnectButton.disabled = true;
-                    
-                    // 隐藏房间控制界面
-                    roomControlDiv.style.display = 'none';
-                    
-                    // 隐藏连接信息
-                    connectionInfoDiv.style.display = 'none';
-                    connectionUrlElement.textContent = '未连接';
-                }
-            }
-            
-            // 聊天消息响应
-            if (message.command === 'chatResponse') {
-                // 添加助手响应到聊天界面
-                const messagesContainer = document.querySelector('.chat-messages');
-                
-                let messageContent = message.content;
-                
-                // 如果是画布消息,添加预览按钮
-                if (message.canvasData) {
-                    messageContent += `<button class="preview-canvas-btn" data-canvas='${JSON.stringify(message.canvasData)}'>预览画布</button>`;
-                }
-                
-                const botMessageHtml = `
-                    <div class="chat-row left">
-                        <div class="chat-avatar-group">
-                            <div class="avatar">A</div>
-                            <div class="sender">${message.sender}</div>
-                        </div>
-                        <div class="chat-bubble-group">
-                            <div class="chat-bubble left">${messageContent}</div>
-                            <div class="chat-time">${message.time}</div>
-                        </div>
-                    </div>
-                `;
-                
-                messagesContainer.insertAdjacentHTML('beforeend', botMessageHtml);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                
-                // 为新添加的预览按钮绑定事件
-                const previewBtn = messagesContainer.querySelector('.preview-canvas-btn:last-child');
-                if (previewBtn) {
-                    previewBtn.addEventListener('click', function() {
-                        const canvasData = JSON.parse(this.dataset.canvas);
-                        if (vscode) {
-                            vscode.postMessage({
-                                command: 'previewCanvas',
-                                fileName: canvasData.fileName,
-                                content: canvasData.content
-                            });
-                        }
-                    });
-                }
-            } 
-            // Agent响应
-            else if (message.command === 'agentResponse') {
-                const agentMessagesContainer = document.getElementById('agent-messages');
-                
-                // 移除思考中提示
-                if (message.thinkingId) {
-                    const thinkingElement = document.getElementById(message.thinkingId);
-                    if (thinkingElement) {
-                        thinkingElement.remove();
-                    }
-                }
-                
-                // 格式化结果，支持代码块
-                let formattedContent = message.result;
-                
-                // 简单的代码块检测和格式化
-                if (formattedContent.includes('```')) {
-                    const parts = formattedContent.split('```');
-                    formattedContent = '';
-                    for (let i = 0; i < parts.length; i++) {
-                        if (i % 2 === 0) {
-                            // 非代码部分
-                            formattedContent += parts[i];
-                        } else {
-                            // 代码部分
-                            formattedContent += `<div class="agent-message-pre">${parts[i]}</div>`;
-                        }
-                    }
-                }
-                
-                const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-                const assistantMessageHtml = `
-                    <div class="agent-message agent-message-assistant">
-                        <div class="agent-avatar">AI</div>
-                        <div class="agent-message-bubble">
-                            <div class="agent-message-content">${formattedContent}</div>
-                            <div class="agent-message-time">${time}</div>
-                        </div>
-                    </div>
-                `;
-                
-                agentMessagesContainer.insertAdjacentHTML('beforeend', assistantMessageHtml);
-                agentMessagesContainer.scrollTop = agentMessagesContainer.scrollHeight;
-            }
-            // 处理思考状态
-            else if (message.command === 'agentThinking') {
-                // 这部分由上面的代码自动处理
-            }
-        });
-
-        // 添加聊天输入框回车键支持
-        document.getElementById('chat-input').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                document.getElementById('chat-send').click();
-            }
-        });
-
-        // 添加Agent输入框回车键支持
-        document.getElementById('agent-input').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                document.getElementById('agent-send').click();
-            }
-        });
-
-        // 添加预览按钮样式
-        const style = document.createElement('style');
-        style.textContent = `
-            .preview-canvas-btn {
-                background: #3794ff;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                padding: 4px 8px;
-                margin-left: 8px;
-                cursor: pointer;
-                font-size: 12px;
-                transition: background 0.2s;
-            }
-            
-            .preview-canvas-btn:hover {
-                background: #2176c7;
-            }
-        `;
-        document.head.appendChild(style);
-    </script>
+    <script src="sidebar.js"></script>
 </body>
 </html>

@@ -170,6 +170,47 @@ function sendMessage(content) {
 }
 
 /**
+ * 发送语音消息
+ * @param {string} audioData base64编码的WAV格式音频数据
+ * @param {number} duration 语音时长（秒）
+ * @param {string} audioFilename 音频文件名（可选）
+ * @param {string} messageId 消息唯一标识ID（可选，如果不提供则生成一个）
+ * @returns {boolean} 是否发送成功
+ */
+function sendAudioMessage(audioData, duration = 0, audioFilename = null, messageId = null) {
+  if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+    try {
+      // 使用传入的messageId或生成一个新的
+      const actualMessageId = messageId || `audio_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      const message = {
+        type: 'audioMessage',
+        audioData: audioData,
+        duration: duration,
+        id: actualMessageId
+        // 服务器会从连接上下文中获取 userId 和 roomId
+      };
+      
+      // 如果提供了文件名，添加到消息中
+      if (audioFilename) {
+        message.audioFilename = audioFilename;
+      }
+      
+      console.log(`发送语音消息: ID=${actualMessageId}${audioFilename ? ', 文件名=' + audioFilename : ''}`);
+      
+      wsClient.send(JSON.stringify(message));
+      console.log('已发送语音消息，数据大小:', audioData.length, '字符');
+      return true;
+    } catch (error) {
+      console.error('发送语音消息失败:', error);
+      return false;
+    }
+  } else {
+    console.log('未连接到服务器，无法发送语音消息。');
+    return false;
+  }
+}
+
+/**
  * 检查连接状态
  * @returns {boolean} 是否已连接
  */
@@ -194,6 +235,35 @@ function sendPrivateMessage(targetId, content) {
   } else {
     console.log('未连接到服务器，无法发送私聊消息。');
     promptForMessage(); // 如果未连接，重新提示
+  }
+}
+
+/**
+ * 发送私聊语音消息
+ * @param {string} targetId 目标用户ID
+ * @param {string} audioData base64编码的WAV格式音频数据
+ * @param {number} duration 语音时长（秒）
+ * @returns {boolean} 是否发送成功
+ */
+function sendPrivateAudioMessage(targetId, audioData, duration = 0) {
+  if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+    try {
+      const message = {
+        type: 'privateAudioMessage',
+        targetId: targetId,
+        audioData: audioData,
+        duration: duration
+      };
+      wsClient.send(JSON.stringify(message));
+      console.log(`已发送私聊语音消息给 ${targetId}，数据大小: ${audioData.length} 字符`);
+      return true;
+    } catch (error) {
+      console.error('发送私聊语音消息失败:', error);
+      return false;
+    }
+  } else {
+    console.log('未连接到服务器，无法发送私聊语音消息。');
+    return false;
   }
 }
 
@@ -365,7 +435,9 @@ if (require.main === module) {
 module.exports = {
   connectToServer,
   sendMessage,
+  sendAudioMessage,
   sendPrivateMessage,
+  sendPrivateAudioMessage,
   disconnectFromServer,
   isConnected,
   leaveRoom,

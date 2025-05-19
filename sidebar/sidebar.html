@@ -132,6 +132,7 @@
                         <div class="voice-record-timer">00:00</div>
                         <button id="voice-record-btn" class="voice-record-btn" title="录制语音消息">🎤</button>
                         <button id="chat-send" class="chat-send">发送</button>
+                        <button id="run-asr-test" class="chat-send" title="运行语音识别测试">测试ASR</button>
                                 </div>
                             </div>
                         </div>
@@ -453,6 +454,10 @@
                                 <span class="button-icon">+</span>
                                 新建画布
                             </button>
+                            <button id="add-memo-btn" class="canvas-button">
+                                <span class="button-icon">📝</span>
+                                添加纪要
+                            </button>
                         </div>
                         <div class="canvas-list-container">
                             <h4 class="canvas-list-title">最近画布</h4>
@@ -647,6 +652,12 @@
         }
         .chat-send:hover {
             background: #2176c7;
+        }
+        #run-asr-test {
+            background: #f59e0b;
+        }
+        #run-asr-test:hover {
+            background: #d97706;
         }
         .live-share-style {
             background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);

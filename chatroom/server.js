@@ -681,13 +681,33 @@ function handleCanvasMessage(ws, data, userId, currentRoom) {
 function broadcastToRoom(roomId, message, senderUserId = null) {
   if (!chatRooms.has(roomId)) return;
   
-  const messageStr = JSON.stringify(message);
-  chatRooms.get(roomId).forEach(userId => {
-    // 移除不向发送者发送消息的限制
-    if (users.has(userId)) {
-      users.get(userId).ws.send(messageStr);
+  // 验证消息格式
+  if (typeof message !== 'object') {
+    console.error('尝试广播无效消息:', message);
+    return;
+  }
+
+  // 确保消息中有完整的sender信息
+  if (message.type === 'message' && (!message.sender || !message.sender.name)) {
+    console.error('消息缺少sender信息:', message);
+    if (!message.sender) {
+      message.sender = { id: 'system', name: '系统' };
+    } else if (!message.sender.name) {
+      message.sender.name = '未知用户';
     }
-  });
+  }
+  
+  try {
+    const messageStr = JSON.stringify(message);
+    chatRooms.get(roomId).forEach(userId => {
+      // 确保用户存在
+      if (users.has(userId)) {
+        users.get(userId).ws.send(messageStr);
+      }
+    });
+  } catch (error) {
+    console.error('广播消息时出错:', error, message);
+  }
 }
 
 // 获取聊天室中的用户列表

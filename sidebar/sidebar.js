@@ -78,6 +78,68 @@ document.addEventListener('DOMContentLoaded', function() {
             updateServerStatus(message);
         }
 
+        // 处理ASR测试启动消息
+        if (message.command === 'asrTestStarted') {
+            const messagesContainer = document.getElementById('chat-messages');
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            const systemMessageHtml = `
+                <div class="chat-row system">
+                    <div class="system-message">
+                        <div class="system-message-content">ASR测试程序已在终端中启动${message.outputFile ? '<br>结果将保存到文件: ' + message.outputFile : ''}</div>
+                        <div class="chat-time">${time}</div>
+                    </div>
+                </div>
+            `;
+            
+            messagesContainer.insertAdjacentHTML('beforeend', systemMessageHtml);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // 聊天消息响应
+        if (message.command === 'chatResponse') {
+            // 添加助手响应到聊天界面
+            const messagesContainer = document.querySelector('.chat-messages');
+            
+            let messageContent = message.content;
+            
+            // 如果是画布消息,添加预览按钮
+            if (message.canvasData) {
+                messageContent += `<button class="preview-canvas-btn" data-canvas='${JSON.stringify(message.canvasData)}'>预览画布</button>`;
+            }
+            
+            const botMessageHtml = `
+                <div class="chat-row left">
+                    <div class="chat-avatar-group">
+                        <div class="avatar">A</div>
+                        <div class="sender">${message.sender}</div>
+                    </div>
+                    <div class="chat-bubble-group">
+                        <div class="chat-bubble left">${messageContent}</div>
+                        <div class="chat-time">${message.time}</div>
+                    </div>
+                </div>
+            `;
+            
+            messagesContainer.insertAdjacentHTML('beforeend', botMessageHtml);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // 为新添加的预览按钮绑定事件
+            const previewBtn = messagesContainer.querySelector('.preview-canvas-btn:last-child');
+            if (previewBtn) {
+                previewBtn.addEventListener('click', function() {
+                    const canvasData = JSON.parse(this.dataset.canvas);
+                    if (window.vscode) {
+                        window.vscode.postMessage({
+                            command: 'previewCanvas',
+                            fileName: canvasData.fileName,
+                            content: canvasData.content
+                        });
+                    }
+                });
+            }
+        } 
+
         // 处理语音消息
         if (message.command === 'addAudioMessage') {
             handleAudioMessage(message.message);
@@ -392,6 +454,14 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('canvas-action-btn').addEventListener('click', function() {
         if (window.vscode) {
             window.vscode.postMessage({ command: 'createCanvas' });
+        }
+    });
+    // 添加纪要按钮事件处理
+    document.getElementById('add-memo-btn').addEventListener('click', function() {
+        if (window.vscode) {
+            window.vscode.postMessage({
+                command: 'addMemoToCanvas'
+            });
         }
     });
     // 剪贴板历史相关
@@ -792,6 +862,36 @@ document.addEventListener('DOMContentLoaded', function() {
             userDisplayElements.forEach(element => { element.textContent = userName; });
         }
     });
+    // ASR测试按钮事件
+    document.getElementById('run-asr-test').addEventListener('click', function() {
+        if (window.vscode) {
+            // 生成当前时间作为文件名的一部分
+            const now = new Date();
+            const timestamp = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}${now.getSeconds().toString().padStart(2,'0')}`;
+            const outputFileName = `asr_result_${timestamp}.txt`;
+            
+            window.vscode.postMessage({
+                command: 'runAsrTest',
+                outputFile: outputFileName
+            });
+            
+            // 显示正在运行的提示
+            const messagesContainer = document.getElementById('chat-messages');
+            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            const systemMessageHtml = `
+                <div class="chat-row system">
+                    <div class="system-message">
+                        <div class="system-message-content">正在运行语音识别测试...<br>结果将保存到文件: ${outputFileName}</div>
+                        <div class="chat-time">${time}</div>
+                    </div>
+                </div>
+            `;
+            
+            messagesContainer.insertAdjacentHTML('beforeend', systemMessageHtml);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    });
     // 聊天输入框回车支持
     document.getElementById('chat-input').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
@@ -814,11 +914,24 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     });
-    // 预览按钮样式
+    // 添加预览按钮样式
     const style = document.createElement('style');
     style.textContent = `
-        .preview-canvas-btn { background: #3794ff; color: white; border: none; border-radius: 4px; padding: 4px 8px; margin-left: 8px; cursor: pointer; font-size: 12px; transition: background 0.2s; }
-        .preview-canvas-btn:hover { background: #2176c7; }
+        .preview-canvas-btn {
+            background: #3794ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            margin-left: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s;
+        }
+        
+        .preview-canvas-btn:hover {
+            background: #2176c7;
+        }
     `;
     document.head.appendChild(style);
     // 保存DeepSeek API Key
@@ -975,8 +1088,8 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
         }
         
         // 如果服务器运行中但客户端未连接，自动连接
-    if (statusData.status === 'running' && statusData.port && vscode) {
-            vscode.postMessage({
+    if (statusData.status === 'running' && statusData.port && window.vscode) {
+            window.vscode.postMessage({
                 command: 'connectToChatServer',
             port: statusData.port,
             ipAddress: statusData.ipAddress || 'localhost'
@@ -1394,6 +1507,7 @@ function isConferenceButton(id) {
 
 // 创建会议处理函数
 function handleCreateConference() {
+
     if (isInConference) {
         showErrorMessage('您已经在会议中');
         return;

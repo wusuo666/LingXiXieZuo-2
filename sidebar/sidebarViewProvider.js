@@ -315,30 +315,50 @@ class LingxiSidebarProvider {
             }
             
             const tempFile = path.join(tempDir, `preview_${fileName}`);
+            
+            // 确保内容是JSON格式
+            let jsonContent;
+            if (typeof content === 'string') {
+                try {
+                    jsonContent = JSON.parse(content);
+                } catch (e) {
+                    console.error('解析JSON内容失败:', e);
+                    jsonContent = content;
+                }
+            } else {
+                jsonContent = content;
+            }
+
+            // 确保jsonContent是有效的Excalidraw格式
+            if (typeof jsonContent === 'object') {
+                if (!jsonContent.type) {
+                    jsonContent.type = "excalidraw";
+                }
+                if (!jsonContent.version) {
+                    jsonContent.version = 2;
+                }
+                if (!jsonContent.elements) {
+                    jsonContent.elements = [];
+                }
+                if (!jsonContent.appState) {
+                    jsonContent.appState = {
+                        viewBackgroundColor: "#ffffff",
+                        currentItemFontFamily: 1,
+                        gridSize: null,
+                        theme: "light"
+                    };
+                }
+            }
+            
+            // 将内容写入临时文件
+            const contentToWrite = typeof jsonContent === 'string' ? jsonContent : JSON.stringify(jsonContent, null, 2);
             await vscode.workspace.fs.writeFile(
                 vscode.Uri.file(tempFile),
-                Buffer.from(content, 'utf8')
+                Buffer.from(contentToWrite, 'utf8')
             );
 
-            // 先以文本形式预览
-            const doc = await vscode.workspace.openTextDocument(tempFile);
-            await vscode.window.showTextDocument(doc, {
-                preview: true,
-                viewColumn: vscode.ViewColumn.Beside
-            });
-
-            // 询问是否用Excalidraw打开
-            const openWithExcalidraw = await vscode.window.showQuickPick([
-                { label: '是', description: '使用Excalidraw打开此文件' },
-                { label: '否', description: '保持文本预览' }
-            ], {
-                placeHolder: '是否使用Excalidraw打开此文件？'
-            });
-
-            if (openWithExcalidraw && openWithExcalidraw.label === '是') {
-                // 使用Excalidraw打开文件
-                await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(tempFile));
-            }
+            // 直接使用Excalidraw打开文件
+            await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(tempFile));
             
             // 延长临时文件保存时间到30分钟
             setTimeout(async () => {
@@ -347,7 +367,7 @@ class LingxiSidebarProvider {
                 } catch (error) {
                     console.error('删除临时预览文件失败:', error);
                 }
-            }, 30 * 60 * 1000); // 30分钟
+            }, 30 * 60 * 1000);
         } catch (error) {
             console.error('预览画布失败:', error);
             vscode.window.showErrorMessage(`预览画布失败: ${error.message}`);
@@ -619,25 +639,56 @@ class LingxiSidebarProvider {
                     );
                     
                     // 为了便于用户对比，同时打开两个临时预览，确保在不同窗口中打开
-                    // 先打开第一个文件
+                    // 先打开第一个文件（本地优先版本）
                     await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(version1Path));
 
-                    // 使用 showTextDocument 打开第二个文件，并指定在旁边的编辑器组打开
-                    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(version2Path));
-                    await vscode.window.showTextDocument(document, {
-                        viewColumn: vscode.ViewColumn.Beside, // 在旁边的编辑器组打开
-                        preview: false // 不是预览模式，这样文件不会被其他文件替换
-                    });
-                    
                     // 显示冲突提示并让用户选择要保存的最终版本
                     vscode.window.showInformationMessage(
-                        `检测到 ${conflicts.length} 个ID冲突，已打开两个预览版本供对比。请选择要保存的最终版本：`,
+                        `检测到 ${conflicts.length} 个ID冲突，已打开本地优先版本。请选择操作：`,
+                        '查看远程优先版本',
                         '保存本地优先版本',
                         '保存远程优先版本',
                         '取消'
                     ).then(async selected => {
-                        let finalJson;
-                        if (selected === '保存本地优先版本') {
+                        if (selected === '查看远程优先版本') {
+                            // 使用与新建画布相同的方式打开远程优先版本
+                            await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(version2Path));
+
+                            // 确保文件被正确打开
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+
+                            // 再次显示选择提示
+                            vscode.window.showInformationMessage(
+                                `请选择要保存的最终版本：`,
+                                '保存本地优先版本',
+                                '保存远程优先版本',
+                                '取消'
+                            ).then(async finalSelected => {
+                                let finalJson;
+                                if (finalSelected === '保存本地优先版本') {
+                                    finalJson = version1Json;
+                                } else if (finalSelected === '保存远程优先版本') {
+                                    finalJson = version2Json;
+                                } else {
+                                    vscode.window.showInformationMessage('已取消合并操作');
+                                    return;
+                                }
+                                
+                                // 创建最终合并文件名
+                                const mergedFileName = `${fileNameWithoutExt}_merged_${timestamp}.excalidraw`;
+                                const mergedFilePath = pathModule.join(originalDir, mergedFileName);
+                                
+                                // 保存最终合并文件
+                                await vscode.workspace.fs.writeFile(
+                                    vscode.Uri.file(mergedFilePath),
+                                    Buffer.from(JSON.stringify(finalJson, null, 2), 'utf8')
+                                );
+                                
+                                // 打开最终合并文件
+                                await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(mergedFilePath));
+                                vscode.window.showInformationMessage(`已创建并打开合并画布: ${mergedFileName}`);
+                            });
+                        } else if (selected === '保存本地优先版本') {
                             finalJson = version1Json;
                         } else if (selected === '保存远程优先版本') {
                             finalJson = version2Json;
@@ -659,15 +710,6 @@ class LingxiSidebarProvider {
                         // 打开最终合并文件
                         await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(mergedFilePath));
                         vscode.window.showInformationMessage(`已创建并打开合并画布: ${mergedFileName}`);
-                        
-                        // 清理临时文件
-                        try {
-                            await vscode.workspace.fs.delete(vscode.Uri.file(version1Path), { useTrash: false });
-                            await vscode.workspace.fs.delete(vscode.Uri.file(version2Path), { useTrash: false });
-                        } catch (deleteError) {
-                            console.log('清理临时文件时出错:', deleteError);
-                            // 非致命错误，可以忽略
-                        }
                     });
                 } else {
                     // 无冲突，执行常规合并
@@ -1495,6 +1537,14 @@ class LingxiSidebarProvider {
             {
                 label: '拉取画布',
                 description: '从协作服务器拉取画布并合并'
+            },
+            {
+                label: '重命名画布',
+                description: '修改画布文件名'
+            },
+            {
+                label: '删除画布',
+                description: '删除当前画布文件'
             }
         ];
 
@@ -1507,7 +1557,81 @@ class LingxiSidebarProvider {
                 await this.submitCanvas(path, name);
             } else if (selected.label === '拉取画布') {
                 await this.pullCanvas(path, name);
+            } else if (selected.label === '重命名画布') {
+                await this.renameCanvas(path, name);
+            } else if (selected.label === '删除画布') {
+                await this.deleteCanvas(path, name);
             }
+        }
+    }
+
+    /**
+     * 重命名画布文件
+     * @param {string} path 画布文件路径
+     * @param {string} name 画布文件名
+     */
+    async renameCanvas(path, name) {
+        try {
+            // 获取文件名（不含扩展名）
+            const fileNameWithoutExt = name.replace('.excalidraw', '');
+            
+            // 显示输入框让用户输入新文件名
+            const newName = await vscode.window.showInputBox({
+                value: fileNameWithoutExt,
+                prompt: '请输入新的画布名称',
+                validateInput: (value) => {
+                    if (!value) {
+                        return '文件名不能为空';
+                    }
+                    if (value.includes('/') || value.includes('\\')) {
+                        return '文件名不能包含路径分隔符';
+                    }
+                    if (value.length > 100) {
+                        return '文件名不能超过100个字符';
+                    }
+                    return null;
+                }
+            });
+
+            if (!newName) {
+                return; // 用户取消输入
+            }
+
+            // 构建新文件路径
+            const newPath = path.replace(fileNameWithoutExt, newName);
+
+            // 检查新文件名是否已存在
+            try {
+                await vscode.workspace.fs.stat(vscode.Uri.file(newPath));
+                vscode.window.showErrorMessage(`文件名 "${newName}.excalidraw" 已存在`);
+                return;
+            } catch (error) {
+                // 文件不存在，可以继续重命名
+            }
+
+            // 如果文件当前正在编辑，先保存它
+            const document = vscode.workspace.textDocuments.find(doc => doc.fileName === path);
+            if (document) {
+                await vscode.window.showTextDocument(document);
+                await vscode.commands.executeCommand('workbench.action.files.save');
+            }
+
+            // 重命名文件
+            await vscode.workspace.fs.rename(
+                vscode.Uri.file(path),
+                vscode.Uri.file(newPath)
+            );
+
+            // 刷新画布列表
+            await this.sendCanvasList();
+
+            vscode.window.showInformationMessage(`画布已重命名为 "${newName}.excalidraw"`);
+
+            // 打开重命名后的文件
+            await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(newPath));
+        } catch (error) {
+            console.error('重命名画布失败:', error);
+            vscode.window.showErrorMessage(`重命名画布失败: ${error.message}`);
         }
     }
 
@@ -2225,6 +2349,43 @@ class LingxiSidebarProvider {
         } catch (error) {
             console.error('添加纪要到画布失败:', error);
             vscode.window.showErrorMessage(`添加纪要失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 删除画布文件
+     * @param {string} path 画布文件路径
+     * @param {string} name 画布文件名
+     */
+    async deleteCanvas(path, name) {
+        try {
+            // 确认是否删除
+            const answer = await vscode.window.showWarningMessage(
+                `确定要删除画布 "${name}" 吗？此操作不可恢复。`,
+                { modal: true },
+                '确定删除',
+                '取消'
+            );
+
+            if (answer === '确定删除') {
+                // 如果文件当前正在编辑，先关闭它
+                const document = vscode.workspace.textDocuments.find(doc => doc.fileName === path);
+                if (document) {
+                    await vscode.window.showTextDocument(document);
+                    await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+                }
+
+                // 删除文件
+                await vscode.workspace.fs.delete(vscode.Uri.file(path));
+                
+                // 刷新画布列表
+                await this.sendCanvasList();
+                
+                vscode.window.showInformationMessage(`画布 "${name}" 已删除`);
+            }
+        } catch (error) {
+            console.error('删除画布失败:', error);
+            vscode.window.showErrorMessage(`删除画布失败: ${error.message}`);
         }
     }
 }

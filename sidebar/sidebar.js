@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log(222222222222);
 
 
-    // 监听来自扩展的消息，更新 API Key 状态显示
+    // 监听来自扩展的消息
     window.addEventListener('message', event => {
         const message = event.data;
         console.log('收到消息:', message);
@@ -99,9 +99,22 @@ document.addEventListener('DOMContentLoaded', function() {
         // 聊天消息响应
         if (message.command === 'chatResponse') {
             // 添加助手响应到聊天界面
-            const messagesContainer = document.querySelector('.chat-messages');
+            console.log(4444444444444444444444444444);
+            console.log(4444444444444444444444444444);
+            console.log(4444444444444444444444444444);
+            console.log(4444444444444444444444444444);
+            console.log(4444444444444444444444444444);
+            console.log(4444444444444444444444444444);
+            console.log(4444444444444444444444444444);
+            console.log(4444444444444444444444444444);
+            console.log(4444444444444444444444444444);
+            console.log(4444444444444444444444444444);
             
+            console.log(message);
+            const messagesContainer = document.querySelector('.chat-messages');
+            console.log(message.content);
             let messageContent = message.content;
+            console.log(message.canvasData);
             
             // 如果是画布消息,添加预览按钮
             if (message.canvasData) {

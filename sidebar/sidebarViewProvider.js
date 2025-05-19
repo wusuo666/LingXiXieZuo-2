@@ -72,17 +72,31 @@ class LingxiSidebarProvider {
                     const message = JSON.parse(event.data);
                     console.log('收到WebSocket消息:', message);
                     
+                    console.log(111111111111111);
+                    console.log(111111111111111);
+                    console.log(111111111111111);
+                    console.log(111111111111111);
+                    console.log(111111111111111);
+                    console.log(111111111111111);
+                    console.log(111111111111111);
+                    console.log(111111111111111);
+                    console.log(111111111111111);
+                    console.log(111111111111111);
+                    console.log(111111111111111);
+                    console.log(message);
+                    console.log(message.type);
+
                     // 处理不同类型的消息
                     switch (message.type) {
-                        case 'canvas':
-                            console.log('处理画布消息:', message);
-                            if (message.action === 'list' && message.canvasList) {
-                                console.log('收到画布列表:', message.canvasList);
-                                await this.handleCanvasList(message.canvasList);
-                            } else {
-                                await this.handleCanvasMessage(message);
-                            }
-                            break;
+                        // case 'canvas':
+                        //     console.log('处理画布消息:', message);
+                        //     if (message.action === 'list' && message.canvasList) {
+                        //         console.log('收到画布列表:', message.canvasList);
+                        //         await this.handleCanvasList(message.canvasList);
+                        //     } else {
+                        //         await this.handleCanvasMessage(message);
+                        //     }
+                        //     break;
                             
                         case 'message':
                             this.handleChatMessage(message);
@@ -102,12 +116,18 @@ class LingxiSidebarProvider {
                                     console.log('检测到画布链接，服务器:', serverAddress);
                                     console.log('检测到画布链接，ID:', canvasId);
                                     
+                                    console.log(1145141919810);
+                                    console.log(1145141919810);
+                                    console.log(1145141919810);
+                                    console.log(1145141919810);
+
                                     // 询问用户是否下载远程画布
                                     const senderName = message.sender && message.sender.name ? message.sender.name : '其他用户';
                                     const answer = await vscode.window.showInformationMessage(
-                                        `${senderName} 分享了一个画布，是否下载并打开？`, 
+                                        `${senderName} 分享了一个画布，是否下载并打开？`,  
                                         '下载并打开', '忽略'
                                     );
+
                                     
                                     if (answer === '下载并打开') {
                                         // 构造完整链接
@@ -1455,70 +1475,88 @@ class LingxiSidebarProvider {
                 }, 1000);
             }
             
-            // 添加消息处理
-            const originalOnMessage = this._chatClient.onmessage;
-            this._chatClient.onmessage = async (event) => {
-                // 调用原始处理函数
-                if (originalOnMessage) {
-                    originalOnMessage(event);
-                }
+            // // 添加消息处理
+            // const originalOnMessage = this._chatClient.onmessage;
+            // this._chatClient.onmessage = async (event) => {
+            //     // 调用原始处理函数
+            //     if (originalOnMessage) {
+            //         originalOnMessage(event);
+            //     }
                 
-                // 添加我们自己的处理逻辑
-                try {
-                    console.log('接收到WebSocket消息:', event.data);
-                    const message = JSON.parse(event.data);
+            //     // 添加我们自己的处理逻辑
+            //     try {
+
+            //         console.log(2222222222222);
+            //         console.log(2222222222222);
+            //         console.log(2222222222222);
+            //         console.log(2222222222222);
+            //         console.log(2222222222222);
+            //         console.log(2222222222222);
+
+
+            //         console.log('接收到WebSocket消息:', event.data);
+            //         const message = JSON.parse(event.data);
                     
-                    // 检测消息是否包含画布链接
-                    if (message.type === 'message' && message.content) {
-                        console.log('检查消息是否包含画布链接:', message.content);
-                        const canvasLinkPattern = /https?:\/\/([^\/]+)\/canvas\/([^"\s]+)/;
-                        const canvasLinkMatch = message.content.match(canvasLinkPattern);
-                        console.log('画布链接匹配结果:', canvasLinkMatch);
+            //         // 检测消息是否包含画布链接
+            //         if (message.type === 'message' && message.content) {
+            //             console.log('检查消息是否包含画布链接:', message.content);
+            //             const canvasLinkPattern = /https?:\/\/([^\/]+)\/canvas\/([^"\s]+)/;
+            //             const canvasLinkMatch = message.content.match(canvasLinkPattern);
+            //             console.log('画布链接匹配结果:', canvasLinkMatch);
                         
-                        if (canvasLinkMatch) {
-                            const serverAddress = canvasLinkMatch[1]; // 第一个捕获组是服务器地址(包含可选端口号)
-                            const canvasId = canvasLinkMatch[2]; // 第二个捕获组是画布ID
-                            console.log('检测到画布链接，服务器:', serverAddress);
-                            console.log('检测到画布链接，ID:', canvasId);
+            //             if (canvasLinkMatch) {
+            //                 const serverAddress = canvasLinkMatch[1]; // 第一个捕获组是服务器地址(包含可选端口号)
+            //                 const canvasId = canvasLinkMatch[2]; // 第二个捕获组是画布ID
+            //                 console.log('检测到画布链接，服务器:', serverAddress);
+            //                 console.log('检测到画布链接，ID:', canvasId);
                             
-                            // 询问用户是否下载远程画布
-                            let senderName = '其他用户';
-                            if (message.sender) {
-                                if (typeof message.sender === 'object' && message.sender.name) {
-                                    senderName = message.sender.name;
-                                } else if (typeof message.sender === 'string') {
-                                    senderName = message.sender;
-                                }
-                            }
-                            const answer = await vscode.window.showInformationMessage(
-                                `${senderName} 分享了一个画布，是否下载并打开？`, 
-                                '下载并打开', '忽略'
-                            );
+            //                 console.log(66666666666666666);
+            //                 console.log(message.sender);
+            //                 console.log(message.sender.name);
+            //                 console.log(message);
+
+            //                 // 询问用户是否下载远程画布
+            //                 let senderName = '其他用户';
+            //                 if (message.sender) {
+            //                     if (typeof message.sender === 'object' && message.sender.name) {
+            //                         senderName = message.sender.name;
+            //                     } else if (typeof message.sender === 'string') {
+            //                         senderName = message.sender;
+            //                     }
+            //                 }
+            //                 console.log(senderName);
+            //                 console.log(767777777777777777);
+
+            //                 console.log(message.content);
+            //                 // const answer = await vscode.window.showInformationMessage(
+            //                 //     `${senderName} 分享了一个画布，是否下载并打开？`, 
+            //                 //     '下载并打开', '忽略'
+            //                 // );
                             
-                            if (answer === '下载并打开') {
-                                // 构造完整链接
-                                const fullLink = `http://${serverAddress}/canvas/${canvasId}`;
-                                console.log('提取的完整链接:', fullLink);
+            //                 if (answer === '下载并打开') {
+            //                     // 构造完整链接
+            //                     const fullLink = `http://${serverAddress}/canvas/${canvasId}`;
+            //                     console.log('提取的完整链接:', fullLink);
                                 
-                                // 下载远程画布
-                                await this.downloadRemoteCanvas(canvasId, fullLink);
-                            }
-                        }
-                    }
+            //                     // 下载远程画布
+            //                     await this.downloadRemoteCanvas(canvasId, fullLink);
+            //                 }
+            //             }
+            //         }
                     
-                    // 将消息发送到前端
-                    if (this._webviewView) {
-                        this._webviewView.webview.postMessage({
-                            command: 'chatResponse',
-                            sender: senderName,
-                            content: message.content || '空消息',
-                            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
-                        });
-                    }
-                } catch (error) {
-                    console.error('处理聊天消息时出错:', error);
-                }
-            };
+            //         // 将消息发送到前端
+            //         if (this._webviewView) {
+            //             this._webviewView.webview.postMessage({
+            //                 command: 'chatResponse',
+            //                 sender: senderName,
+            //                 content: message.content || '空消息',
+            //                 time: new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
+            //             });
+            //         }
+            //     } catch (error) {
+            //         console.error('处理聊天消息时出错:', error);
+            //     }
+            // };
 
             // 更新服务器状态
             if (this._webviewView) {

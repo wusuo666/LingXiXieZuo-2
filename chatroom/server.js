@@ -298,21 +298,24 @@ wss.on('connection', (ws) => {
           }, userId);
           break;
           
-        case 'message':
-          // 发送消息到聊天室
-          if (userId && currentRoom) {
-            broadcastToRoom(currentRoom, {
-              type: 'message',
-              userId: userId,
-              sender: {
-                id: userId,
-                name: users.get(userId).name
-              },
-              content: data.content,
-              timestamp: Date.now()
-            }, userId);
-          }
-          break;
+          case 'message':
+            // 发送消息到聊天室
+            if (userId && currentRoom) {
+              // 确保用户存在且有name属性
+              const senderName = users.has(userId) ? users.get(userId).name : '未知用户';
+              
+              broadcastToRoom(currentRoom, {
+                type: 'message',
+                userId: userId,
+                sender: {
+                  id: userId,
+                  name: senderName
+                },
+                content: data.content,
+                timestamp: Date.now()
+              }, userId);
+            }
+            break;
         
         // 音频流相关消息处理
         case 'audioStream':

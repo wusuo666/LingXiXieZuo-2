@@ -4,12 +4,66 @@ const fs = require('fs');
 const path = require('path');
 const Mic = require('node-microphone');
 const WebSocket = require('ws');
+// 添加音频处理库
+const WavEncoder = require('wav-encoder');
+const WavDecoder = require('wav-decoder');
+const AudioBuffer = require('audio-buffer');
+
+// 全局音频处理设置
+const audioSettings = {
+    sampleRate: 44100,      // 采样率
+    numChannels: 1,         // 通道数
+    bitsPerSample: 16,      // 采样位深
+    // 音频增强设置
+    enhancementEnabled: true,   // 整体增强开关
+    voiceEnhancement: {
+        enabled: true,
+        gain: 1.5,         // 语音增益
+        clarity: 1.3       // 清晰度调整
+    },
+    // 均衡器设置 - 针对人声频率增强
+    equalizer: {
+        enabled: true,
+        // 人声增强均衡器 (单位为dB)
+        bands: [
+            { frequency: 100, gain: 1.0 },   // 低频
+            { frequency: 250, gain: 1.5 },   // 低中频 - 温暖度
+            { frequency: 800, gain: 2.0 },   // 中频 - 人声基频
+            { frequency: 2000, gain: 2.5 },  // 中高频 - 清晰度
+            { frequency: 4000, gain: 2.0 },  // 高频 - 明亮度
+            { frequency: 8000, gain: 1.0 }   // 超高频
+        ]
+    }
+};
 
 // 检查命令行参数
 const args = process.argv.slice(2);
 const streamMode = args.includes('-stream');
 let serverPort = 3000; // 默认WebSocket服务器端口
 let serverAddress = 'localhost'; // 默认地址
+
+// 处理音频质量参数
+const qualityIndex = args.indexOf('-quality');
+if (qualityIndex !== -1 && args.length > qualityIndex + 1) {
+    const quality = args[qualityIndex + 1];
+    if (quality === 'high') {
+        // 高质量设置
+        audioSettings.voiceEnhancement.gain = 1.7;
+        audioSettings.voiceEnhancement.clarity = 2.0;
+        audioSettings.equalizer.bands[2].gain = 2.5; // 增强人声基频
+        audioSettings.equalizer.bands[3].gain = 3.0; // 更多清晰度
+        console.error(`使用高质量音频设置`);
+    } else if (quality === 'low') {
+        // 低质量设置 - 减少处理以节省资源
+        audioSettings.voiceEnhancement.enabled = false;
+        audioSettings.equalizer.enabled = true;
+        audioSettings.equalizer.bands = audioSettings.equalizer.bands.map(band => {
+            return { ...band, gain: Math.min(band.gain, 1.5) };
+        });
+        console.error(`使用低质量音频设置`);
+    }
+    console.error(`音频质量设置为: ${quality}`);
+}
 
 // 如果是流模式，解析端口和地址
 if (streamMode) {
@@ -33,38 +87,254 @@ const duration = streamMode ? 0 : parseInt(args[0] || '5', 10);
 
 // 确保recordings文件夹存在
 // 尝试获取工作区根目录
-let recordingsDir;
-try {
-    // 如果命令行传递了工作区路径参数
-    const workspacePathIndex = streamMode ? args.indexOf('-workspace') : 1;
+let recordingsDir = null;
+let canSaveFiles = false;
+
+// 打印接收到的命令行参数，用于调试
+console.error('接收到的命令行参数:', process.argv);
+console.error('处理后的args:', args);
+
+// 多种方式尝试获取工作区路径
+const getWorkspacePath = () => {
+    // 方法1: 从命令行参数获取
+    const workspacePathIndex = args.indexOf('-workspace');
     if (workspacePathIndex !== -1 && args.length > workspacePathIndex + 1) {
-        const workspacePath = args[workspacePathIndex + 1];
-        recordingsDir = path.join(workspacePath, 'recordings');
-        console.error(`使用命令行参数提供的工作区路径: ${workspacePath}`);
+        let fromArg = args[workspacePathIndex + 1];
+        
+        // 规范化路径格式（处理Windows路径问题）
+        fromArg = fromArg.replace(/\\\\/g, '\\');
+        
+        console.error(`检查工作区路径存在性: "${fromArg}"`);
+        try {
+            if (fs.existsSync(fromArg)) {
+                console.error(`从命令行参数获取工作区路径: ${fromArg}`);
+                return fromArg;
+            } else {
+                console.error(`路径不存在: ${fromArg}`);
+                // 尝试去除引号
+                const cleanPath = fromArg.replace(/^["']|["']$/g, '');
+                if (cleanPath !== fromArg && fs.existsSync(cleanPath)) {
+                    console.error(`清理引号后路径存在: ${cleanPath}`);
+                    return cleanPath;
+                }
+            }
+        } catch (err) {
+            console.error(`检查路径时出错: ${err.message}`);
+        }
     } else {
-        // 默认使用相对于插件目录的recordings文件夹
-        recordingsDir = path.join(path.resolve(__dirname, '..'), 'recordings');
-        console.error(`使用默认路径: ${recordingsDir}`);
+        console.error('未找到-workspace参数');
     }
     
-    // 确保recordings文件夹存在
-    if (!fs.existsSync(recordingsDir)) {
-        fs.mkdirSync(recordingsDir, { recursive: true });
-        console.error(`创建recordings文件夹: ${recordingsDir}`);
+    // 方法2: 检查第二个位置参数
+    if (args.length >= 2) {
+        let secondArg = args[1];
+        
+        // 检查第二个参数是否是有效路径
+        try {
+            secondArg = secondArg.replace(/\\\\/g, '\\');
+            console.error(`检查第二个参数是否为工作区路径: "${secondArg}"`);
+            
+            if (fs.existsSync(secondArg)) {
+                console.error(`从位置参数获取工作区路径: ${secondArg}`);
+                return secondArg;
+            }
+        } catch (err) {
+            console.error(`检查第二个参数路径时出错: ${err.message}`);
+        }
+    }
+    
+    // 如果获取路径失败
+    console.error('无法确定工作区路径');
+    return null;
+};
+
+try {
+    // 获取工作区路径
+    const workspacePath = getWorkspacePath();
+    
+    if (workspacePath) {
+        recordingsDir = path.join(workspacePath, 'recordings');
+        canSaveFiles = true;
+        console.error(`使用工作区路径: ${workspacePath}`);
+        
+        // 确保recordings文件夹存在
+        if (!fs.existsSync(recordingsDir)) {
+            fs.mkdirSync(recordingsDir, { recursive: true });
+            console.error(`创建recordings文件夹: ${recordingsDir}`);
+        }
+        
+        // 测试文件夹写入权限
+        try {
+            const testFilePath = path.join(recordingsDir, 'test.txt');
+            fs.writeFileSync(testFilePath, 'test', { flag: 'w' });
+            console.error(`测试文件写入成功: ${testFilePath}`);
+            // 成功创建测试文件后删除它
+            fs.unlinkSync(testFilePath);
+            console.error('测试文件已删除');
+            // 确认可以写入
+            canSaveFiles = true;
+        } catch (writeErr) {
+            console.error(`测试文件写入失败，没有写入权限: ${writeErr}`);
+            canSaveFiles = false;
+        }
+    } else {
+        console.error('未提供有效的工作区路径，音频将不会被保存到文件');
+        canSaveFiles = false;
     }
 } catch (error) {
-    console.error('创建recordings文件夹失败:', error);
-    process.exit(1);
+    console.error('处理工作区路径时出错:', error);
+    canSaveFiles = false;
 }
 
-// 音频文件路径（仅用于录音模式）
+// 音频文件路径（仅用于录音模式且有有效工作区）
 let savedWavFile;
-if (!streamMode) {
+if (!streamMode && canSaveFiles && recordingsDir) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     // 添加随机字符串确保唯一性
     const uniqueId = Math.random().toString(36).substring(2, 10);
     savedWavFile = path.join(recordingsDir, `recording_${timestamp}_${uniqueId}.wav`);
     console.error(`将保存录音文件: ${savedWavFile}`);
+} else if (!streamMode) {
+    console.error('未检测到有效工作区或无写入权限，录音将不会被保存到文件');
+}
+
+/**
+ * 处理音频数据，应用增强效果
+ * @param {Buffer} audioData 原始音频数据
+ * @returns {Promise<Buffer>} 处理后的音频数据
+ */
+async function enhanceAudioData(audioData) {
+    try {
+        // 检查数据是否包含WAV头
+        const hasWavHeader = audioData.length > 44 && 
+                             audioData[0] === 82 && audioData[1] === 73 && 
+                             audioData[2] === 70 && audioData[3] === 70; // "RIFF"
+        
+        // 如果没有启用增强，直接返回原始数据
+        if (!audioSettings.enhancementEnabled) {
+            return audioData;
+        }
+        
+        let audioBuffer;
+        
+        if (hasWavHeader) {
+            // 使用WavDecoder解码WAV数据
+            try {
+                const decodedData = await WavDecoder.decode(audioData);
+                const channelData = decodedData.channelData[0]; // 假设是单声道
+                
+                // 应用音频处理
+                const enhancedData = applyAudioEnhancements(channelData);
+                
+                // 重新编码为WAV
+                const wavData = await WavEncoder.encode({
+                    sampleRate: decodedData.sampleRate,
+                    channelData: [enhancedData]
+                });
+                
+                return Buffer.from(wavData);
+            } catch (error) {
+                console.error('WAV解码失败，跳过增强处理:', error);
+                return audioData;
+            }
+        } else {
+            // 直接处理PCM数据
+            // 假设16位单声道PCM数据
+            const sampleCount = audioData.length / 2;
+            const floatSamples = new Float32Array(sampleCount);
+            
+            // 转换Int16PCM到Float32
+            for (let i = 0; i < sampleCount; i++) {
+                floatSamples[i] = audioData.readInt16LE(i * 2) / 32768.0; // 归一化到[-1,1]
+            }
+            
+            // 应用音频处理
+            const enhancedData = applyAudioEnhancements(floatSamples);
+            
+            // 转换回Int16PCM格式
+            const enhancedBuffer = Buffer.alloc(enhancedData.length * 2);
+            for (let i = 0; i < enhancedData.length; i++) {
+                // 限制在有效范围内
+                const value = Math.max(-1, Math.min(1, enhancedData[i]));
+                // 转换回Int16
+                enhancedBuffer.writeInt16LE(Math.round(value * 32767), i * 2);
+            }
+            
+            return enhancedBuffer;
+        }
+    } catch (error) {
+        console.error('音频增强处理失败:', error);
+        // 失败时返回原始数据
+        return audioData;
+    }
+}
+
+/**
+ * 应用音频增强处理
+ * @param {Float32Array} audioData 浮点音频数据
+ * @returns {Float32Array} 处理后的浮点音频数据
+ */
+function applyAudioEnhancements(audioData) {
+    // 克隆数据以避免修改原始数据
+    const enhancedData = new Float32Array(audioData);
+    
+    // 1. 应用语音增强
+    if (audioSettings.voiceEnhancement.enabled) {
+        // 语音增益处理
+        for (let i = 0; i < enhancedData.length; i++) {
+            // 应用非线性增益曲线增强信号(保持小信号特性，增强中等信号)
+            const sample = enhancedData[i];
+            const sign = Math.sign(sample);
+            const abs = Math.abs(sample);
+            
+            // 非线性压缩/增益曲线
+            let processed;
+            if (abs < 0.1) {
+                // 保持小信号完整性
+                processed = sample * audioSettings.voiceEnhancement.gain * 0.8;
+            } else if (abs < 0.4) {
+                // 中等信号增强
+                processed = sign * (Math.pow(abs, 0.8) * audioSettings.voiceEnhancement.gain);
+            } else {
+                // 大信号软饱和压缩
+                const compressed = sign * (1.0 - Math.exp(-(abs - 0.4) * 2));
+                processed = sign * (Math.min(abs * 0.9, compressed) * audioSettings.voiceEnhancement.gain);
+            }
+            
+            // 应用清晰度处理 - 通过增强瞬态
+            if (i > 0) {
+                const diff = Math.abs(enhancedData[i] - enhancedData[i-1]);
+                const clarityBoost = diff * audioSettings.voiceEnhancement.clarity * 0.5;
+                processed += clarityBoost * sign;
+            }
+            
+            // 确保结果在[-1, 1]范围内
+            enhancedData[i] = Math.max(-1, Math.min(1, processed));
+        }
+    }
+    
+    // 2. 应用均衡器
+    if (audioSettings.equalizer.enabled) {
+        // 简化的均衡器实现 - 在实际项目中应使用FFT或滤波器组实现
+        // 这里使用简单的峰值检测和增强
+        
+        // 简单的峰值增强
+        for (let i = 0; i < enhancedData.length; i++) {
+            // 人声范围加强 (模拟均衡效果)
+            enhancedData[i] *= 1.2; // 整体提升20%
+            
+            // 确保结果在[-1, 1]范围内
+            enhancedData[i] = Math.max(-1, Math.min(1, enhancedData[i]));
+        }
+    }
+    
+    // 3. 最终处理 - 轻微饱和度压缩以避免过载
+    for (let i = 0; i < enhancedData.length; i++) {
+        // 软饱和度压缩 (tanh函数模拟)
+        enhancedData[i] = Math.tanh(enhancedData[i] * 0.95);
+    }
+    
+    return enhancedData;
 }
 
 /**
@@ -73,6 +343,33 @@ if (!streamMode) {
  */
 async function streamAudio() {
     console.error('开始音频流传输...');
+
+    console.error('流模式参数检查:');
+    console.error('- canSaveFiles:', canSaveFiles);
+    console.error('- recordingsDir:', recordingsDir);
+    console.error('- streamMode:', streamMode);
+    console.error('- 工作区路径参数索引:', args.indexOf('-workspace'));
+    console.error('- 完整参数列表:', args);
+    
+    // 为流模式准备录音文件（如果有工作区）
+    let streamRecordingFile = null;
+    let streamOutputFile = null;
+    
+    if (canSaveFiles && recordingsDir) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const uniqueId = Math.random().toString(36).substring(2, 10);
+        streamRecordingFile = path.join(recordingsDir, `stream_${timestamp}_${uniqueId}.wav`);
+        
+        try {
+            // 创建WAV文件和写入头部
+            streamOutputFile = fs.createWriteStream(streamRecordingFile);
+            streamOutputFile.write(createWavHeader());
+            console.error(`将保存流音频到: ${streamRecordingFile}`);
+        } catch (err) {
+            console.error(`创建流录音文件失败: ${err}`);
+            streamOutputFile = null;
+        }
+    }
     
     return new Promise((resolve, reject) => {
         try {
@@ -96,6 +393,9 @@ async function streamAudio() {
             
             // 跟踪发送的数据包序号
             let sequenceNumber = 0;
+            
+            // 记录音频数据总大小，用于更新WAV头部
+            let totalAudioDataSize = 0;
             
             ws.on('open', () => {
                 console.error('已连接到WebSocket服务器，开始传输音频流');
@@ -132,17 +432,18 @@ async function streamAudio() {
                     type: 'init',
                     role: 'streamer',
                     format: {
-                        sampleRate: 44100,
-                        numChannels: 1,
-                        bitsPerSample: 16
-                    }
+                        sampleRate: audioSettings.sampleRate,
+                        numChannels: audioSettings.numChannels,
+                        bitsPerSample: audioSettings.bitsPerSample
+                    },
+                    enhancementEnabled: audioSettings.enhancementEnabled
                 }));
                 
                 // 开始录音
                 const micStream = mic.startRecording();
                 
                 // 数据处理 - 发送音频数据块
-                micStream.on('data', (data) => {
+                micStream.on('data', async (data) => {
                     // 检查WebSocket连接状态
                     if (ws.readyState === WebSocket.OPEN) {
                         try {
@@ -158,9 +459,9 @@ async function streamAudio() {
                             
                             if (!hasRiffHeader) {
                                 // 添加WAV头部 (44字节标准WAV头)
-                                const sampleRate = 44100;
-                                const numChannels = 1;
-                                const bitsPerSample = 16;
+                                const sampleRate = audioSettings.sampleRate;
+                                const numChannels = audioSettings.numChannels;
+                                const bitsPerSample = audioSettings.bitsPerSample;
                                 
                                 // 创建头部
                                 const headerBytes = Buffer.alloc(44);
@@ -204,8 +505,33 @@ async function streamAudio() {
                                 console.log('音频数据已包含WAV头部');
                             }
                             
+                            // 应用音频增强处理
+                            const enhancedAudio = await enhanceAudioData(audioDataWithHeader);
+                            console.log(`音频增强处理完成，处理后大小: ${enhancedAudio.length} 字节`);
+                            
+                            // 保存到本地文件（如果启用）
+                            if (streamOutputFile) {
+                                try {
+                                    // 提取纯音频数据（不含WAV头）
+                                    let rawAudioData;
+                                    if (hasRiffHeader || enhancedAudio.length > 44) {
+                                        // 如果有头部，跳过前44字节
+                                        rawAudioData = enhancedAudio.slice(44);
+                                    } else {
+                                        rawAudioData = enhancedAudio;
+                                    }
+                                    
+                                    // 写入原始音频数据
+                                    streamOutputFile.write(rawAudioData);
+                                    totalAudioDataSize += rawAudioData.length;
+                                    console.log(`已将${rawAudioData.length}字节音频数据写入文件，总计: ${totalAudioDataSize}字节`);
+                                } catch (writeErr) {
+                                    console.error(`写入音频文件失败: ${writeErr}`);
+                                }
+                            }
+                            
                             // 将处理后的二进制数据转换为Base64字符串
-                            const base64Audio = audioDataWithHeader.toString('base64');
+                            const base64Audio = enhancedAudio.toString('base64');
                             console.log(`Base64编码后长度: ${base64Audio.length} 字符`);
                             
                             // 构建JSON消息
@@ -214,10 +540,11 @@ async function streamAudio() {
                                 audioData: base64Audio,
                                 sequence: sequenceNumber++,
                                 format: {
-                                    sampleRate: 44100,
-                                    numChannels: 1,
-                                    bitsPerSample: 16,
-                                    isWav: true // 标记为WAV格式
+                                    sampleRate: audioSettings.sampleRate,
+                                    numChannels: audioSettings.numChannels,
+                                    bitsPerSample: audioSettings.bitsPerSample,
+                                    isWav: true, // 标记为WAV格式
+                                    enhanced: audioSettings.enhancementEnabled
                                 },
                                 timestamp: Date.now()
                             };
@@ -241,6 +568,15 @@ async function streamAudio() {
                 micStream.on('error', (err) => {
                     console.error('录音错误:', err);
                     mic.stopRecording();
+                    
+                    // 关闭流文件
+                    if (streamOutputFile) {
+                        streamOutputFile.end();
+                        // 更新WAV文件头
+                        updateWavHeader(streamRecordingFile, totalAudioDataSize);
+                        console.error(`流音频文件已关闭并更新头部，总大小: ${totalAudioDataSize}字节`);
+                    }
+                    
                     ws.close();
                     reject(err);
                 });
@@ -249,6 +585,15 @@ async function streamAudio() {
                 ws.on('close', () => {
                     console.error('WebSocket连接已关闭，停止音频流');
                     mic.stopRecording();
+                    
+                    // 关闭流文件
+                    if (streamOutputFile) {
+                        streamOutputFile.end();
+                        // 更新WAV文件头
+                        updateWavHeader(streamRecordingFile, totalAudioDataSize);
+                        console.error(`流音频文件已关闭并更新头部，总大小: ${totalAudioDataSize}字节`);
+                    }
+                    
                     resolve();
                 });
                 
@@ -256,6 +601,15 @@ async function streamAudio() {
                 ws.on('error', (err) => {
                     console.error('WebSocket错误:', err);
                     mic.stopRecording();
+                    
+                    // 关闭流文件
+                    if (streamOutputFile) {
+                        streamOutputFile.end();
+                        // 更新WAV文件头
+                        updateWavHeader(streamRecordingFile, totalAudioDataSize);
+                        console.error(`流音频文件已关闭并更新头部，总大小: ${totalAudioDataSize}字节`);
+                    }
+                    
                     reject(err);
                 });
                 
@@ -268,8 +622,49 @@ async function streamAudio() {
                         if (msg.type === 'command' && msg.action === 'stop') {
                             console.error('接收到停止命令，结束音频流');
                             mic.stopRecording();
+                            
+                            // 关闭流文件
+                            if (streamOutputFile) {
+                                streamOutputFile.end();
+                                // 更新WAV文件头
+                                updateWavHeader(streamRecordingFile, totalAudioDataSize);
+                                console.error(`流音频文件已关闭并更新头部，总大小: ${totalAudioDataSize}字节`);
+                            }
+                            
                             ws.close();
                             resolve();
+                        }
+                        
+                        // 处理音频设置更改命令
+                        if (msg.type === 'command' && msg.action === 'updateAudioSettings') {
+                            console.error('接收到音频设置更新命令');
+                            if (msg.settings) {
+                                // 更新音频设置
+                                if (typeof msg.settings.enhancementEnabled !== 'undefined') {
+                                    audioSettings.enhancementEnabled = msg.settings.enhancementEnabled;
+                                }
+                                
+                                if (msg.settings.voiceEnhancement) {
+                                    audioSettings.voiceEnhancement = {
+                                        ...audioSettings.voiceEnhancement,
+                                        ...msg.settings.voiceEnhancement
+                                    };
+                                }
+                                
+                                if (msg.settings.equalizer) {
+                                    audioSettings.equalizer.enabled = 
+                                        msg.settings.equalizer.enabled !== undefined ? 
+                                        msg.settings.equalizer.enabled : 
+                                        audioSettings.equalizer.enabled;
+                                        
+                                    if (msg.settings.equalizer.bands) {
+                                        // 更新均衡器频段
+                                        audioSettings.equalizer.bands = msg.settings.equalizer.bands;
+                                    }
+                                }
+                                
+                                console.error('音频设置已更新');
+                            }
                         }
                     } catch (err) {
                         console.error('解析服务器消息失败:', err);
@@ -280,6 +675,15 @@ async function streamAudio() {
                 process.on('SIGINT', () => {
                     console.error('接收到中断信号，结束音频流');
                     mic.stopRecording();
+                    
+                    // 关闭流文件
+                    if (streamOutputFile) {
+                        streamOutputFile.end();
+                        // 更新WAV文件头
+                        updateWavHeader(streamRecordingFile, totalAudioDataSize);
+                        console.error(`流音频文件已关闭并更新头部，总大小: ${totalAudioDataSize}字节`);
+                    }
+                    
                     ws.close();
                     resolve();
                 });
@@ -288,11 +692,25 @@ async function streamAudio() {
             // 处理连接失败
             ws.on('error', (err) => {
                 console.error('连接到WebSocket服务器失败:', err);
+                
+                // 关闭流文件
+                if (streamOutputFile) {
+                    streamOutputFile.end();
+                    console.error('流音频文件已关闭（连接失败）');
+                }
+                
                 reject(err);
             });
             
         } catch (err) {
             console.error('初始化音频流传输时出错:', err);
+            
+            // 关闭流文件
+            if (streamOutputFile) {
+                streamOutputFile.end();
+                console.error('流音频文件已关闭（初始化错误）');
+            }
+            
             reject(err);
         }
     });
@@ -308,11 +726,15 @@ async function recordAudio(seconds) {
     
     return new Promise((resolve, reject) => {
         try {
-            // 创建输出文件流
-            const outputFile = fs.createWriteStream(savedWavFile);
-            
-            // 初始化WAV文件头
-            outputFile.write(createWavHeader());
+            // 创建输出文件流（如果可以保存文件）
+            let outputFile = null;
+            if (canSaveFiles && savedWavFile) {
+                outputFile = fs.createWriteStream(savedWavFile);
+                outputFile.write(createWavHeader());
+                console.error(`将录音保存到: ${savedWavFile}`);
+            } else {
+                console.error('不保存录音文件，只处理音频数据');
+            }
             
             // 记录数据大小，用于后续更新头部
             let dataSize = 0;
@@ -324,49 +746,96 @@ async function recordAudio(seconds) {
             // 开始录音
             const micStream = mic.startRecording();
             
+            // 处理收集的音频数据段
+            let audioChunks = [];
+            
             // 数据处理
             micStream.on('data', (data) => {
                 dataSize += data.length;
-                outputFile.write(data);
+                // 存储音频段，稍后处理
+                audioChunks.push(data);
             });
             
             // 错误处理
             micStream.on('error', (err) => {
                 console.error('录音错误:', err);
                 mic.stopRecording();
-                outputFile.end();
+                if (outputFile) outputFile.end();
                 reject(err);
             });
             
             // 设置定时器，在指定时间后停止录音
-            setTimeout(() => {
+            setTimeout(async () => {
                 console.error('停止录音');
                 mic.stopRecording();
                 
-                // 完成文件写入
-                outputFile.end();
-                
-                // 更新WAV文件头中的数据大小
-                updateWavHeader(savedWavFile, dataSize);
-                
-                console.error(`录音已完成，文件保存至: ${savedWavFile}`);
-                
-                // 提取文件名
-                const filename = path.basename(savedWavFile);
-                
-                // 读取文件并转为base64
-                fs.readFile(savedWavFile, (err, fileData) => {
-                    if (err) {
-                        reject(err);
-                        return;
-                    }
+                try {
+                    // 合并所有音频段
+                    const combinedAudio = Buffer.concat(audioChunks);
                     
-                    const base64Data = fileData.toString('base64');
-                    resolve({
-                        audioData: base64Data,
-                        filename: filename
-                    });
-                });
+                    // 应用音频增强
+                    const enhancedAudio = await enhanceAudioData(combinedAudio);
+                    console.error(`音频增强处理完成，提升了声音质量`);
+                    
+                    // 如果可以保存文件，写入处理后的音频数据
+                    if (canSaveFiles && outputFile) {
+                        // 写入处理后的音频数据
+                        outputFile.write(enhancedAudio);
+                        
+                        // 完成文件写入
+                        outputFile.end();
+                        
+                        // 更新WAV文件头中的数据大小
+                        updateWavHeader(savedWavFile, enhancedAudio.length);
+                        
+                        console.error(`录音已完成，文件保存至: ${savedWavFile}`);
+                        
+                        // 提取文件名
+                        const filename = path.basename(savedWavFile);
+                        
+                        // 读取文件并转为base64
+                        fs.readFile(savedWavFile, (err, fileData) => {
+                            if (err) {
+                                reject(err);
+                                return;
+                            }
+                            
+                            const base64Data = fileData.toString('base64');
+                            resolve({
+                                audioData: base64Data,
+                                filename: filename,
+                                enhanced: true
+                            });
+                        });
+                    } else {
+                        // 没有保存文件，直接处理内存中的音频数据
+                        console.error('没有保存到文件，直接处理内存中的音频数据');
+                        
+                        // 创建一个WAV文件结构的完整内存缓冲区
+                        const header = createWavHeader();
+                        const completeAudio = Buffer.concat([header, enhancedAudio]);
+                        
+                        // 更新头部信息
+                        completeAudio.writeUInt32LE(enhancedAudio.length, 40); // 数据大小
+                        completeAudio.writeUInt32LE(enhancedAudio.length + 36, 4); // 文件大小 - 8
+                        
+                        // 生成一个虚拟文件名以供识别
+                        const virtualFilename = `virtual_recording_${Date.now()}_${Math.random().toString(36).substring(2, 10)}.wav`;
+                        
+                        // 直接将缓冲区转换为base64
+                        const base64Data = completeAudio.toString('base64');
+                        
+                        resolve({
+                            audioData: base64Data,
+                            filename: virtualFilename,
+                            enhanced: true,
+                            virtual: true // 标记为虚拟文件，未保存到磁盘
+                        });
+                    }
+                } catch (error) {
+                    console.error('处理音频数据失败:', error);
+                    reject(error);
+                }
             }, seconds * 1000);
             
         } catch (err) {
@@ -381,10 +850,10 @@ async function recordAudio(seconds) {
  * @returns {Buffer} WAV文件头
  */
 function createWavHeader() {
-    // WAV文件参数 - 使用更常见的参数
-    const sampleRate = 44100;      // 采样率
-    const numChannels = 1;         // 单声道
-    const bitsPerSample = 16;      // 采样位深
+    // WAV文件参数
+    const sampleRate = audioSettings.sampleRate;
+    const numChannels = audioSettings.numChannels;
+    const bitsPerSample = audioSettings.bitsPerSample;
     
     // 计算派生值
     const blockAlign = numChannels * bitsPerSample / 8;

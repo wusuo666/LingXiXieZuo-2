@@ -35,8 +35,8 @@
         "category": "灵犀协作"
       }
     ],
-    "keybindings": [ ],
-    "menus": { },
+    "keybindings": [],
+    "menus": {},
     "viewsContainers": {
       "activitybar": [
         {
@@ -62,13 +62,16 @@
     "test": "node ./test/runTest.js"
   },
   "dependencies": {
+    "audio-buffer": "^5.0.0",
     "axios": "^1.6.2",
-    "openai": "^4.98.0",
-    "uuid": "^9.0.1",
     "node-microphone": "^0.1.6",
+    "openai": "^4.98.0",
     "socket.io": "^4.8.1",
     "speaker": "^0.5.5",
+    "uuid": "^9.0.1",
     "vscode": "^1.1.37",
+    "wav-decoder": "^1.3.0",
+    "wav-encoder": "^1.3.0",
     "ws": "^8.18.2",
     "xmldom": "^0.6.0"
   },

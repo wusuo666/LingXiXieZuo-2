@@ -11,11 +11,6 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onCommand:lingxixiezuo.testCopyText",
-    "onCommand:lingxixiezuo.testCopyCode",
-    "onCommand:lingxixiezuo.testRead",
-    "onCommand:lingxixiezuo.showHistory",
-    "onCommand:lingxixiezuo.pasteSmart",
     "onCommand:lingxixiezuo.createDrawio",
     "onCommand:lingxixiezuo.configAgentApi",
     "onCommand:lingxixiezuo.recordAudio",
@@ -24,31 +19,6 @@
   "main": "./extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "lingxixiezuo.testCopyText",
-        "title": "灵犀协作: 测试复制文本",
-        "category": "灵犀协作"
-      },
-      {
-        "command": "lingxixiezuo.testCopyCode",
-        "title": "灵犀协作: 测试复制代码",
-        "category": "灵犀协作"
-      },
-      {
-        "command": "lingxixiezuo.testRead",
-        "title": "灵犀协作: 测试读取剪贴板",
-        "category": "灵犀协作"
-      },
-      {
-        "command": "lingxixiezuo.showHistory",
-        "title": "灵犀协作: 查看剪贴板历史",
-        "category": "灵犀协作"
-      },
-      {
-        "command": "lingxixiezuo.pasteSmart",
-        "title": "灵犀协作: 智能粘贴",
-        "category": "灵犀协作"
-      },
       {
         "command": "lingxixiezuo.configAgentApi",
         "title": "灵犀协作: 配置智谱AI API",
@@ -65,58 +35,8 @@
         "category": "灵犀协作"
       }
     ],
-    "keybindings": [
-      {
-        "command": "lingxixiezuo.testCopyText",
-        "key": "ctrl+shift+c",
-        "mac": "cmd+shift+c",
-        "when": "editorHasSelection"
-      },
-      {
-        "command": "lingxixiezuo.testCopyCode",
-        "key": "ctrl+shift+x",
-        "mac": "cmd+shift+x",
-        "when": "editorHasSelection"
-      },
-      {
-        "command": "lingxixiezuo.testRead",
-        "key": "ctrl+shift+v",
-        "mac": "cmd+shift+v"
-      },
-      {
-        "command": "lingxixiezuo.showHistory",
-        "key": "ctrl+shift+h",
-        "mac": "cmd+shift+h"
-      },
-      {
-        "command": "lingxixiezuo.pasteSmart",
-        "key": "ctrl+alt+v",
-        "mac": "cmd+alt+v"
-      }
-    ],
-    "menus": {
-      "editor/context": [
-        {
-          "command": "lingxixiezuo.testCopyText",
-          "when": "editorHasSelection",
-          "group": "clipboard"
-        },
-        {
-          "command": "lingxixiezuo.testCopyCode",
-          "when": "editorHasSelection",
-          "group": "clipboard"
-        },
-        {
-          "command": "lingxixiezuo.showHistory",
-          "group": "clipboard"
-        },
-        {
-          "command": "lingxixiezuo.pasteSmart",
-          "when": "editorTextFocus",
-          "group": "clipboard@2"
-        }
-      ]
-    },
+    "keybindings": [ ],
+    "menus": { },
     "viewsContainers": {
       "activitybar": [
         {

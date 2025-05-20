@@ -11,7 +11,7 @@
     <div class="tab-container">
         <div class="tab-header">
             <button class="tab-button active" data-tab="collab-area">协作区</button>
-            <button class="tab-button" data-tab="history">History</button>
+            <!-- <button class="tab-button" data-tab="history">History</button> -->
             <button class="tab-button" data-tab="canvas">Canvas</button>
         </div>
         <div class="tab-content">
@@ -432,7 +432,7 @@
                     </div>
                 </div>
             </div>
-            <div class="tab-pane" id="history">
+            <!-- <div class="tab-pane" id="history">
                 <div class="history-container">
                     <h3 class="history-title">剪贴板历史</h3>
                     <div id="clip-history-list" class="clip-history-list"></div>
@@ -441,7 +441,7 @@
                         <div class="preview-content"></div>
                     </div>
                 </div>
-            </div>
+            </div> -->
             <div class="tab-pane" id="canvas">
                 <div class="canvas-pane live-share-style">
                     <div class="canvas-container">
@@ -449,13 +449,11 @@
                             <h3>协同画布</h3>
                             <p>创建和管理可共享的流程图、架构图等</p>
                         </div>
-                        <div class="canvas-tools">
-                            <button id="canvas-action-btn" class="canvas-button">
-                                <span class="button-icon">+</span>
+                        <div class="canvas-tools" style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 0;">
+                            <button id="canvas-action-btn" class="canvas-button left-btn">
                                 新建画布
                             </button>
-                            <button id="add-memo-btn" class="canvas-button">
-                                <span class="button-icon">📝</span>
+                            <button id="add-memo-btn" class="canvas-button right-btn">
                                 添加纪要
                             </button>
                         </div>
@@ -819,9 +817,17 @@
             line-height: 1.6;
         }
         .canvas-tools {
-            margin: 10px 0 25px 0;
             display: flex;
-            justify-content: flex-start;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            gap: 0;
+        }
+        .canvas-button.left-btn {
+            margin-right: auto;
+        }
+        .canvas-button.right-btn {
+            margin-left: auto;
         }
         .canvas-button {
             background: linear-gradient(135deg, #3794ff 60%, #4ec9b0 100%);
@@ -836,7 +842,9 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
+            text-align: center;
         }
         .button-icon {
             font-size: 18px;
@@ -2138,6 +2146,22 @@
                 rgba(55, 148, 255, 0.8) 0%, 
                 rgba(55, 148, 255, 0.1) 100%);
             border-radius: 2px;
+        }
+        @media (max-width: 500px) {
+            .canvas-tools {
+                flex-direction: row;
+                gap: 0;
+            }
+            .canvas-button {
+                min-width: 0;
+                flex: 1 1 0;
+                font-size: 14px;
+                padding: 10px 6px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+            }
         }
     </style>
     

@@ -424,10 +424,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     tabId: tabId
                 });
             }
-            // 如果切换到 history 标签，主动请求最新历史记录
-            if (tabId === 'history' && window.vscode) {
-                window.vscode.postMessage({ type: 'getClipboardHistory' });
-            }
         });
     });
     // 内部tab切换
@@ -474,7 +470,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     // 剪贴板历史相关
-    let historyData = [];
     // 画布列表相关
     let canvasListData = [];
     const canvasListEl = document.querySelector('.canvas-list');
@@ -482,10 +477,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('message', event => {
         const message = event.data;
         console.log('收到消息:', message);
-        if (message.type === 'clipboardHistory') {
-            historyData = message.data || [];
-            renderHistoryList(historyData);
-        } else if (message.type === 'canvasList') {
+        if (message.type === 'canvasList') {
             canvasListData = message.data || [];
             renderCanvasList(canvasListData);
         } else if (message.command === 'agentResponse') {
@@ -592,11 +584,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
-    // 剪贴板历史渲染
-    const listEl = document.getElementById('clip-history-list');
-    const previewEl = document.getElementById('clip-preview');
-    const previewContentEl = previewEl.querySelector('.preview-content');
-    const previewPlaceholderEl = previewEl.querySelector('.preview-placeholder');
     function getTypeIcon(type) {
         switch(type) {
             case 'code': return '📝';
@@ -604,38 +591,6 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'image': return '🖼️';
             default: return '❓';
         }
-    }
-    function renderHistoryList(history) {
-        listEl.innerHTML = '';
-        if (!history || history.length === 0) {
-            listEl.innerHTML = '<div class="empty-history">暂无历史记录</div>';
-            previewContentEl.textContent = '';
-            previewContentEl.classList.remove('active');
-            previewPlaceholderEl.style.display = 'block';
-            return;
-        }
-        history.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'clip-history-item';
-            div.title = item.content;
-            div.innerHTML = `
-                <span class="clip-type">${getTypeIcon(item.type)}</span>
-                <span class="clip-content">${item.content.length > 30 ? item.content.slice(0, 30) + '...' : item.content}</span>
-                <span class="clip-time">${item.time || ''}</span>
-            `;
-            div.onclick = function() {
-                document.querySelectorAll('.clip-history-item').forEach(i => i.classList.remove('selected'));
-                div.classList.add('selected');
-                previewContentEl.textContent = item.content;
-                previewContentEl.classList.add('active');
-                previewPlaceholderEl.style.display = 'none';
-            };
-            listEl.appendChild(div);
-        });
-    }
-    // 页面加载后请求剪贴板历史数据
-    if (window.vscode) {
-        window.vscode.postMessage({ type: 'getClipboardHistory' });
     }
     // 画布列表渲染
     function renderCanvasList(canvasList) {

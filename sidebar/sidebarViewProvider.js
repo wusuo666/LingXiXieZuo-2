@@ -1,7 +1,6 @@
 const vscode = require('vscode');
 const fs = require('fs');
 const path = require('path');
-const { getClipboardHistory } = require('../clipboard');
 const agentApi = require('../agent/agentApi');
 const { connectToServer, sendMessage, disconnectFromServer, isConnected } = require('../chatroom/client');
 const WebSocket = require('ws');
@@ -37,7 +36,6 @@ class LingxiSidebarProvider {
             activeInnerTab: 'chat',
             chatMessages: [],
             agentMessages: [],
-            clipboardHistory: [],
             canvasList: [],
             mcpServerStatus: '未启动',
             chatServerConnected: false
@@ -875,22 +873,7 @@ class LingxiSidebarProvider {
     /**
      * 向 Webview 发送剪贴板历史记录
      */
-    sendClipboardHistory() {
-        if (!this._webviewView) {
-            return;
-        }
-
-        const history = getClipboardHistory();
-        // 格式化时间戳和类型
-        const formatted = history.map(item => ({
-            id: item.id,
-            content: typeof item.content === 'string' ? item.content : JSON.stringify(item.content),
-            type: item.type,
-            time: item.timestamp ? new Date(item.timestamp).toLocaleString([], {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'}) : ''
-        }));
-
-        this._webviewView.webview.postMessage({ type: 'clipboardHistory', data: formatted });
-    }
+    // sendClipboardHistory() { ... } // 整个函数移除
 
     /**
      * 扫描并获取工作区中的画布文件列表
@@ -1367,16 +1350,11 @@ class LingxiSidebarProvider {
 
         // 监听 webview 消息，实现 clipboardHistory 同步
         webviewView.webview.onDidReceiveMessage(async (message) => {
-            if (message.type === 'getClipboardHistory') {
-                this.sendClipboardHistory();
-            } else if (message.command === 'switchTab') {
+            if (message.command === 'switchTab') {
                 // 保存当前活动标签页状态
                 this._viewState.activeTab = message.tabId;
                 
-                if (message.tabId === 'history') {
-                    // 切换到 History 标签页时刷新数据
-                    this.sendClipboardHistory();
-                } else if (message.tabId === 'canvas') {
+                if (message.tabId === 'canvas') {
                     // 切换到 Canvas 标签页时加载画布列表
                     this.sendCanvasList();
                 }
@@ -1542,10 +1520,7 @@ class LingxiSidebarProvider {
         this._webviewView.webview.onDidReceiveMessage(async (message) => {
             switch (message.command) {
                 case 'switchTab':
-                    if (message.tabId === 'history') {
-                        // 切换到 History 标签页时刷新数据
-                        this.sendClipboardHistory();
-                    } else if (message.tabId === 'canvas') {
+                    if (message.tabId === 'canvas') {
                         // 切换到 Canvas 标签页时加载画布列表
                         this.sendCanvasList();
                     } else if (message.tabId === 'collab-area') {
@@ -1567,9 +1542,6 @@ class LingxiSidebarProvider {
                 case 'createCanvas':
                     // 调用创建Excalidraw画布的命令
                     vscode.commands.executeCommand('lingxixiezuo.createExcalidraw');
-                    break;
-                case 'getClipboardHistory':
-                    this.sendClipboardHistory();
                     break;
                 case 'getCanvasList':
                     this.sendCanvasList();
@@ -1837,25 +1809,6 @@ class LingxiSidebarProvider {
                         } catch (error) {
                             console.error('停止MCP服务器失败:', error);
                             vscode.window.showErrorMessage(`停止MCP服务器失败: ${error.message}`);
-                        }
-                    }
-                    break;
-                case 'copyToClipboard':
-                    // 复制文本到剪贴板
-                    if (message.text) {
-                        try {
-                            await vscode.env.clipboard.writeText(message.text);
-                            this._webviewView.webview.postMessage({
-                                command: 'clipboardCopyResult',
-                                success: true
-                            });
-                        } catch (error) {
-                            console.error('复制到剪贴板失败:', error);
-                            this._webviewView.webview.postMessage({
-                                command: 'clipboardCopyResult',
-                                success: false,
-                                error: error.message
-                            });
                         }
                     }
                     break;
@@ -2491,8 +2444,8 @@ class LingxiSidebarProvider {
         });
         
         // 重新发送各种数据
-        this.sendClipboardHistory();
-        this.sendCanvasList();
+        // 移除sendClipboardHistory函数调用
+        // 移除sendCanvasList函数调用
         
         // 重新发送API密钥状态
         this.initializeApiConfiguration().catch(err => {

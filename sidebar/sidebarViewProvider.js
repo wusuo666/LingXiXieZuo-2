@@ -88,16 +88,6 @@ class LingxiSidebarProvider {
 
                     // 处理不同类型的消息
                     switch (message.type) {
-                        // case 'canvas':
-                        //     console.log('处理画布消息:', message);
-                        //     if (message.action === 'list' && message.canvasList) {
-                        //         console.log('收到画布列表:', message.canvasList);
-                        //         await this.handleCanvasList(message.canvasList);
-                        //     } else {
-                        //         await this.handleCanvasMessage(message);
-                        //     }
-                        //     break;
-                            
                         case 'message':
                             this.handleChatMessage(message);
                             if (message.content) {
@@ -141,16 +131,7 @@ class LingxiSidebarProvider {
                                     console.log('未在消息中找到画布链接');
                                 }
                                 
-                                // 将消息显示在聊天界面中
-                                if (this._webviewView) {
-                                    this._webviewView.webview.postMessage({
-                                        command: 'chatResponse',
-                                        sender: message.sender.name,
-                                        content: message.content,
-                                        time: new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}),
-                                        canvasData: message.canvasData
-                                    });
-                                }
+                                // 移除重复发送的代码，因为handleChatMessage方法中已经处理了消息发送
                             }
                             break;
                             
@@ -983,7 +964,25 @@ class LingxiSidebarProvider {
         if (!this._webviewView || !message) return;
         
         try {
-            if (message.type === 'message' || message.type === 'system') {
+            // 检查是否为当前用户发送的消息
+            if (message.type === 'message'|| message.type === 'system') {
+                const isFromCurrentUser = message.sender && 
+                                         message.sender.id && 
+                                         this._userId && 
+                                         message.sender.id === this._userId;
+                
+                if (isFromCurrentUser) {
+                    console.log('已忽略当前用户自己发送的文字消息:', message.content);
+                    return; // 不向前端发送当前用户自己的消息
+                }
+                
+                // 不是当前用户的消息，正常发送
+                this._webviewView.webview.postMessage({
+                    command: 'addChatMessage',
+                    message
+                });
+            } else if (message.type === 'system') {
+                // 系统消息正常显示
                 this._webviewView.webview.postMessage({
                     command: 'addChatMessage',
                     message
@@ -994,7 +993,18 @@ class LingxiSidebarProvider {
                     message
                 });
             } else if (message.type === 'audioMessage') {
-                // 处理语音消息
+                // 检查是否为当前用户发送的语音消息
+                const isFromCurrentUser = message.sender && 
+                                         message.sender.id && 
+                                         this._userId && 
+                                         message.sender.id === this._userId;
+                
+                if (isFromCurrentUser) {
+                    console.log('已忽略当前用户自己发送的语音消息:', message.id);
+                    return; // 不向前端发送当前用户自己的语音消息
+                }
+                
+                // 处理其他用户的语音消息
                 this._webviewView.webview.postMessage({
                     command: 'addAudioMessage',
                     message
@@ -1474,89 +1484,6 @@ class LingxiSidebarProvider {
                     }
                 }, 1000);
             }
-            
-            // // 添加消息处理
-            // const originalOnMessage = this._chatClient.onmessage;
-            // this._chatClient.onmessage = async (event) => {
-            //     // 调用原始处理函数
-            //     if (originalOnMessage) {
-            //         originalOnMessage(event);
-            //     }
-                
-            //     // 添加我们自己的处理逻辑
-            //     try {
-
-            //         console.log(2222222222222);
-            //         console.log(2222222222222);
-            //         console.log(2222222222222);
-            //         console.log(2222222222222);
-            //         console.log(2222222222222);
-            //         console.log(2222222222222);
-
-
-            //         console.log('接收到WebSocket消息:', event.data);
-            //         const message = JSON.parse(event.data);
-                    
-            //         // 检测消息是否包含画布链接
-            //         if (message.type === 'message' && message.content) {
-            //             console.log('检查消息是否包含画布链接:', message.content);
-            //             const canvasLinkPattern = /https?:\/\/([^\/]+)\/canvas\/([^"\s]+)/;
-            //             const canvasLinkMatch = message.content.match(canvasLinkPattern);
-            //             console.log('画布链接匹配结果:', canvasLinkMatch);
-                        
-            //             if (canvasLinkMatch) {
-            //                 const serverAddress = canvasLinkMatch[1]; // 第一个捕获组是服务器地址(包含可选端口号)
-            //                 const canvasId = canvasLinkMatch[2]; // 第二个捕获组是画布ID
-            //                 console.log('检测到画布链接，服务器:', serverAddress);
-            //                 console.log('检测到画布链接，ID:', canvasId);
-                            
-            //                 console.log(66666666666666666);
-            //                 console.log(message.sender);
-            //                 console.log(message.sender.name);
-            //                 console.log(message);
-
-            //                 // 询问用户是否下载远程画布
-            //                 let senderName = '其他用户';
-            //                 if (message.sender) {
-            //                     if (typeof message.sender === 'object' && message.sender.name) {
-            //                         senderName = message.sender.name;
-            //                     } else if (typeof message.sender === 'string') {
-            //                         senderName = message.sender;
-            //                     }
-            //                 }
-            //                 console.log(senderName);
-            //                 console.log(767777777777777777);
-
-            //                 console.log(message.content);
-            //                 // const answer = await vscode.window.showInformationMessage(
-            //                 //     `${senderName} 分享了一个画布，是否下载并打开？`, 
-            //                 //     '下载并打开', '忽略'
-            //                 // );
-                            
-            //                 if (answer === '下载并打开') {
-            //                     // 构造完整链接
-            //                     const fullLink = `http://${serverAddress}/canvas/${canvasId}`;
-            //                     console.log('提取的完整链接:', fullLink);
-                                
-            //                     // 下载远程画布
-            //                     await this.downloadRemoteCanvas(canvasId, fullLink);
-            //                 }
-            //             }
-            //         }
-                    
-            //         // 将消息发送到前端
-            //         if (this._webviewView) {
-            //             this._webviewView.webview.postMessage({
-            //                 command: 'chatResponse',
-            //                 sender: senderName,
-            //                 content: message.content || '空消息',
-            //                 time: new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
-            //             });
-            //         }
-            //     } catch (error) {
-            //         console.error('处理聊天消息时出错:', error);
-            //     }
-            // };
 
             // 更新服务器状态
             if (this._webviewView) {
@@ -1667,14 +1594,7 @@ class LingxiSidebarProvider {
                                 content: message.message
                             };
                             this._chatClient.send(JSON.stringify(chatMsg));
-
-                            const message = {
-                                type: 'message',
-                                content: content
-                                // 服务器会从连接上下文中获取 userId 和 roomId
-                              };
-                              wsClient.send(JSON.stringify(message));
-                              console.log('已发送消息:', content);
+                            console.log('已发送消息:', message.message);
                         } catch (error) {
                             console.error('发送聊天消息失败:', error);
                         }
@@ -2007,29 +1927,10 @@ class LingxiSidebarProvider {
                             
                             console.log('语音消息已发送，使用ID:', messageId, '文件名:', audioFilename);
                             
-                            // 直接在前端显示消息
+                            // 不再直接在前端显示本地消息，避免语音消息重复
+                            // 服务器会回传消息，由handleChatMessage方法处理
                             if (success) {
-                                // 构建一个本地消息对象，模拟从服务器返回的消息
-                                const localMessage = {
-                                    type: 'audioMessage',
-                                    userId: this._chatClient._userId || 'unknown_user',
-                                    sender: {
-                                        id: this._chatClient._userId,
-                                        name: this._userName
-                                    },
-                                    audioData: audioData,
-                                    duration: duration || 0,
-                                    id: messageId,
-                                    audioFilename: audioFilename,
-                                    timestamp: Date.now(),
-                                    isLocalMessage: true // 标记为本地发送的消息
-                                };
-                                
-                                // 给前端发送消息
-                                this._webviewView.webview.postMessage({
-                                    command: 'addAudioMessage',
-                                    message: localMessage
-                                });
+                                console.log('语音消息发送成功，不显示本地回显，等待服务器回传');
                             }
                             
                             this._webviewView.webview.postMessage({

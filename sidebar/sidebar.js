@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // tab页切换
     //全局变量 
     //语音消息全局变量
-    let currentUserId = 'unknown_user'; // 当前用户ID，默认值
+    // 使用全局的currentUserId变量，不再重新定义
     let currentlyPlayingAudio = null; // 当前正在播放的音频元素
     // 语音录制变量
     let mediaRecorder = null;
@@ -188,6 +188,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // 更新当前用户ID
         if (message.command === 'updateCurrentUser') {
             currentUserId = message.userId;
+            console.log('[调试] 更新当前用户ID:', currentUserId);
         }
         
         // 处理音频播放完成
@@ -254,13 +255,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 }
                 
-                // 发送语音消息，包含录音文件名和消息ID
+                // 发送语音消息，包含录音文件名和消息ID，确保包含当前用户ID
                 vscode.postMessage({
                     command: 'sendAudioMessage',
                     audioData: audioData,
                     duration: duration || Math.round((Date.now() - recordingStartTime) / 1000),
                     audioFilename: audioFilename,
-                    messageId: window.lastRecordedMessageId
+                    messageId: window.lastRecordedMessageId,
+                    userId: currentUserId // 确保包含当前用户ID
                 });
             } else if (error) {
                 console.error('录音失败:', error);
@@ -283,12 +285,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log('收到音频数据，准备播放', message.filename ? `文件名: ${message.filename}` : '');
                 playAudio(message.audioData, message.mimeType || 'audio/wav');
             }
-        }
-
-        // 更新当前用户ID (在websocket连接成功后由VSCode扩展发送)
-        if (message.command === 'updateCurrentUser') {
-            currentUserId = message.userId;
-            console.log('[调试] 更新当前用户ID:', currentUserId);
         }
 
         // 处理会议相关消息
@@ -1147,12 +1143,15 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
 }
 }
 
-// 处理接收到的语音消息
+/**
+ * 处理接收到的语音消息
+ * @param {Object} message 聊天消息对象
+ */
 function handleAudioMessage(message) {
     const chatMessages = document.querySelector('.chat-messages');
-    const isCurrentUser = message.userId === currentUserId;
+    const isCurrentUser = (message.userId === currentUserId);
     
-    // 创建消息容器
+    // 创建消息容器，确保当前用户消息显示在右侧，其他用户消息显示在左侧
     const messageRow = document.createElement('div');
     messageRow.className = isCurrentUser ? 'chat-row right' : 'chat-row left';
     

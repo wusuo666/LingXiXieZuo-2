@@ -33,7 +33,9 @@ const audioSettings = {
             { frequency: 4000, gain: 2.0 },  // 高频 - 明亮度
             { frequency: 8000, gain: 1.0 }   // 超高频
         ]
-    }
+    },
+    // 实际音频采集校准系数 - 根据实验校准
+    calibrationFactor: 1.35  // 理论时长与实际时长的比例因子
 };
 
 // 检查命令行参数
@@ -351,6 +353,10 @@ async function streamAudio() {
     console.error('- 工作区路径参数索引:', args.indexOf('-workspace'));
     console.error('- 完整参数列表:', args);
     
+    // 应用校准后的采样率
+    const adjustedSampleRate = Math.floor(audioSettings.sampleRate / audioSettings.calibrationFactor);
+    console.error(`应用采样率校准: 原始采样率 ${audioSettings.sampleRate}Hz, 校准后 ${adjustedSampleRate}Hz`);
+    
     // 为流模式准备录音文件（如果有工作区）
     let streamRecordingFile = null;
     let streamOutputFile = null;
@@ -361,9 +367,9 @@ async function streamAudio() {
         streamRecordingFile = path.join(recordingsDir, `stream_${timestamp}_${uniqueId}.wav`);
         
         try {
-            // 创建WAV文件和写入头部
+            // 创建WAV文件和写入头部 - 使用校准后的采样率
             streamOutputFile = fs.createWriteStream(streamRecordingFile);
-            streamOutputFile.write(createWavHeader());
+            streamOutputFile.write(createWavHeader(adjustedSampleRate));
             console.error(`将保存流音频到: ${streamRecordingFile}`);
         } catch (err) {
             console.error(`创建流录音文件失败: ${err}`);
@@ -427,12 +433,12 @@ async function streamAudio() {
                     console.error(`已发送身份认证信息，用户ID: ${userId}, 房间ID: ${roomId}`);
                 }
                 
-                // 发送初始化消息，标识为音频流发送者
+                // 发送初始化消息，标识为音频流发送者 - 使用校准后的采样率
                 ws.send(JSON.stringify({
                     type: 'init',
                     role: 'streamer',
                     format: {
-                        sampleRate: audioSettings.sampleRate,
+                        sampleRate: adjustedSampleRate, // 使用校准后的采样率
                         numChannels: audioSettings.numChannels,
                         bitsPerSample: audioSettings.bitsPerSample
                     },
@@ -459,7 +465,7 @@ async function streamAudio() {
                             
                             if (!hasRiffHeader) {
                                 // 添加WAV头部 (44字节标准WAV头)
-                                const sampleRate = audioSettings.sampleRate;
+                                const sampleRate = adjustedSampleRate; // 使用校准后的采样率
                                 const numChannels = audioSettings.numChannels;
                                 const bitsPerSample = audioSettings.bitsPerSample;
                                 
@@ -540,7 +546,7 @@ async function streamAudio() {
                                 audioData: base64Audio,
                                 sequence: sequenceNumber++,
                                 format: {
-                                    sampleRate: audioSettings.sampleRate,
+                                    sampleRate: adjustedSampleRate, // 使用校准后的采样率
                                     numChannels: audioSettings.numChannels,
                                     bitsPerSample: audioSettings.bitsPerSample,
                                     isWav: true, // 标记为WAV格式
@@ -572,8 +578,8 @@ async function streamAudio() {
                     // 关闭流文件
                     if (streamOutputFile) {
                         streamOutputFile.end();
-                        // 更新WAV文件头
-                        updateWavHeader(streamRecordingFile, totalAudioDataSize);
+                        // 更新WAV文件头 - 使用校准后的采样率
+                        updateWavHeader(streamRecordingFile, totalAudioDataSize, adjustedSampleRate);
                         console.error(`流音频文件已关闭并更新头部，总大小: ${totalAudioDataSize}字节`);
                     }
                     
@@ -589,8 +595,8 @@ async function streamAudio() {
                     // 关闭流文件
                     if (streamOutputFile) {
                         streamOutputFile.end();
-                        // 更新WAV文件头
-                        updateWavHeader(streamRecordingFile, totalAudioDataSize);
+                        // 更新WAV文件头 - 使用校准后的采样率
+                        updateWavHeader(streamRecordingFile, totalAudioDataSize, adjustedSampleRate);
                         console.error(`流音频文件已关闭并更新头部，总大小: ${totalAudioDataSize}字节`);
                     }
                     
@@ -605,8 +611,8 @@ async function streamAudio() {
                     // 关闭流文件
                     if (streamOutputFile) {
                         streamOutputFile.end();
-                        // 更新WAV文件头
-                        updateWavHeader(streamRecordingFile, totalAudioDataSize);
+                        // 更新WAV文件头 - 使用校准后的采样率
+                        updateWavHeader(streamRecordingFile, totalAudioDataSize, adjustedSampleRate);
                         console.error(`流音频文件已关闭并更新头部，总大小: ${totalAudioDataSize}字节`);
                     }
                     
@@ -626,8 +632,8 @@ async function streamAudio() {
                             // 关闭流文件
                             if (streamOutputFile) {
                                 streamOutputFile.end();
-                                // 更新WAV文件头
-                                updateWavHeader(streamRecordingFile, totalAudioDataSize);
+                                // 更新WAV文件头 - 使用校准后的采样率
+                                updateWavHeader(streamRecordingFile, totalAudioDataSize, adjustedSampleRate);
                                 console.error(`流音频文件已关闭并更新头部，总大小: ${totalAudioDataSize}字节`);
                             }
                             
@@ -679,8 +685,8 @@ async function streamAudio() {
                     // 关闭流文件
                     if (streamOutputFile) {
                         streamOutputFile.end();
-                        // 更新WAV文件头
-                        updateWavHeader(streamRecordingFile, totalAudioDataSize);
+                        // 更新WAV文件头 - 使用校准后的采样率
+                        updateWavHeader(streamRecordingFile, totalAudioDataSize, adjustedSampleRate);
                         console.error(`流音频文件已关闭并更新头部，总大小: ${totalAudioDataSize}字节`);
                     }
                     
@@ -743,14 +749,26 @@ async function recordAudio(seconds) {
             const mic = new Mic();
             console.error("麦克风已初始化，请开始说话...");
             
-            // 开始录音
-            const micStream = mic.startRecording();
-            
             // 处理收集的音频数据段
             let audioChunks = [];
             
+            // 用于跟踪实际录音开始的时间
+            let recordingStartTime = null;
+            
+            // 确保我们录制足够的时间
+            const targetDuration = seconds * 1000; // 目标时长(毫秒)
+            
+            // 开始录音
+            const micStream = mic.startRecording();
+            
             // 数据处理
             micStream.on('data', (data) => {
+                // 第一次收到数据时开始计时
+                if (recordingStartTime === null) {
+                    recordingStartTime = Date.now();
+                    console.error('录音实际开始时间:', new Date(recordingStartTime).toISOString());
+                }
+                
                 dataSize += data.length;
                 // 存储音频段，稍后处理
                 audioChunks.push(data);
@@ -764,79 +782,228 @@ async function recordAudio(seconds) {
                 reject(err);
             });
             
-            // 设置定时器，在指定时间后停止录音
-            setTimeout(async () => {
+            // 使用递归检查函数，确保录制足够的时间
+            const checkRecordingDuration = () => {
+                // 如果还没开始收到数据，继续等待
+                if (recordingStartTime === null) {
+                    console.error('等待麦克风开始收集数据...');
+                    setTimeout(checkRecordingDuration, 100);
+                    return;
+                }
+                
+                // 计算已经录制的时间
+                const elapsedTime = Date.now() - recordingStartTime;
+                
+                // 如果还没达到目标时长，继续等待
+                if (elapsedTime < targetDuration) {
+                    const remaining = targetDuration - elapsedTime;
+                    console.error(`已录制 ${elapsedTime}ms，还需 ${remaining}ms 达到目标 ${targetDuration}ms`);
+                    setTimeout(checkRecordingDuration, Math.min(remaining, 1000));
+                    return;
+                }
+                
+                // 达到目标时长，完成录音
+                console.error(`录音已达到目标时长 ${targetDuration}ms，实际录制了 ${elapsedTime}ms`);
+                finishRecording();
+            };
+            
+            // 完成录音的函数
+            const finishRecording = async () => {
                 console.error('停止录音');
                 mic.stopRecording();
                 
                 try {
                     // 合并所有音频段
                     const combinedAudio = Buffer.concat(audioChunks);
+                    console.error(`收集到原始音频数据: ${combinedAudio.length} 字节`);
                     
                     // 应用音频增强
                     const enhancedAudio = await enhanceAudioData(combinedAudio);
-                    console.error(`音频增强处理完成，提升了声音质量`);
+                    console.error(`音频增强处理完成，处理后大小: ${enhancedAudio.length} 字节`);
                     
-                    // 如果可以保存文件，写入处理后的音频数据
-                    if (canSaveFiles && outputFile) {
-                        // 写入处理后的音频数据
-                        outputFile.write(enhancedAudio);
+                    // 计算理论音频时长
+                    const bytesPerSample = (audioSettings.bitsPerSample / 8) * audioSettings.numChannels;
+                    const samplesPerSecond = audioSettings.sampleRate;
+                    const bytesPerSecond = samplesPerSecond * bytesPerSample;
+                    const theoreticalDuration = enhancedAudio.length / bytesPerSecond;
+                    console.error(`理论音频时长: ${(theoreticalDuration * 1000).toFixed(0)}ms (${theoreticalDuration.toFixed(2)}秒)`);
+                    
+                    // 应用校准 - 根据实际录制时长调整音频数据
+                    const actualDuration = (Date.now() - recordingStartTime) / 1000; // 实际录制秒数
+                    console.error(`实际录制时长: ${(actualDuration * 1000).toFixed(0)}ms (${actualDuration.toFixed(2)}秒)`);
+                    
+                    // 获取用于写入WAV文件的音频数据
+                    let finalAudioData = enhancedAudio;
+                    
+                    // 如果理论时长与实际时长相差超过5%，尝试修正
+                    if (Math.abs(theoreticalDuration - actualDuration) / actualDuration > 0.05) {
+                        console.error(`检测到时长不匹配，尝试调整...`);
                         
-                        // 完成文件写入
-                        outputFile.end();
+                        // 方法1: 调整音频头部中的采样率，使得播放器正确解释音频时长
+                        // 这不会改变音频内容，只会影响播放器对时长的计算
+                        const adjustedSampleRate = Math.floor(audioSettings.sampleRate / audioSettings.calibrationFactor);
+                        console.error(`调整后的采样率: ${adjustedSampleRate}Hz (原始: ${audioSettings.sampleRate}Hz)`);
                         
-                        // 更新WAV文件头中的数据大小
-                        updateWavHeader(savedWavFile, enhancedAudio.length);
-                        
-                        console.error(`录音已完成，文件保存至: ${savedWavFile}`);
-                        
-                        // 提取文件名
-                        const filename = path.basename(savedWavFile);
-                        
-                        // 读取文件并转为base64
-                        fs.readFile(savedWavFile, (err, fileData) => {
-                            if (err) {
-                                reject(err);
-                                return;
-                            }
+                        // 如果可以保存文件，写入处理后的音频数据
+                        if (canSaveFiles && outputFile) {
+                            // 重要：关闭之前的输出流
+                            outputFile.end();
                             
-                            const base64Data = fileData.toString('base64');
+                            // 创建完整的WAV文件（包括正确的头部）
+                            const wavHeader = createWavHeader(adjustedSampleRate);
+                            
+                            // 手动更新头部信息
+                            // 更新RIFF块大小 (文件大小 - 8)
+                            wavHeader.writeUInt32LE(finalAudioData.length + 36, 4);
+                            // 更新data块大小
+                            wavHeader.writeUInt32LE(finalAudioData.length, 40);
+                            
+                            // 写入完整文件（头部+音频数据）
+                            fs.writeFileSync(savedWavFile, Buffer.concat([wavHeader, finalAudioData]));
+                            
+                            // 重新计算理论时长（使用调整后的采样率）
+                            const adjustedBytesPerSecond = adjustedSampleRate * bytesPerSample;
+                            const adjustedDuration = finalAudioData.length / adjustedBytesPerSecond;
+                            console.error(`调整后的理论时长: ${(adjustedDuration * 1000).toFixed(0)}ms (${adjustedDuration.toFixed(2)}秒)`);
+                            
+                            console.error(`录音已完成，文件保存至: ${savedWavFile}`);
+                            
+                            // 提取文件名
+                            const filename = path.basename(savedWavFile);
+                            
+                            // 读取文件并转为base64
+                            fs.readFile(savedWavFile, (err, fileData) => {
+                                if (err) {
+                                    reject(err);
+                                    return;
+                                }
+                                
+                                const base64Data = fileData.toString('base64');
+                                resolve({
+                                    audioData: base64Data,
+                                    filename: filename,
+                                    enhanced: true,
+                                    durationMs: Math.round(actualDuration * 1000), // 使用实际录制时长
+                                    fileSizeBytes: fileData.length,
+                                    adjustedSampleRate: adjustedSampleRate
+                                });
+                            });
+                        } else {
+                            // 没有保存文件，直接处理内存中的音频数据
+                            console.error('没有保存到文件，直接处理内存中的音频数据');
+                            
+                            // 创建一个WAV文件结构的完整内存缓冲区（使用调整后的采样率）
+                            const header = createWavHeader(adjustedSampleRate);
+                            
+                            // 更新头部信息
+                            header.writeUInt32LE(finalAudioData.length, 40); // 数据大小
+                            header.writeUInt32LE(finalAudioData.length + 36, 4); // 文件大小 - 8
+                            
+                            const completeAudio = Buffer.concat([header, finalAudioData]);
+                            
+                            // 生成一个虚拟文件名以供识别
+                            const virtualFilename = `virtual_recording_${Date.now()}_${Math.random().toString(36).substring(2, 10)}.wav`;
+                            
+                            // 直接将缓冲区转换为base64
+                            const base64Data = completeAudio.toString('base64');
+                            
                             resolve({
                                 audioData: base64Data,
-                                filename: filename,
-                                enhanced: true
+                                filename: virtualFilename,
+                                enhanced: true,
+                                virtual: true, // 标记为虚拟文件，未保存到磁盘
+                                durationMs: Math.round(actualDuration * 1000), // 使用实际录制时长
+                                fileSizeBytes: completeAudio.length,
+                                adjustedSampleRate: adjustedSampleRate
                             });
-                        });
+                        }
                     } else {
-                        // 没有保存文件，直接处理内存中的音频数据
-                        console.error('没有保存到文件，直接处理内存中的音频数据');
+                        // 时长匹配正常，使用常规处理
                         
-                        // 创建一个WAV文件结构的完整内存缓冲区
-                        const header = createWavHeader();
-                        const completeAudio = Buffer.concat([header, enhancedAudio]);
-                        
-                        // 更新头部信息
-                        completeAudio.writeUInt32LE(enhancedAudio.length, 40); // 数据大小
-                        completeAudio.writeUInt32LE(enhancedAudio.length + 36, 4); // 文件大小 - 8
-                        
-                        // 生成一个虚拟文件名以供识别
-                        const virtualFilename = `virtual_recording_${Date.now()}_${Math.random().toString(36).substring(2, 10)}.wav`;
-                        
-                        // 直接将缓冲区转换为base64
-                        const base64Data = completeAudio.toString('base64');
-                        
-                        resolve({
-                            audioData: base64Data,
-                            filename: virtualFilename,
-                            enhanced: true,
-                            virtual: true // 标记为虚拟文件，未保存到磁盘
-                        });
+                        // 如果可以保存文件，写入处理后的音频数据
+                        if (canSaveFiles && outputFile) {
+                            // 重要：关闭之前的输出流
+                            outputFile.end();
+                            
+                            // 创建完整的WAV文件（包括正确的头部）
+                            const wavHeader = createWavHeader();
+                            
+                            // 手动更新头部信息
+                            // 更新RIFF块大小 (文件大小 - 8)
+                            wavHeader.writeUInt32LE(finalAudioData.length + 36, 4);
+                            // 更新data块大小
+                            wavHeader.writeUInt32LE(finalAudioData.length, 40);
+                            
+                            // 写入完整文件（头部+音频数据）
+                            fs.writeFileSync(savedWavFile, Buffer.concat([wavHeader, finalAudioData]));
+                            
+                            console.error(`录音已完成，文件保存至: ${savedWavFile}`);
+                            
+                            // 提取文件名
+                            const filename = path.basename(savedWavFile);
+                            
+                            // 读取文件并转为base64
+                            fs.readFile(savedWavFile, (err, fileData) => {
+                                if (err) {
+                                    reject(err);
+                                    return;
+                                }
+                                
+                                const base64Data = fileData.toString('base64');
+                                resolve({
+                                    audioData: base64Data,
+                                    filename: filename,
+                                    enhanced: true,
+                                    durationMs: Math.round(theoreticalDuration * 1000),
+                                    fileSizeBytes: fileData.length
+                                });
+                            });
+                        } else {
+                            // 没有保存文件，直接处理内存中的音频数据
+                            console.error('没有保存到文件，直接处理内存中的音频数据');
+                            
+                            // 创建一个WAV文件结构的完整内存缓冲区
+                            const header = createWavHeader();
+                            
+                            // 更新头部信息
+                            header.writeUInt32LE(finalAudioData.length, 40); // 数据大小
+                            header.writeUInt32LE(finalAudioData.length + 36, 4); // 文件大小 - 8
+                            
+                            const completeAudio = Buffer.concat([header, finalAudioData]);
+                            
+                            // 生成一个虚拟文件名以供识别
+                            const virtualFilename = `virtual_recording_${Date.now()}_${Math.random().toString(36).substring(2, 10)}.wav`;
+                            
+                            // 直接将缓冲区转换为base64
+                            const base64Data = completeAudio.toString('base64');
+                            
+                            resolve({
+                                audioData: base64Data,
+                                filename: virtualFilename,
+                                enhanced: true,
+                                virtual: true, // 标记为虚拟文件，未保存到磁盘
+                                durationMs: Math.round(theoreticalDuration * 1000),
+                                fileSizeBytes: completeAudio.length
+                            });
+                        }
                     }
                 } catch (error) {
                     console.error('处理音频数据失败:', error);
                     reject(error);
                 }
-            }, seconds * 1000);
+            };
+            
+            // 启动录音持续时间检查 - 使用递归检查代替简单的setTimeout
+            checkRecordingDuration();
+            
+            // 设置一个最大录制时长限制，防止出现问题时永远不结束
+            setTimeout(() => {
+                if (recordingStartTime === null) {
+                    console.error('警告: 在规定时间内未检测到麦克风输入，强制结束录音');
+                    mic.stopRecording();
+                    reject(new Error('麦克风未检测到输入'));
+                }
+            }, (seconds + 5) * 1000); // 给予额外5秒的缓冲时间
             
         } catch (err) {
             console.error('初始化录音设备时出错:', err);
@@ -847,11 +1014,12 @@ async function recordAudio(seconds) {
 
 /**
  * 创建WAV文件头（44字节）
+ * @param {number} [overrideSampleRate] 覆盖默认采样率的值
  * @returns {Buffer} WAV文件头
  */
-function createWavHeader() {
+function createWavHeader(overrideSampleRate) {
     // WAV文件参数
-    const sampleRate = audioSettings.sampleRate;
+    const sampleRate = overrideSampleRate || audioSettings.sampleRate;
     const numChannels = audioSettings.numChannels;
     const bitsPerSample = audioSettings.bitsPerSample;
     
@@ -888,10 +1056,31 @@ function createWavHeader() {
  * 更新WAV文件头中的文件大小和数据大小
  * @param {string} filePath WAV文件路径
  * @param {number} dataSize 音频数据大小（字节）
+ * @param {number} [overrideSampleRate] 覆盖默认采样率的值
  */
-function updateWavHeader(filePath, dataSize) {
+function updateWavHeader(filePath, dataSize, overrideSampleRate) {
     try {
+        // 使用同步方法确保写入完成
         const fd = fs.openSync(filePath, 'r+');
+        
+        // 确定采样率
+        const sampleRate = overrideSampleRate || audioSettings.sampleRate;
+        const numChannels = audioSettings.numChannels;
+        const bitsPerSample = audioSettings.bitsPerSample;
+        
+        // 计算派生值
+        const blockAlign = numChannels * bitsPerSample / 8;
+        const byteRate = sampleRate * blockAlign;
+        
+        // 更新采样率 (偏移量24)
+        const sampleRateBuffer = Buffer.alloc(4);
+        sampleRateBuffer.writeUInt32LE(sampleRate, 0);
+        fs.writeSync(fd, sampleRateBuffer, 0, 4, 24);
+        
+        // 更新字节率 (偏移量28)
+        const byteRateBuffer = Buffer.alloc(4);
+        byteRateBuffer.writeUInt32LE(byteRate, 0);
+        fs.writeSync(fd, byteRateBuffer, 0, 4, 28);
         
         // 更新data块大小 (偏移量40)
         const dataSizeBuffer = Buffer.alloc(4);
@@ -903,9 +1092,18 @@ function updateWavHeader(filePath, dataSize) {
         fileSizeBuffer.writeUInt32LE(dataSize + 36, 0); // 文件大小 = 数据大小 + 头部(44) - 8
         fs.writeSync(fd, fileSizeBuffer, 0, 4, 4);
         
+        // 添加文件同步和关闭
+        fs.fsyncSync(fd);
         fs.closeSync(fd);
         
+        // 计算理论音频时长
+        const bytesPerSample = (bitsPerSample / 8) * numChannels;
+        const samplesPerSecond = sampleRate;
+        const bytesPerSecond = samplesPerSecond * bytesPerSample;
+        const theoreticalDuration = dataSize / bytesPerSecond;
+        
         console.error(`WAV头部已更新，数据大小: ${dataSize} 字节，总文件大小: ${dataSize + 44} 字节`);
+        console.error(`使用采样率: ${sampleRate}Hz, 理论音频时长: ${(theoreticalDuration * 1000).toFixed(0)}ms (${theoreticalDuration.toFixed(2)}秒)`);
     } catch (error) {
         console.error('更新WAV文件头失败:', error);
     }

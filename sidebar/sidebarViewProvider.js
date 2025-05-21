@@ -2762,21 +2762,32 @@ class LingxiSidebarProvider {
             const dirEntries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(asrOutputDir));
             console.log(`ASR输出目录中的文件数量: ${dirEntries.length}`);
             
-            // 过滤出ASR结果文件（以asr_result_开头的.txt文件）
+            // 过滤出ASR结果文件（以meeting_开头的.txt文件或以asr_result_开头的.txt文件）
             const asrResultFiles = dirEntries
                 .filter(([name, type]) => {
                     const isFile = type === vscode.FileType.File;
-                    const isAsrResult = name.startsWith('asr_result_') && name.endsWith('.txt');
+                    const isAsrResult = (name.startsWith('meeting_') || name.startsWith('asr_result_')) && name.endsWith('.txt');
                     return isFile && isAsrResult;
                 })
                 .map(([name]) => {
                     // 从文件名中提取时间戳
                     let timestamp = 0;
-                    const timestampMatch = name.match(/asr_result_(\d{8}_\d{6})\.txt/);
-                    if (timestampMatch) {
-                        // 将文件名中的时间戳格式 YYYYMMDD_HHMMSS 转换为正确的日期
-                        const dateStr = timestampMatch[1].replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6');
-                        timestamp = new Date(dateStr).getTime();
+                    let timestampMatch;
+                    
+                    if (name.startsWith('meeting_')) {
+                        // 处理meeting_1747828524808_transcript.txt格式
+                        timestampMatch = name.match(/meeting_(\d+)_transcript\.txt/);
+                        if (timestampMatch) {
+                            timestamp = parseInt(timestampMatch[1]);
+                        }
+                    } else {
+                        // 处理asr_result_YYYYMMDD_HHMMSS.txt格式
+                        timestampMatch = name.match(/asr_result_(\d{8}_\d{6})\.txt/);
+                        if (timestampMatch) {
+                            // 将文件名中的时间戳格式 YYYYMMDD_HHMMSS 转换为正确的日期
+                            const dateStr = timestampMatch[1].replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6');
+                            timestamp = new Date(dateStr).getTime();
+                        }
                     }
                     
                     // 生成格式化时间显示
@@ -2798,139 +2809,19 @@ class LingxiSidebarProvider {
                 });
 
             console.log(`找到的ASR结果文件数量: ${asrResultFiles.length}`);
-            for (const file of asrResultFiles) {
-                console.log(`- ${file.name} (${new Date(file.timestamp).toLocaleString()})`);
-            }
-
-            // 如果没有找到结果文件，返回null
-            if (asrResultFiles.length === 0) {
-                console.log('未找到任何ASR结果文件');
-                return null;
-            }
-
-            // 按时间戳降序排序，获取最新的文件
-            asrResultFiles.sort((a, b) => b.timestamp - a.timestamp);
-            const latestFile = asrResultFiles[0];
-            console.log(`选择的最新ASR结果文件: ${latestFile.name} (${new Date(latestFile.timestamp).toLocaleString()})`);
             
-            // 检查文件是否存在且非空
-            const fileStats = await vscode.workspace.fs.stat(vscode.Uri.file(latestFile.path));
-            if (fileStats.size === 0) {
-                console.log(`ASR结果文件为空: ${latestFile.path}`);
-                throw new Error('ASR结果文件为空');
+            // 按时间戳排序，获取最新的文件
+            if (asrResultFiles.length > 0) {
+                asrResultFiles.sort((a, b) => b.timestamp - a.timestamp);
+                const latestFile = asrResultFiles[0];
+                console.log(`最新的ASR结果文件: ${latestFile.name} (${latestFile.modified})`);
+                return latestFile.path;
             }
             
-            return latestFile.path;
-        } catch (error) {
-            console.error('获取最新ASR结果文件失败:', error);
-            vscode.window.showErrorMessage(`获取ASR结果文件失败: ${error.message}`);
             return null;
-        }
-    }
-
-    /**
-     * 从ASR结果文件中提取最长的句子
-     * @param {string} filePath ASR结果文件路径
-     * @returns {Promise<string[]>} 提取出的最长句子列表
-     */
-    async extractSentencesFromAsrResult(filePath) {
-        try {
-            console.log(`正在从文件中提取ASR句子: ${filePath}`);
-            
-            // 检查文件是否存在
-            if (!fs.existsSync(filePath)) {
-                console.error(`文件不存在: ${filePath}`);
-                vscode.window.showErrorMessage(`ASR结果文件不存在: ${path.basename(filePath)}`);
-                return [];
-            }
-            
-            // 读取文件内容
-            const content = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
-            const contentText = Buffer.from(content).toString('utf8');
-            
-            if (!contentText || contentText.trim().length === 0) {
-                console.log('ASR结果文件内容为空');
-                vscode.window.showWarningMessage('选择的ASR结果文件内容为空');
-                return [];
-            }
-            
-            console.log(`ASR结果文件内容长度: ${contentText.length} 字节`);
-            
-            // 按行分割
-            const lines = contentText.split('\n').filter(line => line.trim().length > 0);
-            console.log(`ASR结果文件有效行数: ${lines.length}`);
-            
-            // 跳过以#开头的注释行
-            const contentLines = lines.filter(line => !line.trim().startsWith('#'));
-            if (contentLines.length < lines.length) {
-                console.log(`忽略了 ${lines.length - contentLines.length} 行注释`);
-            }
-            
-            // 创建一个数组来存储解析出的完整句子
-            const sentences = [];
-            
-            // 当前行可能包含多个段落，我们需要处理这种情况
-            const lineRegex = /(\d+):([^0-9]+)(?=\d+:|$)/g;
-            
-            contentLines.forEach(line => {
-                // 重置正则表达式状态
-                lineRegex.lastIndex = 0;
-                
-                let match;
-                let parsedAny = false;
-                
-                // 提取所有匹配的段落
-                while ((match = lineRegex.exec(line)) !== null) {
-                    parsedAny = true;
-                    const segId = match[1];
-                    const text = match[2].trim();
-                    
-                    // 确保这个段落ID在数组范围内
-                    const segIdNum = parseInt(segId, 10);
-                    while (sentences.length <= segIdNum) {
-                        sentences.push('');
-                    }
-                    
-                    // 保存这个段落的最长文本
-                    if (text.length > sentences[segIdNum].length) {
-                        sentences[segIdNum] = text;
-                    }
-                }
-                
-                // 如果当前行包含完整句子（以句号结尾），则直接使用该行
-                if (!parsedAny && line.includes(':')) {
-                    const parts = line.split(':');
-                    const segId = parts[0].trim();
-                    if (/^\d+$/.test(segId)) {
-                        const segIdNum = parseInt(segId, 10);
-                        const text = parts.slice(1).join(':').trim();
-                        
-                        while (sentences.length <= segIdNum) {
-                            sentences.push('');
-                        }
-                        
-                        if (text.length > sentences[segIdNum].length) {
-                            sentences[segIdNum] = text;
-                        }
-                    } else {
-                        console.log(`无法解析的行: ${line}`);
-                    }
-                }
-            });
-            
-            // 过滤掉空句子
-            const finalSentences = sentences.filter(sent => sent.length > 0);
-            
-            console.log(`最终提取的句子数量: ${finalSentences.length}`);
-            finalSentences.forEach((text, index) => {
-                console.log(`- 段落 ${index}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
-            });
-            
-            return finalSentences;
         } catch (error) {
-            console.error('从ASR结果文件中提取句子失败:', error);
-            vscode.window.showErrorMessage(`从ASR结果文件中提取句子失败: ${error.message}`);
-            return [];
+            console.error('获取最新ASR结果文件时出错:', error);
+            throw error;
         }
     }
 
@@ -2963,21 +2854,32 @@ class LingxiSidebarProvider {
             const dirEntries = await vscode.workspace.fs.readDirectory(vscode.Uri.file(asrOutputDir));
             console.log(`ASR输出目录中的文件数量: ${dirEntries.length}`);
             
-            // 过滤出ASR结果文件（以asr_result_开头的.txt文件）
+            // 过滤出ASR结果文件（以meeting_开头的.txt文件或以asr_result_开头的.txt文件）
             const asrResultFiles = dirEntries
                 .filter(([name, type]) => {
                     const isFile = type === vscode.FileType.File;
-                    const isAsrResult = name.startsWith('asr_result_') && name.endsWith('.txt');
+                    const isAsrResult = (name.startsWith('meeting_') || name.startsWith('asr_result_')) && name.endsWith('.txt');
                     return isFile && isAsrResult;
                 })
                 .map(([name]) => {
                     // 从文件名中提取时间戳
                     let timestamp = 0;
-                    const timestampMatch = name.match(/asr_result_(\d{8}_\d{6})\.txt/);
-                    if (timestampMatch) {
-                        // 将文件名中的时间戳格式 YYYYMMDD_HHMMSS 转换为正确的日期
-                        const dateStr = timestampMatch[1].replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6');
-                        timestamp = new Date(dateStr).getTime();
+                    let timestampMatch;
+                    
+                    if (name.startsWith('meeting_')) {
+                        // 处理meeting_1747828524808_transcript.txt格式
+                        timestampMatch = name.match(/meeting_(\d+)_transcript\.txt/);
+                        if (timestampMatch) {
+                            timestamp = parseInt(timestampMatch[1]);
+                        }
+                    } else {
+                        // 处理asr_result_YYYYMMDD_HHMMSS.txt格式
+                        timestampMatch = name.match(/asr_result_(\d{8}_\d{6})\.txt/);
+                        if (timestampMatch) {
+                            // 将文件名中的时间戳格式 YYYYMMDD_HHMMSS 转换为正确的日期
+                            const dateStr = timestampMatch[1].replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6');
+                            timestamp = new Date(dateStr).getTime();
+                        }
                     }
                     
                     // 生成格式化时间显示
@@ -3006,7 +2908,7 @@ class LingxiSidebarProvider {
             // 在工作区中搜索更多的ASR结果文件
             console.log('在整个工作区搜索ASR结果文件...');
             try {
-                const asrFiles = await vscode.workspace.findFiles('**/asr_result_*.txt', '**/node_modules/**');
+                const asrFiles = await vscode.workspace.findFiles('**/{meeting_*.txt,asr_result_*.txt}', '**/node_modules/**');
                 
                 if (asrFiles && asrFiles.length > 0) {
                     console.log(`在工作区中找到 ${asrFiles.length} 个ASR结果文件`);
@@ -3021,11 +2923,22 @@ class LingxiSidebarProvider {
                                 
                                 // 从文件名中提取时间戳
                                 let timestamp = fileStats.mtime;
-                                const timestampMatch = fileName.match(/asr_result_(\d{8}_\d{6})\.txt/);
-                                if (timestampMatch) {
-                                    // 将文件名中的时间戳格式 YYYYMMDD_HHMMSS 转换为正确的日期
-                                    const dateStr = timestampMatch[1].replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6');
-                                    timestamp = new Date(dateStr).getTime();
+                                let timestampMatch;
+                                
+                                if (fileName.startsWith('meeting_')) {
+                                    // 处理meeting_1747828524808_transcript.txt格式
+                                    timestampMatch = fileName.match(/meeting_(\d+)_transcript\.txt/);
+                                    if (timestampMatch) {
+                                        timestamp = parseInt(timestampMatch[1]);
+                                    }
+                                } else {
+                                    // 处理asr_result_YYYYMMDD_HHMMSS.txt格式
+                                    timestampMatch = fileName.match(/asr_result_(\d{8}_\d{6})\.txt/);
+                                    if (timestampMatch) {
+                                        // 将文件名中的时间戳格式 YYYYMMDD_HHMMSS 转换为正确的日期
+                                        const dateStr = timestampMatch[1].replace(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6');
+                                        timestamp = new Date(dateStr).getTime();
+                                    }
                                 }
                                 
                                 // 生成格式化时间显示
@@ -3047,30 +2960,22 @@ class LingxiSidebarProvider {
                                 
                                 console.log(`添加额外找到的ASR文件: ${fileName} (${formattedDate})`);
                             } catch (error) {
-                                console.error(`获取文件信息失败: ${uri.fsPath}`, error);
+                                console.error(`处理文件 ${uri.fsPath} 时出错:`, error);
                             }
                         }
                     }
                 }
-            } catch (searchError) {
-                console.error('搜索工作区ASR文件时出错:', searchError);
+            } catch (error) {
+                console.error('搜索工作区ASR文件时出错:', error);
             }
 
-            // 如果没有找到结果文件，返回空数组
-            if (asrResultFiles.length === 0) {
-                console.log('未找到任何ASR结果文件');
-                return [];
-            }
-
-            // 按时间戳降序排序（从新到旧）
+            // 按时间戳排序
             asrResultFiles.sort((a, b) => b.timestamp - a.timestamp);
-            console.log('ASR结果文件已按时间从新到旧排序');
             
             return asrResultFiles;
         } catch (error) {
-            console.error('获取ASR结果文件列表失败:', error);
-            vscode.window.showErrorMessage(`获取ASR结果文件列表失败: ${error.message}`);
-            return [];
+            console.error('获取所有ASR结果文件时出错:', error);
+            throw error;
         }
     }
 
@@ -3429,6 +3334,86 @@ class LingxiSidebarProvider {
         } catch (error) {
             console.error('删除画布失败:', error);
             vscode.window.showErrorMessage(`删除画布失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 从ASR结果文件中提取句子，保持原始顺序
+     * @param {string} filePath ASR结果文件路径
+     * @returns {Promise<string[]>} 提取出的句子列表
+     */
+    async extractSentencesFromAsrResult(filePath) {
+        try {
+            console.log(`正在从文件中提取ASR句子: ${filePath}`);
+            
+            // 检查文件是否存在
+            if (!fs.existsSync(filePath)) {
+                console.error(`文件不存在: ${filePath}`);
+                vscode.window.showErrorMessage(`ASR结果文件不存在: ${path.basename(filePath)}`);
+                return [];
+            }
+            
+            // 读取文件内容
+            const content = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+            const contentText = Buffer.from(content).toString('utf8');
+            
+            if (!contentText || contentText.trim().length === 0) {
+                console.log('ASR结果文件内容为空');
+                vscode.window.showWarningMessage('选择的ASR结果文件内容为空');
+                return [];
+            }
+            
+            console.log(`ASR结果文件内容长度: ${contentText.length} 字节`);
+            
+            // 按行分割
+            const lines = contentText.split('\n').filter(line => line.trim().length > 0);
+            console.log(`ASR结果文件有效行数: ${lines.length}`);
+            
+            // 跳过以#开头的注释行
+            const contentLines = lines.filter(line => !line.trim().startsWith('#'));
+            if (contentLines.length < lines.length) {
+                console.log(`忽略了 ${lines.length - contentLines.length} 行注释`);
+            }
+            
+            // 创建一个Set来存储唯一的句子
+            const uniqueSentences = new Set();
+            
+            // 处理每一行
+            contentLines.forEach(line => {
+                // 跳过文件结束标记行
+                if (line.includes('--- 文件') && line.includes('转写结束 ---')) {
+                    return;
+                }
+                
+                // 跳过标题行
+                if (line.includes('会议') && line.includes('的语音转写记录')) {
+                    return;
+                }
+                
+                // 处理包含冒号的行（句子行）
+                if (line.includes(':')) {
+                    const parts = line.split(':');
+                    const text = parts.slice(1).join(':').trim();
+                    if (text) {
+                        // 只添加唯一的文本内容
+                        uniqueSentences.add(text);
+                    }
+                }
+            });
+            
+            // 将Set转换为数组
+            const sentences = Array.from(uniqueSentences);
+            
+            console.log(`最终提取的唯一句子数量: ${sentences.length}`);
+            sentences.forEach((text, index) => {
+                console.log(`- 句子 ${index}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`);
+            });
+            
+            return sentences;
+        } catch (error) {
+            console.error('从ASR结果文件中提取句子失败:', error);
+            vscode.window.showErrorMessage(`从ASR结果文件中提取句子失败: ${error.message}`);
+            return [];
         }
     }
 }

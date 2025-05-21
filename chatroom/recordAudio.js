@@ -362,9 +362,18 @@ async function streamAudio() {
     let streamOutputFile = null;
     
     if (canSaveFiles && recordingsDir) {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const uniqueId = Math.random().toString(36).substring(2, 10);
-        streamRecordingFile = path.join(recordingsDir, `stream_${timestamp}_${uniqueId}.wav`);
+        // 修改时间戳格式为更易读的形式
+        const now = new Date();
+        const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
+        
+        // 从命令行参数中提取会议ID
+        let conferenceId = 'unknown';
+        const confIdIndex = args.indexOf('-conferenceId');
+        if (confIdIndex !== -1 && args.length > confIdIndex + 1) {
+            conferenceId = args[confIdIndex + 1];
+        }
+        
+        streamRecordingFile = path.join(recordingsDir, `stream_${conferenceId}_${timestamp}.wav`);
         
         try {
             // 创建WAV文件和写入头部 - 使用校准后的采样率
@@ -388,14 +397,6 @@ async function streamAudio() {
             console.error(`尝试连接到WebSocket服务器: ${wsUrl}`);
             
             const ws = new WebSocket(wsUrl);
-            
-            // 查找conferenceId参数
-            let conferenceId = null;
-            const confIdIndex = args.indexOf('-conferenceId');
-            if (confIdIndex !== -1 && args.length > confIdIndex + 1) {
-                conferenceId = args[confIdIndex + 1];
-                console.error(`指定会议ID: ${conferenceId}`);
-            }
             
             // 跟踪发送的数据包序号
             let sequenceNumber = 0;

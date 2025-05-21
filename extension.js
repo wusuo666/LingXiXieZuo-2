@@ -277,10 +277,6 @@ async function activate(context) {
         terminal.show();
         terminal.sendText('echo 正在启动ASR语音识别...');
         
-        // 默认使用音频目录下的测试文件
-        let audioFile = path.join(__dirname, 'pyyuyin', 'audio', 'lfasr_涉政.wav');
-        let outputPath = null;
-        
         try {
             // 获取用户工作区路径
             const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -288,46 +284,148 @@ async function activate(context) {
                 throw new Error('请先打开一个工作区');
             }
             
-            // 处理输出文件参数
-            if (params && params.outputFile) {
-                // 创建统一的输出目录路径
-                const outputDir = path.join(workspaceFolders[0].uri.fsPath, 'yuyin', 'output');
-                outputPath = path.join(outputDir, params.outputFile);
-                
-                // 确保输出目录存在
-                if (!fs.existsSync(outputDir)) {
-                    fs.mkdirSync(outputDir, { recursive: true });
-                }
-                
-                console.log(`ASR输出目录: ${outputDir}`);
-                console.log(`ASR输出文件: ${outputPath}`);
-                terminal.sendText(`echo 输出文件将保存至: ${outputPath}`);
+            // 获取recordings目录下的所有wav文件
+            const recordingsDir = path.join(workspaceFolders[0].uri.fsPath, 'recordings');
+            if (!fs.existsSync(recordingsDir)) {
+                throw new Error('未找到recordings目录，请先进行语音会议');
             }
             
-            // 在终端显示正在处理的文件
-            terminal.sendText(`echo 正在处理音频文件: ${audioFile}`);
+            // 读取recordings目录下的所有wav文件并按会议ID分组
+            const files = fs.readdirSync(recordingsDir)
+                .filter(file => file.startsWith('stream_') && file.endsWith('.wav'));
             
-            // 调用ASR模块进行语音识别
-            const result = await runASR({
-                audioFile: audioFile,
-                outputFile: outputPath
+            if (files.length === 0) {
+                throw new Error('未找到会议录音文件，请先进行语音会议');
+            }
+
+            // 按会议ID分组文件
+            const conferenceGroups = {};
+            files.forEach(file => {
+                const parts = file.split('_');
+                if (parts.length >= 4) { // 确保文件名格式正确：stream_conference_会议ID_时间戳.wav
+                    // 会议ID在stream_conference_之后，时间戳之前
+                    // 例如：stream_conference_1747827276364_2025-05-21_19-34-36.wav
+                    const conferenceId = parts[2]; // 获取会议ID部分
+                    if (!conferenceGroups[conferenceId]) {
+                        conferenceGroups[conferenceId] = [];
+                    }
+                    conferenceGroups[conferenceId].push(file);
+                }
+            });
+
+            // 为每个会议ID创建选项，添加更多信息
+            const conferenceOptions = Object.keys(conferenceGroups).map(confId => {
+                // 获取该会议的第一个文件的时间戳作为会议开始时间
+                const firstFile = conferenceGroups[confId][0];
+                const timeParts = firstFile.split('_').slice(-2);
+                const meetingTime = timeParts.join(' ').replace('.wav', '');
+                
+                return {
+                    label: `会议 ${confId}`,
+                    description: `${conferenceGroups[confId].length} 个录音文件`,
+                    detail: `开始时间: ${meetingTime} | 文件数: ${conferenceGroups[confId].length}`,
+                    conferenceId: confId
+                };
+            }).sort((a, b) => {
+                // 提取时间戳部分进行比较
+                const timeA = a.detail.split('开始时间: ')[1].split(' |')[0];
+                const timeB = b.detail.split('开始时间: ')[1].split(' |')[0];
+                return timeB.localeCompare(timeA); // 倒序排列，从晚到早
+            });
+
+            // 让用户选择会议
+            const selectedConference = await vscode.window.showQuickPick(conferenceOptions, {
+                placeHolder: '请选择要转写的会议',
+                canPickMany: false,
+                ignoreFocusOut: true,
+                matchOnDescription: true,
+                matchOnDetail: true
             });
             
-            // 处理结果
-            terminal.sendText('echo 语音识别处理完成!');
+            if (!selectedConference) {
+                terminal.sendText('echo 已取消转写');
+                vscode.window.showInformationMessage('已取消转写操作');
+                return;
+            }
+
+            // 获取选中会议的所有文件并按时间排序
+            const selectedFiles = conferenceGroups[selectedConference.conferenceId]
+                .sort((a, b) => {
+                    // 提取时间戳部分进行比较
+                    const timeA = a.split('_').slice(-2).join('_').replace('.wav', '');
+                    const timeB = b.split('_').slice(-2).join('_').replace('.wav', '');
+                    return timeA.localeCompare(timeB); // 升序排列，从早到晚
+                });
+
+            // 创建输出目录
+            const outputDir = path.join(workspaceFolders[0].uri.fsPath, 'yuyin', 'output');
+            if (!fs.existsSync(outputDir)) {
+                fs.mkdirSync(outputDir, { recursive: true });
+            }
             
-            if (outputPath) {
-                vscode.window.showInformationMessage(`ASR测试已完成，结果已保存到: ${params.outputFile}`);
+            // 生成输出文件名（使用会议ID）
+            const outputFileName = `meeting_${selectedConference.conferenceId}_transcript.txt`;
+            const outputPath = path.join(outputDir, outputFileName);
+            
+            // 创建或清空输出文件
+            fs.writeFileSync(outputPath, `会议 ${selectedConference.conferenceId} 的语音转写记录\n\n`);
+            
+            terminal.sendText(`echo 开始处理会议 ${selectedConference.conferenceId} 的录音文件...`);
+            
+            // 依次处理每个文件
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const file = selectedFiles[i];
+                terminal.sendText(`echo 正在处理第 ${i + 1}/${selectedFiles.length} 个文件: ${file}`);
                 
-                // 检查文件是否创建成功
-                if (fs.existsSync(outputPath)) {
-                    terminal.sendText(`echo 结果文件已生成: ${outputPath}`);
-                } else {
-                    terminal.sendText('echo 警告: 结果文件可能未生成，请检查终端输出');
-                    vscode.window.showWarningMessage('ASR结果文件可能未生成，请检查终端输出');
+                // 构建完整的文件路径
+                const audioFile = path.join(recordingsDir, file);
+                
+                // 为每个文件创建临时输出文件
+                const tempOutputPath = path.join(outputDir, `temp_${file.replace('.wav', '.txt')}`);
+                
+                // 调用ASR模块进行语音识别，输出到临时文件
+                const result = await runASR({
+                    audioFile: audioFile,
+                    outputFile: tempOutputPath
+                });
+                
+                // 读取临时文件内容
+                if (fs.existsSync(tempOutputPath)) {
+                    const content = fs.readFileSync(tempOutputPath, 'utf8');
+                    
+                    // 处理内容，确保行号正确
+                    const lines = content.split('\n');
+                    const processedLines = lines.map((line, index) => {
+                        // 如果行以数字开头，更新行号
+                        if (/^\d+/.test(line)) {
+                            // 计算新的行号：当前文件的行号 + 之前所有文件的总行数
+                            const newLineNumber = index + 1;
+                            return line.replace(/^\d+/, newLineNumber.toString());
+                        }
+                        return line;
+                    });
+                    
+                    // 将处理后的内容追加到最终文件
+                    fs.appendFileSync(outputPath, processedLines.join('\n') + '\n');
+                    
+                    // 添加分隔符
+                    fs.appendFileSync(outputPath, `\n--- 文件 ${file} 转写结束 ---\n\n`);
+                    
+                    // 删除临时文件
+                    fs.unlinkSync(tempOutputPath);
                 }
+            }
+            
+            // 处理完成
+            terminal.sendText('echo 所有文件处理完成!');
+            vscode.window.showInformationMessage(`会议 ${selectedConference.conferenceId} 的语音转写已完成，结果已保存到: ${outputFileName}`);
+            
+            // 检查文件是否创建成功
+            if (fs.existsSync(outputPath)) {
+                terminal.sendText(`echo 结果文件已生成: ${outputPath}`);
             } else {
-                vscode.window.showInformationMessage('ASR测试已完成');
+                terminal.sendText('echo 警告: 结果文件可能未生成，请检查终端输出');
+                vscode.window.showWarningMessage('ASR结果文件可能未生成，请检查终端输出');
             }
         } catch (error) {
             terminal.sendText(`echo 错误: ${error.message}`);

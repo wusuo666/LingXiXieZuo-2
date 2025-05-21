@@ -105,6 +105,7 @@
                             <button id="create-conference-btn" class="conference-btn">创建会议</button>
                             <button id="join-conference-btn" class="conference-btn">加入会议</button>
                             <button id="leave-conference-btn" class="conference-btn" disabled>离开会议</button>
+                            <button id="run-asr-test" class="conference-btn" title="生成会议纪要">生成纪要</button>
                         </div>
                         
                         <div class="conference-join-form" style="display: none;">
@@ -132,8 +133,7 @@
                         <div class="voice-record-timer">00:00</div>
                         <button id="voice-record-btn" class="voice-record-btn" title="录制语音消息">🎤</button>
                         <button id="chat-send" class="chat-send">发送</button>
-                        <button id="run-asr-test" class="chat-send" title="运行语音识别测试">测试ASR</button>
-                                </div>
+                    </div>
                             </div>
                         </div>
                         <div class="inner-tab-pane" id="agent">
@@ -649,13 +649,7 @@
             flex-shrink: 0;
         }
         .chat-send:hover {
-            background: #2176c7;
-        }
-        #run-asr-test {
-            background: #f59e0b;
-        }
-        #run-asr-test:hover {
-            background: #d97706;
+            background: linear-gradient(135deg, #1177bb, #0e639c);
         }
         .live-share-style {
             background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);

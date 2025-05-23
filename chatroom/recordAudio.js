@@ -8,6 +8,10 @@ const WebSocket = require('ws');
 const WavEncoder = require('wav-encoder');
 const WavDecoder = require('wav-decoder');
 const AudioBuffer = require('audio-buffer');
+const os = require('os');
+
+// 全局变量
+let conferenceId = 'default';
 
 // 全局音频处理设置
 const audioSettings = {
@@ -33,6 +37,17 @@ const audioSettings = {
             { frequency: 4000, gain: 2.0 },  // 高频 - 明亮度
             { frequency: 8000, gain: 1.0 }   // 超高频
         ]
+    },
+    // 噪音抑制设置
+    noiseReduction: {
+        enabled: true,        // 默认启用噪音抑制
+        threshold: 0.05,      // 噪音阈值（0-1之间）
+        reduction: 0.7        // 噪音抑制强度（0-1之间）
+    },
+    // 回声消除设置
+    echoReduction: {
+        enabled: true,       // 默认启用回声消除
+        strength: 0.8        // 回声消除强度（0-1之间）
     },
     // 实际音频采集校准系数 - 根据实验校准
     calibrationFactor: 1.35  // 理论时长与实际时长的比例因子
@@ -201,6 +216,84 @@ if (!streamMode && canSaveFiles && recordingsDir) {
 }
 
 /**
+ * 查找或读取本地存储的用户ID
+ * 尝试从本地文件读取已存在的用户ID，以保持ID一致性
+ * @returns {string|null} 找到的用户ID或null
+ */
+function findExistingUserId() {
+    try {
+        // 尝试多种可能的位置来读取保存的ID
+        const homeDir = process.env.HOME || process.env.USERPROFILE;
+        const possiblePaths = [
+            // 常见的配置文件位置
+            path.join(homeDir, '.lingxi-userid'),
+            path.join(homeDir, '.config', 'lingxi-userid'),
+            // 临时目录
+            path.join(os.tmpdir(), 'lingxi-userid')
+        ];
+
+        // 工作区路径
+        const workspacePath = getWorkspacePath();
+        if (workspacePath) {
+            possiblePaths.push(path.join(workspacePath, '.lingxi-userid'));
+        }
+
+        // 尝试读取这些位置的文件
+        for (const filePath of possiblePaths) {
+            if (fs.existsSync(filePath)) {
+                const userId = fs.readFileSync(filePath, 'utf8').trim();
+                if (userId && (userId.startsWith('vscode_') || userId.startsWith('user_'))) {
+                    console.log(`找到已保存的用户ID: ${userId} (从 ${filePath})`);
+                    return userId;
+                }
+            }
+        }
+
+        // 尝试从环境变量读取
+        if (process.env.LINGXI_USER_ID) {
+            const userId = process.env.LINGXI_USER_ID.trim();
+            if (userId && (userId.startsWith('vscode_') || userId.startsWith('user_'))) {
+                console.log(`从环境变量读取到用户ID: ${userId}`);
+                return userId;
+            }
+        }
+
+        console.log('没有找到已保存的用户ID');
+        return null;
+    } catch (error) {
+        console.error('读取用户ID时出错:', error);
+        return null;
+    }
+}
+
+/**
+ * 保存用户ID到本地存储
+ * @param {string} userId 要保存的用户ID
+ */
+function saveUserId(userId) {
+    try {
+        if (!userId) return;
+        
+        // 尝试保存到工作区
+        const workspacePath = getWorkspacePath();
+        if (workspacePath) {
+            const idFilePath = path.join(workspacePath, '.lingxi-userid');
+            fs.writeFileSync(idFilePath, userId, 'utf8');
+            console.log(`已保存用户ID到工作区: ${idFilePath}`);
+            return;
+        }
+        
+        // 如果没有工作区，保存到用户主目录
+        const homeDir = process.env.HOME || process.env.USERPROFILE;
+        const idFilePath = path.join(homeDir, '.lingxi-userid');
+        fs.writeFileSync(idFilePath, userId, 'utf8');
+        console.log(`已保存用户ID到用户目录: ${idFilePath}`);
+    } catch (error) {
+        console.error('保存用户ID时出错:', error);
+    }
+}
+
+/**
  * 处理音频数据，应用增强效果
  * @param {Buffer} audioData 原始音频数据
  * @returns {Promise<Buffer>} 处理后的音频数据
@@ -280,7 +373,78 @@ function applyAudioEnhancements(audioData) {
     // 克隆数据以避免修改原始数据
     const enhancedData = new Float32Array(audioData);
     
-    // 1. 应用语音增强
+    // 1. 应用噪音抑制 - 先处理背景噪音
+    if (audioSettings.noiseReduction && audioSettings.noiseReduction.enabled) {
+        const threshold = audioSettings.noiseReduction.threshold; 
+        const reduction = audioSettings.noiseReduction.reduction;
+        
+        // 计算音频能量的平均值，用于检测噪音
+        let avgEnergy = 0;
+        for (let i = 0; i < enhancedData.length; i++) {
+            avgEnergy += enhancedData[i] * enhancedData[i];
+        }
+        avgEnergy /= enhancedData.length;
+        
+        // 设置噪音门限
+        const noiseGate = Math.sqrt(avgEnergy) * threshold;
+        
+        // 应用噪音抑制
+        for (let i = 0; i < enhancedData.length; i++) {
+            const amplitude = Math.abs(enhancedData[i]);
+            
+            // 如果振幅低于噪音门限，则降低其值
+            if (amplitude < noiseGate) {
+                enhancedData[i] *= (1 - reduction);
+            } else if (amplitude < noiseGate * 2) {
+                // 在噪音门限附近平滑过渡
+                const factor = (amplitude - noiseGate) / noiseGate;
+                const attenuationFactor = factor * (1 - reduction) + reduction;
+                enhancedData[i] *= attenuationFactor;
+            }
+        }
+    }
+    
+    // 2. 应用回声消除 - 用于减少系统声音被重新捕获的问题
+    if (audioSettings.echoReduction && audioSettings.echoReduction.enabled) {
+        const strength = audioSettings.echoReduction.strength;
+        
+        // 简化的回声消除算法：
+        // 检测音频中周期性的模式（回声特征）并减弱它们
+        
+        // 工作在较短的窗口上，如256样本
+        const windowSize = 256;
+        
+        // 对于每个窗口
+        for (let offset = 0; offset + windowSize < enhancedData.length; offset += windowSize) {
+            // 查找窗口中的重复模式
+            for (let delay = 20; delay < windowSize / 2; delay++) {
+                let correlation = 0;
+                
+                // 计算当前样本和延迟样本之间的相关性
+                for (let i = 0; i < windowSize - delay; i++) {
+                    if (offset + i + delay < enhancedData.length) {
+                        correlation += enhancedData[offset + i] * enhancedData[offset + i + delay];
+                    }
+                }
+                
+                // 规范化相关性
+                correlation /= (windowSize - delay);
+                
+                // 如果相关性较高，说明可能存在回声
+                if (correlation > 0.5) {
+                    // 减弱可能的回声
+                    for (let i = 0; i < windowSize - delay; i++) {
+                        if (offset + i + delay < enhancedData.length) {
+                            // 应用抑制，减少回声幅度
+                            enhancedData[offset + i + delay] *= (1 - strength * 0.5);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 3. 应用语音增强
     if (audioSettings.voiceEnhancement.enabled) {
         // 语音增益处理
         for (let i = 0; i < enhancedData.length; i++) {
@@ -315,7 +479,7 @@ function applyAudioEnhancements(audioData) {
         }
     }
     
-    // 2. 应用均衡器
+    // 4. 应用均衡器
     if (audioSettings.equalizer.enabled) {
         // 简化的均衡器实现 - 在实际项目中应使用FFT或滤波器组实现
         // 这里使用简单的峰值检测和增强
@@ -330,7 +494,7 @@ function applyAudioEnhancements(audioData) {
         }
     }
     
-    // 3. 最终处理 - 轻微饱和度压缩以避免过载
+    // 5. 最终处理 - 轻微饱和度压缩以避免过载
     for (let i = 0; i < enhancedData.length; i++) {
         // 软饱和度压缩 (tanh函数模拟)
         enhancedData[i] = Math.tanh(enhancedData[i] * 0.95);
@@ -367,7 +531,6 @@ async function streamAudio() {
         const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
         
         // 从命令行参数中提取会议ID
-        let conferenceId = 'unknown';
         const confIdIndex = args.indexOf('-conferenceId');
         if (confIdIndex !== -1 && args.length > confIdIndex + 1) {
             conferenceId = args[confIdIndex + 1];
@@ -413,6 +576,50 @@ async function streamAudio() {
                 if (userIdIndex !== -1 && args.length > userIdIndex + 1) {
                     userId = args[userIdIndex + 1];
                     console.error(`指定用户ID: ${userId}`);
+
+                    // 如果ID没有标准前缀，添加前缀
+                    if (!userId.startsWith('vscode_') && !userId.startsWith('user_') && !userId.startsWith('client_')) {
+                        // 检查是否在VSCode环境中
+                        const isVSCode = process.env.VSCODE_PID || process.env.VSCODE_CWD || 
+                                        process.title.toLowerCase().includes('vscode');
+                        
+                        if (isVSCode) {
+                            // 优先使用vscode前缀
+                            const originalId = userId;
+                            userId = `vscode_${originalId}`;
+                            console.error(`将用户ID转换为VSCode格式: ${userId}`);
+                        } else {
+                            // 否则使用user前缀
+                            const originalId = userId;
+                            userId = `user_${originalId}`;
+                            console.error(`将用户ID转换为标准用户格式: ${userId}`);
+                        }
+                    }
+                } else {
+                    // 尝试查找已存在的用户ID
+                    const existingUserId = findExistingUserId();
+                    
+                    if (existingUserId) {
+                        // 使用已存在的用户ID
+                        userId = existingUserId;
+                        console.error(`使用已存在的用户ID: ${userId}`);
+                    } else {
+                        // 如果没有找到已存在的ID，才生成新的
+                    const timestamp = Date.now();
+                    // 检查是否在VSCode环境中
+                    const isVSCode = process.env.VSCODE_PID || process.env.VSCODE_CWD || 
+                                    process.title.toLowerCase().includes('vscode');
+                    
+                    if (isVSCode) {
+                        userId = `vscode_${timestamp}`;
+                    } else {
+                        userId = `user_${timestamp}`;
+                    }
+                        console.error(`生成新的用户ID: ${userId}`);
+                        
+                        // 保存新生成的ID以便将来使用
+                        saveUserId(userId);
+                    }
                 }
                 
                 // 查找roomId参数
@@ -557,7 +764,7 @@ async function streamAudio() {
                             };
                             
                             // 如果指定了会议ID，添加到消息中
-                            if (conferenceId) {
+                            if (typeof conferenceId !== 'undefined' && conferenceId) {
                                 audioMessage.conferenceId = conferenceId;
                             }
                             
@@ -670,7 +877,34 @@ async function streamAudio() {
                                     }
                                 }
                                 
-                                console.error('音频设置已更新');
+                                // 处理噪音抑制设置
+                                if (msg.settings.noiseReduction) {
+                                    if (typeof msg.settings.noiseReduction.enabled !== 'undefined') {
+                                        audioSettings.noiseReduction.enabled = msg.settings.noiseReduction.enabled;
+                                    }
+                                    if (typeof msg.settings.noiseReduction.threshold !== 'undefined') {
+                                        audioSettings.noiseReduction.threshold = msg.settings.noiseReduction.threshold;
+                                    }
+                                    if (typeof msg.settings.noiseReduction.reduction !== 'undefined') {
+                                        audioSettings.noiseReduction.reduction = msg.settings.noiseReduction.reduction;
+                                    }
+                                }
+                                
+                                // 处理回声消除设置
+                                if (msg.settings.echoReduction) {
+                                    if (typeof msg.settings.echoReduction.enabled !== 'undefined') {
+                                        audioSettings.echoReduction.enabled = msg.settings.echoReduction.enabled;
+                                    }
+                                    if (typeof msg.settings.echoReduction.strength !== 'undefined') {
+                                        audioSettings.echoReduction.strength = msg.settings.echoReduction.strength;
+                                    }
+                                }
+                                
+                                console.error('音频设置已更新：', {
+                                    enhancementEnabled: audioSettings.enhancementEnabled,
+                                    noiseReductionEnabled: audioSettings.noiseReduction.enabled,
+                                    echoReductionEnabled: audioSettings.echoReduction.enabled
+                                });
                             }
                         }
                     } catch (err) {

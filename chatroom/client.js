@@ -3,7 +3,7 @@ const readline = require('readline'); // 用于命令行交互测试
 
 let wsClient = null;
 let currentRoomId = 'default'; // 默认房间ID
-let currentUserId = `client_${Date.now()}`; // 默认用户ID
+let currentUserId = null; // 默认用户ID
 let currentUserName = 'TestClientUser'; // 默认用户名
 let reconnectAttempts = 0;
 let maxReconnectAttempts = 3;
@@ -24,7 +24,7 @@ const rl = readline.createInterface({
  * @param {string} ipAddress 服务器IP地址
  * @returns {WebSocket} WebSocket 实例
  */
-function connectToServer(port = 3000, roomId = 'default', userId = `client_${Date.now()}`, userName = 'TestClientUser', ipAddress = 'localhost') {
+function connectToServer(port = 3000, roomId = 'default', userId = null, userName = 'TestClientUser', ipAddress = 'localhost') {
   if (wsClient && wsClient.readyState === WebSocket.OPEN) {
     console.log('已经连接到服务器。');
     return wsClient;
@@ -38,6 +38,25 @@ function connectToServer(port = 3000, roomId = 'default', userId = `client_${Dat
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
+  }
+
+  // 生成或使用提供的userId，优先使用vscode_前缀
+  if (!userId) {
+    const timestamp = Date.now();
+    // 如果运行在VSCode环境中或应用程序名称包含vscode
+    if (process.env.VSCODE_PID || process.env.VSCODE_CWD || process.title.toLowerCase().includes('vscode')) {
+      userId = `vscode_${timestamp}`;
+    } else {
+      userId = `client_${timestamp}`;
+    }
+  } else if (!userId.startsWith('vscode_') && !userId.startsWith('user_') && !userId.startsWith('client_')) {
+    // 如果用户ID没有标准前缀，添加vscode_前缀
+    const originalId = userId;
+    if (process.env.VSCODE_PID || process.env.VSCODE_CWD || process.title.toLowerCase().includes('vscode')) {
+      userId = `vscode_${originalId}`;
+    } else {
+      userId = `client_${originalId}`;
+    }
   }
 
   const serverUrl = `ws://${ipAddress}:${port}`;
@@ -66,7 +85,7 @@ function connectToServer(port = 3000, roomId = 'default', userId = `client_${Dat
       
       try {
         wsClient.send(JSON.stringify(joinMessage));
-        console.log(`尝试加入房间: ${currentRoomId}，用户名为: ${currentUserName}`);
+        console.log(`尝试加入房间: ${currentRoomId}，用户ID: ${currentUserId}, 用户名为: ${currentUserName}`);
         
         // 检查readline状态后再调用promptForMessage
         if (!rl.closed) {
@@ -418,6 +437,50 @@ function joinRoom(roomId) {
   }
 }
 
+/**
+ * 设置音频处理选项
+ * @param {Object} options 音频处理选项
+ * @param {boolean} options.noiseReductionEnabled 是否启用噪音抑制
+ * @param {number} options.noiseReductionThreshold 噪音阈值 (0-1)
+ * @param {number} options.noiseReductionStrength 噪音抑制强度 (0-1)
+ * @param {boolean} options.echoReductionEnabled 是否启用回声消除
+ * @param {number} options.echoReductionStrength 回声消除强度 (0-1)
+ * @returns {boolean} 是否成功发送设置
+ */
+function setAudioProcessingOptions(options) {
+  if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+    try {
+      const message = {
+        type: 'command',
+        action: 'updateAudioSettings',
+        settings: {
+          noiseReduction: {
+            enabled: options.noiseReductionEnabled !== undefined ? options.noiseReductionEnabled : true,
+            threshold: options.noiseReductionThreshold !== undefined ? options.noiseReductionThreshold : 0.05,
+            reduction: options.noiseReductionStrength !== undefined ? options.noiseReductionStrength : 0.7
+          },
+          echoReduction: {
+            enabled: options.echoReductionEnabled !== undefined ? options.echoReductionEnabled : true,
+            strength: options.echoReductionStrength !== undefined ? options.echoReductionStrength : 0.8
+          },
+          // 保留现有的音频处理选项
+          enhancementEnabled: options.enhancementEnabled !== undefined ? options.enhancementEnabled : true
+        }
+      };
+      
+      wsClient.send(JSON.stringify(message));
+      console.log('已发送音频处理设置:', message.settings);
+      return true;
+    } catch (error) {
+      console.error('发送音频处理设置失败:', error);
+      return false;
+    }
+  } else {
+    console.log('未连接到服务器，无法发送音频处理设置。');
+    return false;
+  }
+}
+
 // 如果此文件被直接执行 (例如通过 npm run test-chat-client)
 if (require.main === module) {
   const defaultPort = 3000; // 服务器默认端口
@@ -441,5 +504,6 @@ module.exports = {
   disconnectFromServer,
   isConnected,
   leaveRoom,
-  joinRoom
+  joinRoom,
+  setAudioProcessingOptions
 };

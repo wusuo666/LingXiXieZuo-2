@@ -1418,6 +1418,55 @@ class LingxiSidebarProvider {
     }
 
     /**
+     * 保存用户ID到本地存储，确保音频流使用相同ID
+     * @param {string} userId 要保存的用户ID
+     */
+    async saveUserId(userId) {
+        try {
+            if (!userId) return;
+            
+            // 工作区路径
+            let workspaceFolder = null;
+            if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                workspaceFolder = vscode.workspace.workspaceFolders[0].uri.fsPath;
+            }
+            
+            // 首先尝试保存到工作区
+            if (workspaceFolder) {
+                try {
+                    const idFilePath = path.join(workspaceFolder, '.lingxi-userid');
+                    await vscode.workspace.fs.writeFile(
+                        vscode.Uri.file(idFilePath),
+                        Buffer.from(userId, 'utf8')
+                    );
+                    console.log(`已保存用户ID到工作区: ${idFilePath}`);
+                    return;
+                } catch (error) {
+                    console.error(`保存用户ID到工作区失败: ${error.message}`);
+                    // 继续尝试其他位置
+                }
+            }
+            
+            // 如果无法保存到工作区，尝试保存到临时目录
+            const os = require('os');
+            const tmpDir = os.tmpdir();
+            const idFilePath = path.join(tmpDir, 'lingxi-userid');
+            
+            await vscode.workspace.fs.writeFile(
+                vscode.Uri.file(idFilePath),
+                Buffer.from(userId, 'utf8')
+            );
+            console.log(`已保存用户ID到临时目录: ${idFilePath}`);
+            
+            // 也设置为环境变量，以便子进程能够访问
+            process.env.LINGXI_USER_ID = userId;
+            
+        } catch (error) {
+            console.error('保存用户ID失败:', error);
+        }
+    }
+
+    /**
      * 连接到聊天室服务器
      * @param {number} port 服务器端口
      * @param {string} ipAddress IP地址，默认为localhost
@@ -1431,6 +1480,9 @@ class LingxiSidebarProvider {
             // 生成一个唯一的用户ID
             const userId = `vscode_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
             this._userId = userId; // 在类实例中保存，确保可以在多个地方访问
+            
+            // 保存用户ID到文件，以便音频流程序可以使用相同的ID
+            this.saveUserId(userId);
             
             this._chatClient = connectToServer(
                 port,
@@ -2540,11 +2592,29 @@ class LingxiSidebarProvider {
                 args.push('-workspace', workspacePath);
             }
             
+            // 添加当前用户ID参数，确保使用相同的ID
+            if (this._userId) {
+                // 检查args中是否已有userId参数
+                const userIdIndex = args.indexOf('-userId');
+                if (userIdIndex !== -1 && userIdIndex < args.length - 1) {
+                    // 已有userId参数，替换为当前ID
+                    args[userIdIndex + 1] = this._userId;
+                } else {
+                    // 没有userId参数，添加
+                    args.push('-userId', this._userId);
+                }
+                console.log(`传递用户ID给音频流: ${this._userId}`);
+            }
+            
             // 使用Node.js子进程执行命令
             const { spawn } = require('child_process');
             this._audioStreamProcess = spawn('node', [scriptPath, ...args], {
                 cwd: workspacePath || extensionPath,
-                stdio: ['ignore', 'pipe', 'pipe']
+                stdio: ['ignore', 'pipe', 'pipe'],
+                env: {
+                    ...process.env,
+                    LINGXI_USER_ID: this._userId || '' // 通过环境变量传递用户ID
+                }
             });
             
             // 添加命令行调试输出

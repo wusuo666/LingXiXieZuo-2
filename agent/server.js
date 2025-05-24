@@ -1338,7 +1338,7 @@ async function createCanvas(name, template = '空白画布') {
     await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2), 'utf8');
     
     console.error(`画布创建成功: ${filePath}`);
-    return `✅ 成功创建画布 ${name}\n💾 文件保存在: ${filePath}\n📐 使用模板: ${template}`;
+    return `✅ 成功创建画布 ${name}\n💾 文件保存在: ${filePath}\n📐 使用模板: ${template}，接下来可以用getCanvasDetails获取新建画布的元素信息`;
   } catch (error) {
     console.error(`创建画布失败: ${error.message}`);
     return `❌ 创建画布失败: ${error.message}`;
@@ -1668,7 +1668,7 @@ async function addShape(name, shapeType, x, y, color) {
   console.error(`开始添加形状，画布: ${name}, 类型: ${shapeType}, 位置: (${x},${y}), 颜色: ${color}`);
   
   // 验证形状类型
-  const validShapes = ['rectangle', 'ellipse', 'diamond', 'line', 'arrow', 'text'];
+  const validShapes = ['rectangle', 'ellipse', 'diamond', 'text'];
   if (!validShapes.includes(shapeType)) {
     return `⚠️ 无效的形状类型: ${shapeType}，有效类型: ${validShapes.join(', ')}`;
   }
@@ -1714,7 +1714,10 @@ async function addShape(name, shapeType, x, y, color) {
       strokeWidth: 1,
       strokeStyle: 'solid',
       roughness: 1,
-      opacity: 100
+      opacity: 100,
+      seed: Math.floor(Math.random() * 10000),
+      version: 1,
+      versionNonce: Math.floor(Math.random() * 1000)
     };
     
     // 根据形状类型调整属性
@@ -1907,13 +1910,43 @@ async function getCanvasDetails(name) {
       types: {}
     };
     
-    // 统计各类元素数量
+    // 计算画布边界
+    let bounds = {
+      minX: Infinity,
+      minY: Infinity,
+      maxX: -Infinity,
+      maxY: -Infinity
+    };
+    
+    // 统计各类元素数量并计算边界
     elements.forEach(element => {
       const type = element.type || 'unknown';
       if (!stats.types[type]) {
         stats.types[type] = 0;
       }
       stats.types[type]++;
+      
+      // 更新边界
+      const x = element.x || 0;
+      const y = element.y || 0;
+      const width = element.width || 0;
+      const height = element.height || 0;
+      
+      bounds.minX = Math.min(bounds.minX, x);
+      bounds.minY = Math.min(bounds.minY, y);
+      bounds.maxX = Math.max(bounds.maxX, x + width);
+      bounds.maxY = Math.max(bounds.maxY, y + height);
+      
+      // 对于线条和箭头，考虑终点坐标
+      if (type === 'line' || type === 'arrow') {
+        const points = element.points || [];
+        points.forEach(point => {
+          bounds.minX = Math.min(bounds.minX, x + point[0]);
+          bounds.minY = Math.min(bounds.minY, y + point[1]);
+          bounds.maxX = Math.max(bounds.maxX, x + point[0]);
+          bounds.maxY = Math.max(bounds.maxY, y + point[1]);
+        });
+      }
     });
     
     // 生成元素详细信息
@@ -1921,36 +1954,291 @@ async function getCanvasDetails(name) {
     elements.forEach((element, index) => {
       elementDetails += `\n${index + 1}. ${element.type || '未知类型'} (ID: ${element.id || '无ID'})`;
       
-      if (element.type === 'text' && element.text) {
+      // 基本属性
+      const x = element.x || 0;
+      const y = element.y || 0;
+      const width = element.width || 0;
+      const height = element.height || 0;
+      const angle = element.angle || 0;
+      
+      elementDetails += `\n   📍 位置: (${x}, ${y})`;
+      
+      // 计算中心点
+      const centerX = x + width / 2;
+      const centerY = y + height / 2;
+      elementDetails += `\n   🎯 中心点: (${centerX.toFixed(2)}, ${centerY.toFixed(2)})`;
+      
+      // 根据元素类型添加特定信息
+      switch (element.type) {
+        case 'text':
         elementDetails += `\n   📝 文本内容: "${element.text.substring(0, 50)}${element.text.length > 50 ? '...' : ''}"`;
+          elementDetails += `\n   📏 字体大小: ${element.fontSize || '默认'}`;
+          elementDetails += `\n   📏 文本对齐: ${element.textAlign || '默认'}`;
+          elementDetails += `\n   📏 字体系列: ${element.fontFamily || '默认'}`;
+          elementDetails += `\n   📏 文本宽度: ${width}px`;
+          elementDetails += `\n   📏 文本高度: ${height}px`;
+          elementDetails += `\n   📏 基线位置: ${element.baseline || '默认'}`;
+          break;
+          
+        case 'rectangle':
+          elementDetails += `\n   📏 尺寸: ${width}×${height}`;
+          elementDetails += `\n   🎨 填充样式: ${element.fillStyle || '无填充'}`;
+          elementDetails += `\n   🎨 背景颜色: ${element.backgroundColor || '透明'}`;
+          elementDetails += `\n   ✏️ 线条宽度: ${element.strokeWidth || '1'}`;
+          elementDetails += `\n   ✏️ 线条样式: ${element.strokeStyle || 'solid'}`;
+          
+          // 计算矩形的四个顶点坐标（考虑旋转）
+          if (angle === 0) {
+            // 不旋转的情况
+            elementDetails += `\n   📐 顶点坐标:`;
+            elementDetails += `\n     ↖ 左上: (${x}, ${y})`;
+            elementDetails += `\n     ↗ 右上: (${x + width}, ${y})`;
+            elementDetails += `\n     ↘ 右下: (${x + width}, ${y + height})`;
+            elementDetails += `\n     ↙ 左下: (${x}, ${y + height})`;
+          } else {
+            // 旋转的情况，计算旋转后的顶点
+            const angleRad = angle * Math.PI / 180;
+            const cos = Math.cos(angleRad);
+            const sin = Math.sin(angleRad);
+            
+            // 以中心点为旋转中心
+            const vertices = [
+              rotatePoint(x, y, centerX, centerY, cos, sin),
+              rotatePoint(x + width, y, centerX, centerY, cos, sin),
+              rotatePoint(x + width, y + height, centerX, centerY, cos, sin),
+              rotatePoint(x, y + height, centerX, centerY, cos, sin)
+            ];
+            
+            elementDetails += `\n   📐 旋转后顶点坐标:`;
+            elementDetails += `\n     ↖ 左上: (${vertices[0][0].toFixed(2)}, ${vertices[0][1].toFixed(2)})`;
+            elementDetails += `\n     ↗ 右上: (${vertices[1][0].toFixed(2)}, ${vertices[1][1].toFixed(2)})`;
+            elementDetails += `\n     ↘ 右下: (${vertices[2][0].toFixed(2)}, ${vertices[2][1].toFixed(2)})`;
+            elementDetails += `\n     ↙ 左下: (${vertices[3][0].toFixed(2)}, ${vertices[3][1].toFixed(2)})`;
+          }
+          
+          // 添加圆角信息
+          if (element.roundness) {
+            elementDetails += `\n   🔄 圆角: ${element.roundness.type === 3 ? element.roundness.value + 'px' : '自动'}`;
+          }
+          break;
+          
+        case 'diamond':
+          elementDetails += `\n   📏 尺寸: ${width}×${height}`;
+          elementDetails += `\n   🎨 填充样式: ${element.fillStyle || '无填充'}`;
+          elementDetails += `\n   🎨 背景颜色: ${element.backgroundColor || '透明'}`;
+          elementDetails += `\n   ✏️ 线条宽度: ${element.strokeWidth || '1'}`;
+          elementDetails += `\n   ✏️ 线条样式: ${element.strokeStyle || 'solid'}`;
+          
+          // 计算菱形的四个顶点坐标
+          if (angle === 0) {
+            // 不旋转的情况
+            elementDetails += `\n   📐 顶点坐标:`;
+            elementDetails += `\n     ⬆️ 上点: (${centerX.toFixed(2)}, ${y})`;
+            elementDetails += `\n     ➡️ 右点: (${(x + width).toFixed(2)}, ${centerY.toFixed(2)})`;
+            elementDetails += `\n     ⬇️ 下点: (${centerX.toFixed(2)}, ${(y + height).toFixed(2)})`;
+            elementDetails += `\n     ⬅️ 左点: (${x}, ${centerY.toFixed(2)})`;
+          } else {
+            // 旋转的情况
+            const angleRad = angle * Math.PI / 180;
+            const cos = Math.cos(angleRad);
+            const sin = Math.sin(angleRad);
+            
+            // 以中心点为旋转中心
+            const vertices = [
+              rotatePoint(centerX, y, centerX, centerY, cos, sin),
+              rotatePoint(x + width, centerY, centerX, centerY, cos, sin),
+              rotatePoint(centerX, y + height, centerX, centerY, cos, sin),
+              rotatePoint(x, centerY, centerX, centerY, cos, sin)
+            ];
+            
+            elementDetails += `\n   📐 旋转后顶点坐标:`;
+            elementDetails += `\n     ⬆️ 上点: (${vertices[0][0].toFixed(2)}, ${vertices[0][1].toFixed(2)})`;
+            elementDetails += `\n     ➡️ 右点: (${vertices[1][0].toFixed(2)}, ${vertices[1][1].toFixed(2)})`;
+            elementDetails += `\n     ⬇️ 下点: (${vertices[2][0].toFixed(2)}, ${vertices[2][1].toFixed(2)})`;
+            elementDetails += `\n     ⬅️ 左点: (${vertices[3][0].toFixed(2)}, ${vertices[3][1].toFixed(2)})`;
+          }
+          break;
+          
+        case 'ellipse':
+          elementDetails += `\n   📏 尺寸: ${width}×${height}`;
+          elementDetails += `\n   🎨 填充样式: ${element.fillStyle || '无填充'}`;
+          elementDetails += `\n   🎨 背景颜色: ${element.backgroundColor || '透明'}`;
+          elementDetails += `\n   ✏️ 线条宽度: ${element.strokeWidth || '1'}`;
+          elementDetails += `\n   ✏️ 线条样式: ${element.strokeStyle || 'solid'}`;
+          
+          // 椭圆特有属性
+          const rx = width / 2;  // 水平半径
+          const ry = height / 2; // 垂直半径
+          
+          elementDetails += `\n   ⭕ 椭圆参数:`;
+          elementDetails += `\n     🔵 中心: (${centerX.toFixed(2)}, ${centerY.toFixed(2)})`;
+          elementDetails += `\n     ↔️ 水平半径: ${rx.toFixed(2)}`;
+          elementDetails += `\n     ↕️ 垂直半径: ${ry.toFixed(2)}`;
+          
+          // 计算椭圆的关键点（0°, 90°, 180°, 270°）
+          if (angle === 0) {
+            // 不旋转的情况
+            elementDetails += `\n   📐 关键点坐标:`;
+            elementDetails += `\n     ⬆️ 上点: (${centerX.toFixed(2)}, ${(centerY - ry).toFixed(2)})`;
+            elementDetails += `\n     ➡️ 右点: (${(centerX + rx).toFixed(2)}, ${centerY.toFixed(2)})`;
+            elementDetails += `\n     ⬇️ 下点: (${centerX.toFixed(2)}, ${(centerY + ry).toFixed(2)})`;
+            elementDetails += `\n     ⬅️ 左点: (${(centerX - rx).toFixed(2)}, ${centerY.toFixed(2)})`;
+          } else {
+            // 旋转的情况
+            const angleRad = angle * Math.PI / 180;
+            const cos = Math.cos(angleRad);
+            const sin = Math.sin(angleRad);
+            
+            // 以中心点为旋转中心
+            const keyPoints = [
+              rotatePoint(centerX, centerY - ry, centerX, centerY, cos, sin),
+              rotatePoint(centerX + rx, centerY, centerX, centerY, cos, sin),
+              rotatePoint(centerX, centerY + ry, centerX, centerY, cos, sin),
+              rotatePoint(centerX - rx, centerY, centerX, centerY, cos, sin)
+            ];
+            
+            elementDetails += `\n   📐 旋转后关键点坐标:`;
+            elementDetails += `\n     ⬆️ 上点: (${keyPoints[0][0].toFixed(2)}, ${keyPoints[0][1].toFixed(2)})`;
+            elementDetails += `\n     ➡️ 右点: (${keyPoints[1][0].toFixed(2)}, ${keyPoints[1][1].toFixed(2)})`;
+            elementDetails += `\n     ⬇️ 下点: (${keyPoints[2][0].toFixed(2)}, ${keyPoints[2][1].toFixed(2)})`;
+            elementDetails += `\n     ⬅️ 左点: (${keyPoints[3][0].toFixed(2)}, ${keyPoints[3][1].toFixed(2)})`;
+          }
+          break;
+          
+        case 'line':
+          const points = element.points || [];
+          const startX = x;
+          const startY = y;
+          const endX = x + (points[points.length-1]?.[0] || 0);
+          const endY = y + (points[points.length-1]?.[1] || 0);
+          
+          elementDetails += `\n   📍 起点: (${startX}, ${startY})`;
+          elementDetails += `\n   📍 终点: (${endX}, ${endY})`;
+          elementDetails += `\n   📏 线长: ${calculateDistance(startX, startY, endX, endY).toFixed(2)}`;
+          elementDetails += `\n   📐 角度: ${calculateAngle(startX, startY, endX, endY).toFixed(2)}°`;
+          elementDetails += `\n   ✏️ 线条宽度: ${element.strokeWidth || '1'}`;
+          elementDetails += `\n   ✏️ 线条样式: ${element.strokeStyle || 'solid'}`;
+          
+          // 如果有多个点，显示所有点
+          if (points.length > 1) {
+            elementDetails += `\n   📍 所有点坐标:`;
+            points.forEach((point, i) => {
+              const pointX = x + point[0];
+              const pointY = y + point[1];
+              elementDetails += `\n     点${i+1}: (${pointX}, ${pointY})`;
+            });
+          }
+          break;
+          
+        case 'arrow':
+          const arrowPoints = element.points || [];
+          const arrowStartX = x;
+          const arrowStartY = y;
+          const arrowEndX = x + (arrowPoints[arrowPoints.length-1]?.[0] || 0);
+          const arrowEndY = y + (arrowPoints[arrowPoints.length-1]?.[1] || 0);
+          
+          elementDetails += `\n   📍 起点: (${arrowStartX}, ${arrowStartY})`;
+          elementDetails += `\n   📍 终点: (${arrowEndX}, ${arrowEndY})`;
+          elementDetails += `\n   📏 线长: ${calculateDistance(arrowStartX, arrowStartY, arrowEndX, arrowEndY).toFixed(2)}`;
+          elementDetails += `\n   📐 角度: ${calculateAngle(arrowStartX, arrowStartY, arrowEndX, arrowEndY).toFixed(2)}°`;
+          elementDetails += `\n   ✏️ 线条宽度: ${element.strokeWidth || '1'}`;
+          elementDetails += `\n   ✏️ 线条样式: ${element.strokeStyle || 'solid'}`;
+          elementDetails += `\n   ➡️ 起点箭头: ${element.startArrowhead || '无'}`;
+          elementDetails += `\n   ➡️ 终点箭头: ${element.endArrowhead || '箭头'}`;
+          
+          // 如果有绑定关系，显示绑定信息
+          if (element.startBinding) {
+            elementDetails += `\n   🔗 起点绑定: 元素ID ${element.startBinding.elementId}，焦点 ${element.startBinding.focus}`;
+          }
+          if (element.endBinding) {
+            elementDetails += `\n   🔗 终点绑定: 元素ID ${element.endBinding.elementId}，焦点 ${element.endBinding.focus}`;
+          }
+          
+          // 如果有多个点，显示所有点
+          if (arrowPoints.length > 1) {
+            elementDetails += `\n   📍 所有点坐标:`;
+            arrowPoints.forEach((point, i) => {
+              const pointX = x + point[0];
+              const pointY = y + point[1];
+              elementDetails += `\n     点${i+1}: (${pointX}, ${pointY})`;
+            });
+          }
+          break;
+          
+        case 'frame':
+          elementDetails += `\n   📏 尺寸: ${width}×${height}`;
+          elementDetails += `\n   📝 标签: ${element.name || '无标签'}`;
+          
+          // 计算框架的四个顶点坐标
+          elementDetails += `\n   📐 顶点坐标:`;
+          elementDetails += `\n     ↖ 左上: (${x}, ${y})`;
+          elementDetails += `\n     ↗ 右上: (${x + width}, ${y})`;
+          elementDetails += `\n     ↘ 右下: (${x + width}, ${y + height})`;
+          elementDetails += `\n     ↙ 左下: (${x}, ${y + height})`;
+          
+          // 如果有自定义数据，显示
+          if (element.customData) {
+            elementDetails += `\n   🔧 自定义数据:`;
+            for (const [key, value] of Object.entries(element.customData)) {
+              elementDetails += `\n     ${key}: ${value}`;
+            }
+          }
+          break;
       }
       
-      elementDetails += `\n   📍 位置: (${element.x || 0}, ${element.y || 0})`;
-      
-      if (element.width && element.height) {
-        elementDetails += `\n   📏 尺寸: ${element.width}×${element.height}`;
-      }
-      
+      // 通用样式属性
       if (element.strokeColor) {
         elementDetails += `\n   🎨 线条颜色: ${element.strokeColor}`;
       }
-      
       if (element.backgroundColor && element.backgroundColor !== 'transparent') {
         elementDetails += `\n   🎨 背景颜色: ${element.backgroundColor}`;
       }
+      if (element.opacity !== undefined && element.opacity !== 100) {
+        elementDetails += `\n   💧 透明度: ${element.opacity}%`;
+      }
+      if (element.angle) {
+        elementDetails += `\n   🔄 旋转角度: ${element.angle}°`;
+      }
+      if (element.roughness !== undefined) {
+        elementDetails += `\n   📊 粗糙度: ${element.roughness}`;
+      }
+      if (element.seed !== undefined) {
+        elementDetails += `\n   🌱 种子值: ${element.seed}`;
+      }
+      if (element.version !== undefined) {
+        elementDetails += `\n   🔄 版本: ${element.version}`;
+      }
+      if (element.updated) {
+        const updateDate = new Date(element.updated);
+        elementDetails += `\n   📅 更新时间: ${updateDate.toLocaleString()}`;
+      }
+      
+      elementDetails += '\n';
     });
     
     // 获取画布属性
     const appState = canvasData.appState || {};
     const theme = appState.theme || 'light';
     const backgroundColor = appState.viewBackgroundColor || '#ffffff';
+    const gridSize = appState.gridSize || 20;
+    const zoomLevel = appState.zoom?.value || 1;
     
     // 生成完整报告
     let result = `📊 画布 ${name} 详细信息:\n`;
     result += `\n📄 基本信息:`;
     result += `\n   🖼️ 画布主题: ${theme}`;
     result += `\n   🎨 背景颜色: ${backgroundColor}`;
+    result += `\n   📏 网格大小: ${gridSize}px`;
+    result += `\n   🔍 缩放级别: ${(zoomLevel * 100).toFixed(0)}%`;
     result += `\n   📂 文件路径: ${filePath}`;
+    
+    // 添加画布边界信息
+    if (elements.length > 0) {
+      result += `\n\n📐 画布边界:`;
+      result += `\n   左上角: (${bounds.minX.toFixed(2)}, ${bounds.minY.toFixed(2)})`;
+      result += `\n   右下角: (${bounds.maxX.toFixed(2)}, ${bounds.maxY.toFixed(2)})`;
+      result += `\n   画布尺寸: ${(bounds.maxX - bounds.minX).toFixed(2)}×${(bounds.maxY - bounds.minY).toFixed(2)}`;
+    }
     
     result += `\n\n📊 元素统计 (共${stats.total}个):`;
     for (const [type, count] of Object.entries(stats.types)) {
@@ -1966,6 +2254,193 @@ async function getCanvasDetails(name) {
   } catch (error) {
     console.error(`获取画布详细信息失败: ${error.message}`);
     return `❌ 获取画布详细信息失败: ${error.message}`;
+  }
+}
+
+/**
+ * 添加箭头到画布
+ * @param {string} name - 画布名称
+ * @param {number} x - 起始X坐标
+ * @param {number} y - 起始Y坐标
+ * @param {number} endX - 结束X坐标
+ * @param {number} endY - 结束Y坐标
+ * @param {string} color - 箭头颜色
+ * @param {string} startArrowhead - 起始箭头样式 (可选)
+ * @param {string} endArrowhead - 结束箭头样式 (可选)
+ * @returns {Promise<string>} 操作结果
+ */
+async function addArrow(name, x, y, endX, endY, color = '#000000', startArrowhead = null, endArrowhead = 'arrow') {
+  console.error(`开始添加箭头，画布: ${name}, 起点: (${x},${y}), 终点: (${endX},${endY}), 颜色: ${color}`);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
+    }
+    
+    // 确保elements数组存在
+    if (!canvasData.elements) {
+      canvasData.elements = [];
+    }
+    
+    // 计算箭头的宽度和高度
+    const width = endX - x;
+    const height = endY - y;
+    
+    // 创建箭头元素
+    const newArrow = {
+      id: `arrow-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'arrow',
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      angle: 0,
+      strokeColor: color,
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: 1,
+      strokeStyle: 'solid',
+      roughness: 1,
+      opacity: 100,
+      points: [
+        [0, 0],
+        [width, height]
+      ],
+      startBinding: null,
+      endBinding: null,
+      lastCommittedPoint: null,
+      startArrowhead: startArrowhead,
+      endArrowhead: endArrowhead,
+      seed: Math.floor(Math.random() * 10000),
+      version: 1,
+      versionNonce: Math.floor(Math.random() * 1000)
+    };
+    
+    // 添加到画布
+    canvasData.elements.push(newArrow);
+    
+    // 写回文件
+    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2), 'utf8');
+    
+    console.error(`箭头添加成功: ${filePath}`);
+    return `✅ 成功添加箭头到画布 ${name}
+📍 起点: (${x}, ${y})
+📍 终点: (${endX}, ${endY})
+🎨 颜色: ${color}
+${startArrowhead ? `➡️ 起始箭头: ${startArrowhead}` : ''}
+${endArrowhead ? `➡️ 结束箭头: ${endArrowhead}` : ''}
+🆔 箭头ID: ${newArrow.id}`;
+  } catch (error) {
+    console.error(`添加箭头失败: ${error.message}`);
+    return `❌ 添加箭头失败: ${error.message}`;
+  }
+}
+
+/**
+ * 添加线条到画布
+ * @param {string} name - 画布名称
+ * @param {number} x - 起始X坐标
+ * @param {number} y - 起始Y坐标
+ * @param {number} endX - 结束X坐标
+ * @param {number} endY - 结束Y坐标
+ * @param {string} color - 线条颜色
+ * @param {number} strokeWidth - 线条宽度
+ * @param {string} strokeStyle - 线条样式 (solid, dashed, dotted)
+ * @returns {Promise<string>} 操作结果
+ */
+async function addLine(name, x, y, endX, endY, color = '#000000', strokeWidth = 1, strokeStyle = 'solid') {
+  console.error(`开始添加线条，画布: ${name}, 起点: (${x},${y}), 终点: (${endX},${endY}), 颜色: ${color}`);
+  
+  try {
+    await ensureExcalidrawDir();
+    
+    // 验证文件存在
+    const fileName = name.endsWith('.excalidraw') ? name : `${name}.excalidraw`;
+    const filePath = path.join(EXCALIDRAW_DIR, fileName);
+    
+    try {
+      await fs.access(filePath);
+    } catch {
+      return `⚠️ 画布 ${name} 不存在，请先创建或检查名称是否正确`;
+    }
+    
+    // 读取画布内容
+    const fileContent = await fs.readFile(filePath, 'utf8');
+    let canvasData;
+    try {
+      canvasData = JSON.parse(fileContent);
+    } catch {
+      return `⚠️ 画布文件 ${name} 格式无效，无法解析JSON内容`;
+    }
+    
+    // 确保elements数组存在
+    if (!canvasData.elements) {
+      canvasData.elements = [];
+    }
+    
+    // 计算线条的宽度和高度
+    const width = endX - x;
+    const height = endY - y;
+    
+    // 创建线条元素
+    const newLine = {
+      id: `line-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'line',
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      angle: 0,
+      strokeColor: color,
+      backgroundColor: 'transparent',
+      fillStyle: 'solid',
+      strokeWidth: strokeWidth,
+      strokeStyle: strokeStyle,
+      roughness: 1,
+      opacity: 100,
+      points: [
+        [0, 0],
+        [width, height]
+      ],
+      seed: Math.floor(Math.random() * 10000),
+      version: 1,
+      versionNonce: Math.floor(Math.random() * 1000)
+    };
+    
+    // 添加到画布
+    canvasData.elements.push(newLine);
+    
+    // 写回文件
+    await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2), 'utf8');
+    
+    console.error(`线条添加成功: ${filePath}`);
+    return `✅ 成功添加线条到画布 ${name}
+📍 起点: (${x}, ${y})
+📍 终点: (${endX}, ${endY})
+🎨 颜色: ${color}
+📏 线宽: ${strokeWidth}
+📝 样式: ${strokeStyle}
+🆔 线条ID: ${newLine.id}`;
+  } catch (error) {
+    console.error(`添加线条失败: ${error.message}`);
+    return `❌ 添加线条失败: ${error.message}`;
   }
 }
 
@@ -2150,204 +2625,6 @@ async function deleteElement(name, elementId) {
   }
 }
 
-// 添加参数描述
-createCanvas.description = '创建新的Excalidraw画布，可选择模板';
-createCanvas.parameters = {
-  type: 'object',
-  properties: {
-    name: {
-      type: 'string',
-      description: '画布名称（不需要包含.excalidraw扩展名）'
-    },
-    template: {
-      type: 'string',
-      description: '可选的模板名称，可用模板: 空白画布, 基础图形, 流程图，思维导图，组织结构图'
-    }
-  },
-  required: ['name']
-};
-
-listCanvases.description = '列出所有已创建的Excalidraw画布';
-listCanvases.parameters = {
-  type: 'object',
-  properties: {
-    random: {
-      type: 'string',
-      description: '无需参数'
-    }
-  }
-};
-
-exportCanvas.description = '将Excalidraw画布导出为SVG格式';
-exportCanvas.parameters = {
-  type: 'object',
-  properties: {
-    name: {
-      type: 'string',
-      description: '画布名称'
-    },
-    format: {
-      type: 'string',
-      description: '导出格式: svg'
-    },
-    withBackground: {
-      type: 'boolean',
-      description: '是否包含背景（默认为true）'
-    },
-    withDarkMode: {
-      type: 'boolean',
-      description: '是否使用暗色模式（默认为false）'
-    },
-    exportScale: {
-      type: 'number',
-      description: '导出缩放比例（默认为1）'
-    }
-  },
-  required: ['name', 'format']
-};
-
-addShape.description = '向Excalidraw画布添加基本形状';
-addShape.parameters = {
-  type: 'object',
-  properties: {
-    name: {
-      type: 'string',
-      description: '画布名称'
-    },
-    shapeType: {
-      type: 'string',
-      description: '形状类型: rectangle, ellipse, diamond, line, arrow, text'
-    },
-    x: {
-      type: 'number',
-      description: 'X坐标位置'
-    },
-    y: {
-      type: 'number',
-      description: 'Y坐标位置'
-    },
-    color: {
-      type: 'string',
-      description: '颜色代码，如 #000000 或 #ff0000'
-    }
-  },
-  required: ['name', 'shapeType', 'x', 'y']
-};
-
-importLibrary.description = '导入Excalidraw公共库或从URL导入库';
-importLibrary.parameters = {
-  type: 'object',
-  properties: {
-    libraryUrl: {
-      type: 'string',
-      description: '库URL或识别符（如"rocket"、"charts"等公共库ID或完整URL）'
-    },
-    canvasName: {
-      type: 'string',
-      description: '可选：要导入到的画布名称。如不提供，将作为工作区库导入'
-    }
-  },
-  required: ['libraryUrl']
-};
-
-getCanvasDetails.description = '获取Excalidraw画布的详细信息';
-getCanvasDetails.parameters = {
-  type: 'object',
-  properties: {
-    name: {
-      type: 'string',
-      description: '画布名称'
-    }
-  },
-  required: ['name']
-};
-
-addText.description = '向Excalidraw画布添加文本';
-addText.parameters = {
-  type: 'object',
-  properties: {
-    name: {
-      type: 'string',
-      description: '画布名称'
-    },
-    text: {
-      type: 'string',
-      description: '文本内容'
-    },
-    x: {
-      type: 'number',
-      description: 'X坐标位置'
-    },
-    y: {
-      type: 'number',
-      description: 'Y坐标位置'
-    },
-    color: {
-      type: 'string',
-      description: '文本颜色，如 #000000 或 #ff0000 (可选，默认为黑色)'
-    },
-    fontSize: {
-      type: 'number',
-      description: '字体大小 (可选，默认为20)'
-    }
-  },
-  required: ['name', 'text', 'x', 'y']
-};
-
-deleteElement.description = '从Excalidraw画布中删除指定元素';
-deleteElement.parameters = {
-  type: 'object',
-  properties: {
-    name: {
-      type: 'string',
-      description: '画布名称'
-    },
-    elementId: {
-      type: 'string',
-      description: '要删除的元素ID'
-    }
-  },
-  required: ['name', 'elementId']
-};
-
-// 注册工具
-mcp.tool()(createCanvas);
-mcp.tool()(listCanvases);
-mcp.tool()(exportCanvas);
-mcp.tool()(addShape);
-mcp.tool()(importLibrary);
-mcp.tool()(getCanvasDetails);
-mcp.tool()(addText);
-mcp.tool()(deleteElement);
-
-// 如果直接运行此文件
-if (process.argv[1] === __filename) {
-  // 解析命令行参数
-  let workspaceDir = '';
-  
-  for (let i = 2; i < process.argv.length; i++) {
-    if (process.argv[i] === '--workspace' && i + 1 < process.argv.length) {
-      workspaceDir = process.argv[i + 1];
-      i++; // 跳过下一个参数
-    }
-  }
-  
-  // 设置工作区目录（如果有提供）
-  if (workspaceDir) {
-    console.error(`从命令行参数设置工作区目录: ${workspaceDir}`);
-    setExcalidrawDir(workspaceDir);
-  }
-  
-  // 以标准I/O方式运行MCP服务器
-  mcp.run({ transport: 'stdio' });
-} 
-
-// 导出变量和函数给其他模块使用
-module.exports = {
-  setExcalidrawDir,
-  EXCALIDRAW_DIR
-}; 
-
 /**
  * 在画布中创建一个框架用于分组元素
  * @param {string} name - 画布名称
@@ -2391,6 +2668,9 @@ async function createFrame(name, x, y, width, height, label = '框架', color = 
     
     // 创建框架ID
     const frameId = `frame_${Date.now()}`;
+
+    // 计算标签文本的宽度
+    const estimatedWidth = label.length * 16 * 1.5;
     
     // 创建框架元素
     const frame = {
@@ -2398,7 +2678,7 @@ async function createFrame(name, x, y, width, height, label = '框架', color = 
       type: 'rectangle',
       x: x,
       y: y,
-      width: width,
+      width: estimatedWidth,
       height: height,
       angle: 0,
       strokeColor: color,
@@ -2667,21 +2947,110 @@ async function updateElementStyle(name, elementId, styleOptions = {}) {
     
     // 获取元素引用
     const element = canvasData.elements[elementIndex];
+    const elementType = element.type || 'unknown';
     
-    // 可更新的样式属性列表
-    const updatableProps = [
+    console.error(`正在更新元素类型: ${elementType}, ID: ${elementId}`);
+    
+    // 根据元素类型定义可更新的样式属性列表
+    let updatableProps = [
       'strokeColor', 'backgroundColor', 'fillStyle', 'strokeWidth', 
-      'strokeStyle', 'roughness', 'opacity', 'fontSize', 'fontFamily',
-      'textAlign', 'verticalAlign'
+      'strokeStyle', 'roughness', 'opacity'
     ];
+    
+    // 针对不同类型的元素添加特定的可更新属性
+    switch (elementType) {
+      case 'text':
+        // 文本特有属性
+        updatableProps = [
+          ...updatableProps,
+          'fontSize', 'fontFamily', 'textAlign', 'verticalAlign',
+          'text', 'baseline', 'lineHeight'
+        ];
+        break;
+        
+      case 'rectangle':
+      case 'ellipse':
+      case 'diamond':
+        // 形状特有属性
+        updatableProps = [
+          ...updatableProps,
+          'width', 'height', 'angle'
+        ];
+        
+        // 处理圆角属性
+        if (styleOptions.roundness !== undefined) {
+          if (!element.roundness) {
+            element.roundness = { type: 3, value: 0 };
+          }
+          element.roundness.value = parseFloat(styleOptions.roundness);
+          styleOptions.roundness = undefined; // 避免后面重复处理
+        }
+        break;
+        
+      case 'line':
+        // 线条特有属性
+        updatableProps = [
+          ...updatableProps,
+          'strokeWidth', 'strokeStyle', 'points'
+        ];
+        break;
+        
+      case 'arrow':
+        // 箭头特有属性
+        updatableProps = [
+          ...updatableProps,
+          'strokeWidth', 'strokeStyle', 'points',
+          'startArrowhead', 'endArrowhead'
+        ];
+        break;
+        
+      case 'frame':
+        // 框架特有属性
+        updatableProps = [
+          ...updatableProps,
+          'width', 'height', 'name'
+        ];
+        
+        // 框架名称特殊处理
+        if (styleOptions.name && element.customData) {
+          element.customData.frameName = styleOptions.name;
+        }
+        break;
+    }
     
     // 应用样式更新
     let updatedProps = [];
     
+    // 处理位置调整（如果提供了x和y坐标）
+    if (styleOptions.x !== undefined || styleOptions.y !== undefined) {
+      if (styleOptions.x !== undefined) {
+        element.x = parseFloat(styleOptions.x);
+        updatedProps.push(`x: ${element.x}`);
+      }
+      
+      if (styleOptions.y !== undefined) {
+        element.y = parseFloat(styleOptions.y);
+        updatedProps.push(`y: ${element.y}`);
+      }
+    }
+    
+    // 处理其他样式属性
     for (const [key, value] of Object.entries(styleOptions)) {
+      if (key === 'x' || key === 'y' || key === 'roundness') {
+        // 已经处理过的属性，跳过
+        continue;
+      }
+      
       if (updatableProps.includes(key)) {
-        // 如果属性是有效的可更新属性
-        element[key] = value;
+        // 根据属性类型进行适当的转换
+        if (key === 'width' || key === 'height' || key === 'opacity' || key === 'strokeWidth' || key === 'fontSize') {
+          element[key] = parseFloat(value);
+        } else if (key === 'angle') {
+          element[key] = parseFloat(value) % 360; // 确保角度在0-360范围内
+        } else {
+          element[key] = value;
+        }
+        
         updatedProps.push(`${key}: ${value}`);
       }
     }
@@ -2698,15 +3067,174 @@ async function updateElementStyle(name, elementId, styleOptions = {}) {
     // 保存更新后的画布
     await fs.writeFile(filePath, JSON.stringify(canvasData, null, 2));
     
-    return `✅ 成功更新画布 ${name} 中元素 ${elementId} 的样式，更新了以下属性: ${updatedProps.join(', ')}`;
+    return `✅ 成功更新画布 ${name} 中${elementType}元素 ${elementId} 的样式，更新了以下属性: ${updatedProps.join(', ')}`;
   } catch (error) {
     console.error('更新元素样式时出错：', error);
     return `❌ 更新元素样式失败: ${error.message}`;
   }
 }
 
-// 注册新工具
-createFrame.description = '创建一个框架用于分组元素';
+// 添加参数描述
+createCanvas.description = '创建新的Excalidraw画布，为用户提供绘图的基础环境。可以选择不同的模板来快速开始绘图。';
+createCanvas.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称（不需要包含.excalidraw扩展名）'
+    },
+    template: {
+      type: 'string',
+      description: '可选的模板名称，可用模板: 空白画布, 基础图形, 流程图，思维导图，组织结构图'
+    }
+  },
+  required: ['name']
+};
+
+listCanvases.description = '列出所有已创建的画布，帮助用户了解现有画布情况。';
+listCanvases.parameters = {
+  type: 'object',
+  properties: {
+    random: {
+      type: 'string',
+      description: '无需参数'
+    }
+  }
+};
+
+exportCanvas.description = '导出画布为SVG格式，便于用户分享和使用绘制的内容。';
+exportCanvas.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    format: {
+      type: 'string',
+      description: '导出格式: svg'
+    },
+    withBackground: {
+      type: 'boolean',
+      description: '是否包含背景（默认为true）'
+    },
+    withDarkMode: {
+      type: 'boolean',
+      description: '是否使用暗色模式（默认为false）'
+    },
+    exportScale: {
+      type: 'number',
+      description: '导出缩放比例（默认为1）'
+    }
+  },
+  required: ['name', 'format']
+};
+
+addShape.description = '添加基本形状，构建图表的基本元素。一般配合addText使用，确保形状的边框与线条的连接。';
+addShape.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    shapeType: {
+      type: 'string',
+      description: '形状类型: rectangle, ellipse, diamond, text'
+    },
+    x: {
+      type: 'number',
+      description: 'X坐标位置'
+    },
+    y: {
+      type: 'number',
+      description: 'Y坐标位置'
+    },
+    color: {
+      type: 'string',
+      description: '颜色代码，如 #000000 或 #ff0000'
+    }
+  },
+  required: ['name', 'shapeType', 'x', 'y']
+};
+
+importLibrary.description = '导入Excalidraw库，使用预设模板快速创建复杂图形。可以导入公共库或自定义库。';
+importLibrary.parameters = {
+  type: 'object',
+  properties: {
+    libraryUrl: {
+      type: 'string',
+      description: '库URL或识别符（如"rocket"、"charts"等公共库ID或完整URL）'
+    },
+    canvasName: {
+      type: 'string',
+      description: '可选：要导入到的画布名称。如不提供，将作为工作区库导入'
+    }
+  },
+  required: ['libraryUrl']
+};
+
+getCanvasDetails.description = '获取画布详细信息，深入了解画布内容和结构。包括元素位置、样式、属性等详细信息。';
+getCanvasDetails.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    }
+  },
+  required: ['name']
+};
+
+addText.description = '添加独立文本，为图表添加说明或标签。支持自定义字体大小和颜色。一般配合addShape使用，确保文本的边框与形状的边框对齐。';
+addText.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    text: {
+      type: 'string',
+      description: '文本内容'
+    },
+    x: {
+      type: 'number',
+      description: 'X坐标位置'
+    },
+    y: {
+      type: 'number',
+      description: 'Y坐标位置'
+    },
+    color: {
+      type: 'string',
+      description: '文本颜色，如 #000000 或 #ff0000 (可选，默认为黑色)'
+    },
+    fontSize: {
+      type: 'number',
+      description: '字体大小 (可选，默认为20)'
+    }
+  },
+  required: ['name', 'text', 'x', 'y']
+};
+
+deleteElement.description = '删除画布中的元素，修改或纠正图表内容。';
+deleteElement.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    elementId: {
+      type: 'string',
+      description: '要删除的元素ID'
+    }
+  },
+  required: ['name', 'elementId']
+};
+
+createFrame.description = '创建一个框架用于分组元素，创建边框前一般先读取画布的元素信息，确保边框能够覆盖到需要分组的元素。';
 createFrame.parameters = {
   type: 'object',
   properties: {
@@ -2794,6 +3322,116 @@ updateElementStyle.parameters = {
   required: ['name', 'elementId', 'styleOptions']
 };
 
+// 添加参数描述
+addLine.description = '添加普通线条，创建不带箭头的连接线。在添加线条前读取画布的元素信息，确保线条连接到正确的元素。并且起点终点优先靠近目标位置的边框中点等美观的位置。';
+addLine.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    x: {
+      type: 'number',
+      description: '起始X坐标'
+    },
+    y: {
+      type: 'number',
+      description: '起始Y坐标'
+    },
+    endX: {
+      type: 'number',
+      description: '结束X坐标'
+    },
+    endY: {
+      type: 'number',
+      description: '结束Y坐标'
+    },
+    color: {
+      type: 'string',
+      description: '线条颜色（默认为黑色）'
+    },
+    strokeWidth: {
+      type: 'number',
+      description: '线条宽度（默认为1）'
+    },
+    strokeStyle: {
+      type: 'string',
+      description: '线条样式（默认为solid，可选：solid, dashed, dotted）'
+    }
+  },
+  required: ['name', 'x', 'y', 'endX', 'endY']
+};
+
+// 添加参数描述
+addArrow.description = '添加带箭头的线条，表示流程方向或关系。在添加箭头前读取画布的元素信息，确保箭头连接到正确的元素。并且起点终点优先靠近目标位置的边框中点等美观的位置。';
+addArrow.parameters = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: '画布名称'
+    },
+    x: {
+      type: 'number',
+      description: '起始X坐标'
+    },
+    y: {
+      type: 'number',
+      description: '起始Y坐标'
+    },
+    endX: {
+      type: 'number',
+      description: '结束X坐标'
+    },
+    endY: {
+      type: 'number',
+      description: '结束Y坐标'
+    },
+    color: {
+      type: 'string',
+      description: '箭头颜色（默认为黑色）'
+    },
+    startArrowhead: {
+      type: 'string',
+      description: '起始箭头样式（可选，如 "arrow", "bar", "dot" 等）'
+    },
+    endArrowhead: {
+      type: 'string',
+      description: '结束箭头样式（默认为 "arrow"）'
+    }
+  },
+  required: ['name', 'x', 'y', 'endX', 'endY']
+};
+
+// 如果直接运行此文件
+if (process.argv[1] === __filename) {
+  // 解析命令行参数
+  let workspaceDir = '';
+  
+  for (let i = 2; i < process.argv.length; i++) {
+    if (process.argv[i] === '--workspace' && i + 1 < process.argv.length) {
+      workspaceDir = process.argv[i + 1];
+      i++; // 跳过下一个参数
+    }
+  }
+  
+  // 设置工作区目录（如果有提供）
+  if (workspaceDir) {
+    console.error(`从命令行参数设置工作区目录: ${workspaceDir}`);
+    setExcalidrawDir(workspaceDir);
+  }
+  
+  // 以标准I/O方式运行MCP服务器
+  mcp.run({ transport: 'stdio' });
+} 
+
+// 导出变量和函数给其他模块使用
+module.exports = {
+  setExcalidrawDir,
+  EXCALIDRAW_DIR
+};
+
 // 注册MCP工具
 mcp.tool('createCanvas', createCanvas);
 mcp.tool('listCanvases', listCanvases);
@@ -2806,3 +3444,68 @@ mcp.tool('deleteElement', deleteElement);
 mcp.tool('createFrame', createFrame);
 mcp.tool('embedWebpage', embedWebpage);
 mcp.tool('updateElementStyle', updateElementStyle);
+mcp.tool('addArrow', addArrow);
+mcp.tool('addLine', addLine);
+
+
+// 注册工具
+mcp.tool()(createCanvas);
+mcp.tool()(listCanvases);
+mcp.tool()(exportCanvas);
+mcp.tool()(addShape);
+mcp.tool()(importLibrary);
+mcp.tool()(getCanvasDetails);
+mcp.tool()(addText);
+mcp.tool()(deleteElement);
+mcp.tool()(createFrame);
+mcp.tool()(embedWebpage);
+mcp.tool()(updateElementStyle);
+mcp.tool()(addArrow);
+mcp.tool()(addLine);
+
+/**
+ * 计算点绕中心点旋转后的新坐标
+ * @param {number} x - 点的X坐标
+ * @param {number} y - 点的Y坐标
+ * @param {number} cx - 中心点X坐标
+ * @param {number} cy - 中心点Y坐标
+ * @param {number} cos - 余弦值
+ * @param {number} sin - 正弦值
+ * @returns {Array} 旋转后的坐标 [x, y]
+ */
+function rotatePoint(x, y, cx, cy, cos, sin) {
+  // 将点平移到原点
+  const dx = x - cx;
+  const dy = y - cy;
+  
+  // 旋转
+  const newX = dx * cos - dy * sin + cx;
+  const newY = dx * sin + dy * cos + cy;
+  
+  return [newX, newY];
+}
+
+/**
+ * 计算两点之间的距离
+ * @param {number} x1 - 第一个点的X坐标
+ * @param {number} y1 - 第一个点的Y坐标
+ * @param {number} x2 - 第二个点的X坐标
+ * @param {number} y2 - 第二个点的Y坐标
+ * @returns {number} 距离
+ */
+function calculateDistance(x1, y1, x2, y2) {
+  return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+}
+
+/**
+ * 计算线段的角度（相对于水平线）
+ * @param {number} x1 - 起点X坐标
+ * @param {number} y1 - 起点Y坐标
+ * @param {number} x2 - 终点X坐标
+ * @param {number} y2 - 终点Y坐标
+ * @returns {number} 角度（度）
+ */
+function calculateAngle(x1, y1, x2, y2) {
+  const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+  return angle < 0 ? angle + 360 : angle;
+}

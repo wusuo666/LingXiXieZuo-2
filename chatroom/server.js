@@ -1360,6 +1360,8 @@ function forwardAudioStream(data, senderId, roomId) {
                 
                 // 检查目标用户的WebSocket连接是否仍然有效
                 if (targetUser && targetUser.ws && targetUser.ws.readyState === WebSocket.OPEN) {
+
+                    console.log(audioStreamMessage);
                     targetUser.ws.send(audioStreamMessage);
                     forwardCount++;
                     console.log(`[音频转发] 已转发音频数据到用户: ${participantId}`);

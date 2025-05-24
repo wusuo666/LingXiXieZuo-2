@@ -49,7 +49,9 @@ class LingxiSidebarProvider {
      * 设置WebSocket消息处理器
      */
     setupWebSocketHandlers() {
+        console.log('cccccccccccc');
         if (this._chatClient) {
+            console.log('dddddddddddd');
             // 添加重连机制
             this._chatClient.onclose = () => {
                 console.log('WebSocket连接已关闭，尝试重连...');
@@ -67,8 +69,26 @@ class LingxiSidebarProvider {
 
             this._chatClient.onmessage = async (event) => {
                 try {
+                    console.log('收到原始WebSocket消息类型:', typeof event.data);
+                    console.log('消息长度:', event.data.length);
+                    
+                    // 尝试只记录前100个字符，避免日志过大
+                    console.log('消息前缀:', typeof event.data === 'string' ? 
+                        event.data.substring(0, 100) : '非字符串数据');
+                    
                     const message = JSON.parse(event.data);
-                    console.log('收到WebSocket消息:', message);
+                    console.log('解析后的消息类型:', message.type);
+                    console.log('消息完整类型结构:', Object.keys(message));
+
+                    // 检查audioStream特定属性
+                    if (message.type === 'audioStream') {
+                        console.log('音频流消息详细信息:', {
+                            类型确认: message.type === 'audioStream',
+                            会议ID是否存在: !!message.conferenceId,
+                            发送者ID是否存在: !!message.senderId,
+                            音频数据长度: message.audioData ? message.audioData.length : 0
+                        });
+                    }
 
                     // 处理不同类型的消息
                     switch (message.type) {
@@ -208,6 +228,14 @@ class LingxiSidebarProvider {
                     }
                 } catch (error) {
                     console.error('处理WebSocket消息时出错:', error);
+                    console.error('错误详情:', error.stack);
+                    console.error('错误消息:', error.message);
+                    // 尝试记录原始消息的一部分
+                    try {
+                        console.error('原始消息前100字符:', event.data.substring(0, 100));
+                    } catch (e) {
+                        console.error('无法记录原始消息:', e);
+                    }
                     vscode.window.showErrorMessage(`处理消息失败: ${error.message}`);
                 }
             };

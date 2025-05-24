@@ -37,7 +37,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化语音录制按钮和定时器显示
     voiceRecordBtn = document.getElementById('voice-record-btn');
     voiceRecordTimer = document.querySelector('.voice-record-timer');
-    console.log('voiceRecordBtn:', voiceRecordBtn, 'voiceRecordTimer:', voiceRecordTimer);
     if (voiceRecordTimer) voiceRecordTimer.style.display = 'none';
     console.log(222222222222);
 

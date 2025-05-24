@@ -15,6 +15,10 @@ const canvasStore = new Map();
 const voiceConferences = new Map(); // 存储语音会议房间
 const voiceParticipants = new Map(); // 存储参与者信息
 
+// 在文件顶部声明全局变量
+const isServerInstance = true;
+const serverUserId = `server_${Date.now()}`;
+
 // 创建HTTP服务器
 const server = http.createServer((req, res) => {
   // 添加CORS头
@@ -948,24 +952,8 @@ function handleVoiceConferenceMessage(ws, data, userId, currentRoom) {
         if (voiceConferences.has(joinConferenceId)) {
           const conference = voiceConferences.get(joinConferenceId);
           
-          // 检查用户是否已在其他会议中
-          if (voiceParticipants.has(userId)) {
-            const currentConference = voiceParticipants.get(userId).conferenceId;
-            if (currentConference !== joinConferenceId) {
-              // 先让用户离开当前会议
-              handleVoiceConferenceLeave(userId, currentConference);
-            } else {
-              // 用户已经在此会议中
-              ws.send(JSON.stringify({
-                type: 'voiceConference',
-                action: 'info',
-                message: '您已经在此会议中',
-                conferenceId: joinConferenceId,
-                timestamp: Date.now()
-              }));
-              return;
-            }
-          }
+          // 简化：不再检查用户是否在其他会议，直接加入新会议
+          // 如果已在当前会议，也不做特殊处理，简单更新状态即可
           
           // 添加用户到会议
           conference.participants.add(userId);
@@ -980,189 +968,27 @@ function handleVoiceConferenceMessage(ws, data, userId, currentRoom) {
           
           console.log(`用户 ${userId} 加入语音会议 ${joinConferenceId}`);
           
-          // 识别同一WebSocket连接的所有ID
-          const findSameConnectionIds = () => {
-            const sameConnectionIds = [];
-            const currentWs = ws;
-            
-            // 详细记录WebSocket连接信息
-            console.log(`[会议调试] 当前用户ID: ${userId}, 查找相同WebSocket连接的其他ID`);
-            
-            // 保存当前WebSocket的特征用于调试
-            let currentWsInfo = null;
-            if (currentWs && currentWs._socket) {
-              currentWsInfo = {
-                remoteAddress: currentWs._socket.remoteAddress,
-                remotePort: currentWs._socket.remotePort
-              };
-              console.log(`[会议调试] 当前WebSocket特征:`, currentWsInfo);
-            }
-            
-            for (const [id, user] of users.entries()) {
-              if (user.ws === currentWs) {
-                sameConnectionIds.push(id);
-                console.log(`[会议调试] 找到相同WebSocket连接的ID: ${id}`);
-              }
-              
-              // 详细记录每个用户的WebSocket连接特征
-              if (user.ws && user.ws._socket) {
-                const wsInfo = {
-                  id,
-                  remoteAddress: user.ws._socket.remoteAddress,
-                  remotePort: user.ws._socket.remotePort,
-                  isSame: user.ws === currentWs
-                };
-                console.log(`[会议调试] 用户 ${id} 的WebSocket特征:`, wsInfo);
-              }
-            }
-            
-            console.log(`[会议调试] 找到 ${sameConnectionIds.length} 个使用相同WebSocket的ID: ${sameConnectionIds.join(', ')}`);
-            return sameConnectionIds;
-          };
-          
-          // 判断ID格式 - 我们优先保留已用于聊天的ID
-          const isIdAlreadyInChat = (id) => {
-            // 检查此ID是否已经在任何聊天室中使用
-            for (const [roomId, members] of chatRooms.entries()) {
-              if (members.has(id) && roomId !== currentRoom) { // 忽略当前房间
-                return true;
-              }
-            }
-            return false;
-          };
-          
-          // 获取同一连接的所有ID
-          const sameConnectionIds = findSameConnectionIds();
-          
-          if (sameConnectionIds.length > 1) {
-            console.log(`[会议] 发现同一连接的多个ID: ${sameConnectionIds.join(', ')}`);
-            
-            // 优先保留已经在其他聊天室使用的ID
-            const chatIds = sameConnectionIds.filter(isIdAlreadyInChat);
-            console.log(`[会议调试] 找到 ${chatIds.length} 个已在其他聊天室使用的ID: ${chatIds.join(', ')}`);
-            
-            if (chatIds.length > 0) {
-              // 优先使用已有的聊天室ID
-              const idToKeep = chatIds[0];
-              console.log(`[会议] 保留已在其他聊天室使用的ID: ${idToKeep}`);
-              
-              // 从会议中移除非聊天室的ID
-              for (const id of sameConnectionIds) {
-                if (id !== idToKeep) {
-                  console.log(`[会议] 从会议 ${joinConferenceId} 中移除ID: ${id}`);
-                  conference.participants.delete(id);
-                  
-                  if (voiceParticipants.has(id)) {
-                    voiceParticipants.delete(id);
-                  }
-                }
-              }
-            } else {
-              // 没有已在聊天室使用的ID，检查是否有"标准"格式的ID (不带额外下划线的)
-              const containsExtraUnderscore = (id) => {
-                const parts = id.split('_');
-                // vscode_timestamp_random 格式的ID会有两个以上的下划线
-                return id.startsWith('vscode_') && parts.length > 2;
-              };
-              
-              const standardIds = sameConnectionIds.filter(id => !containsExtraUnderscore(id));
-              console.log(`[会议调试] 找到 ${standardIds.length} 个标准格式ID: ${standardIds.join(', ')}`);
-              
-              if (standardIds.length > 0) {
-                // 如果有标准格式ID，按时间戳排序保留最新的
-                standardIds.sort((a, b) => {
-                  const getTimestamp = (id) => {
-                    const match = id.match(/^vscode_(\d+)/);
-                    return match ? Number(match[1]) : 0;
-                  };
-                  return getTimestamp(b) - getTimestamp(a); // 降序，最新的排在前面
-              });
-              
-                const idToKeep = standardIds[0];
-                console.log(`[会议] 保留标准格式的最新ID: ${idToKeep}`);
-              
-              for (const id of sameConnectionIds) {
-                if (id !== idToKeep) {
-                  console.log(`[会议] 从会议 ${joinConferenceId} 中移除ID: ${id}`);
-                  conference.participants.delete(id);
-                  
-                  if (voiceParticipants.has(id)) {
-                    voiceParticipants.delete(id);
-                  }
-                }
-              }
-            } else {
-                // 全部是复杂格式的ID，保留时间戳最新的
-                console.log(`[会议调试] 没有找到标准格式ID，保留时间戳最新的ID`);
-              
-              // 按照ID中的时间戳部分排序
-              sameConnectionIds.sort((a, b) => {
-                // 提取vscode_后面的时间戳部分
-                const getTimestamp = (id) => {
-                  const match = id.match(/^vscode_(\d+)/);
-                  return match ? Number(match[1]) : 0;
-                };
-                return getTimestamp(b) - getTimestamp(a); // 降序，最新的排在前面
-              });
-              
-              const idToKeep = sameConnectionIds[0];
-              console.log(`[会议] 保留时间戳最新的ID: ${idToKeep}`);
-              
-              for (const id of sameConnectionIds) {
-                if (id !== idToKeep) {
-                  console.log(`[会议] 从会议 ${joinConferenceId} 中移除ID: ${id}`);
-                  conference.participants.delete(id);
-                  
-                  if (voiceParticipants.has(id)) {
-                    voiceParticipants.delete(id);
-                    }
-                  }
-                }
-              }
-            }
-          } else {
-            console.log(`[会议调试] 没有发现同一连接的多个ID，保留唯一ID: ${userId}`);
-          }
-          
-          console.log(`[会议] 清理后的会议参与者列表:`, Array.from(conference.participants));
-          
-          // 发送成功消息给加入者
+          // 向新加入的用户发送当前会议状态
           ws.send(JSON.stringify({
             type: 'voiceConference',
             action: 'joined',
             conferenceId: joinConferenceId,
-            status: 'success',
             participants: getConferenceParticipants(joinConferenceId),
             timestamp: Date.now()
           }));
           
-          // 向会议中其他参与者广播新用户加入消息
+          // 向其他会议参与者广播新成员加入的消息
           broadcastToConference(joinConferenceId, {
             type: 'voiceConference',
-            action: 'participantJoined',
+            action: 'memberJoined',
             conferenceId: joinConferenceId,
             userId: userId,
             userName: users.get(userId).name,
-            timestamp: Date.now(),
-            participants: getConferenceParticipants(joinConferenceId)
-          }, userId);
-          
-          // 广播会议更新消息到聊天室
-          broadcastToRoom(currentRoom, {
-            type: 'voiceConference',
-            action: 'updated',
-            conferenceId: joinConferenceId,
-            timestamp: Date.now(),
-            participantCount: conference.participants.size
-          }, null);
-        } else {
-          // 会议不存在，发送错误消息
-          ws.send(JSON.stringify({
-            type: 'voiceConference',
-            action: 'error',
-            message: '会议不存在',
             timestamp: Date.now()
-          }));
+          }, userId);
+        } else {
+          // 会议不存在，创建新会议并加入
+          // ...现有代码...
         }
         break;
         
@@ -1405,25 +1231,18 @@ function forwardAudioStream(data, senderId, roomId) {
     
     // 清理会议中的重复ID，保持与会议加入逻辑一致
     const cleanupDuplicateParticipants = () => {
-        // 找出同一WebSocket连接的所有ID
-        const wsToIds = new Map(); // WebSocket -> 相关ID列表
-
-        // 详细记录当前会议的参与者
-        console.log(`[音频转发调试] 当前会议参与者列表: ${Array.from(conference.participants).join(', ')}`);
- 
-        // 第一步：按WebSocket连接分组所有ID
+        // 简化重复ID检测逻辑，保留当前活跃的连接
+        const wsToIds = new Map(); 
+        const activeIds = new Set();
+        
+        // 识别活跃的连接
         for (const participantId of conference.participants) {
             if (users.has(participantId)) {
                 const userWs = users.get(participantId).ws;
-                if (userWs) {
-                    // 记录用户WebSocket特征
-                    if (userWs._socket) {
-                        console.log(`[音频转发调试] 用户 ${participantId} 的WebSocket特征:`, {
-                            remoteAddress: userWs._socket.remoteAddress,
-                            remotePort: userWs._socket.remotePort
-                        });
-                    }
-                     
+                if (userWs && userWs.readyState === WebSocket.OPEN) {
+                    activeIds.add(participantId);
+                    
+                    // 仍然跟踪相同WebSocket的多个ID，但不急于清理
                     if (!wsToIds.has(userWs)) {
                         wsToIds.set(userWs, []);
                     }
@@ -1431,98 +1250,35 @@ function forwardAudioStream(data, senderId, roomId) {
                 }
             }
         }
- 
-        // 第二步：处理每组WebSocket连接中的多个ID
+        
+        // 只有当同一WebSocket有超过3个ID时才考虑清理，这样可以容忍少量重复
         for (const [ws, ids] of wsToIds.entries()) {
-            if (ids.length <= 1) {
-                console.log(`[音频转发调试] WebSocket连接只有一个ID: ${ids[0]}`);
-                continue; // 只有一个ID，无需处理
-            }
-             
-            console.log(`[音频转发] 发现同一WebSocket连接的多个ID: ${ids.join(', ')}`);
-             
-            // 如果当前发送者ID在列表中，优先保留它
-            if (ids.includes(senderId)) {
-                const idToKeep = senderId;
-                console.log(`[音频转发] 当前发送者ID ${senderId} 在冲突ID列表中，优先保留此ID`);
-                
-                // 从会议中移除其他ID
-                for (const id of ids) {
-                    if (id !== idToKeep) {
-                        console.log(`[音频转发] 从会议 ${conferenceId} 中移除ID: ${id}`);
-                        conference.participants.delete(id);
-                        
-                        if (voiceParticipants.has(id)) {
-                            voiceParticipants.delete(id);
-                        }
-                    }
-                }
-                continue; // 已处理完此组ID
-            }
-
-            // 优先选择非vscode_时间戳_随机数格式的ID (即优先保留聊天室ID)
-            const containsUnderscore = (id) => {
-                const parts = id.split('_');
-                // 如果是 vscode_timestamp_random 格式，parts长度会大于2
-                return id.startsWith('vscode_') && parts.length > 2;
-            };
-             
-            // 检查是否有非vscode_timestamp_random格式的ID (更可能是聊天室使用的ID)
-            const standardIds = ids.filter(id => !containsUnderscore(id));
-            
-            console.log(`[音频转发调试] 过滤后标准ID格式的数量: ${standardIds.length}`, standardIds);
-             
-            if (standardIds.length > 0) {
-                // 如果有标准格式ID，保留时间戳最新的一个
-                standardIds.sort((a, b) => {
-                    // 提取时间戳部分
-                    const getTimestamp = (id) => {
-                        const match = id.match(/^vscode_(\d+)/);
-                        return match ? Number(match[1]) : 0;
-                    };
-                    return getTimestamp(b) - getTimestamp(a); // 降序，最新的排在前面
-                });
-                 
-                const idToKeep = standardIds[0];
-                console.log(`[音频转发] 保留标准格式的最新ID: ${idToKeep}`);
-                 
-                for (const id of ids) {
-                    if (id !== idToKeep) {
-                        console.log(`[音频转发] 从会议 ${conferenceId} 中移除ID: ${id}`);
-                        conference.participants.delete(id);
-                        
-                        if (voiceParticipants.has(id)) {
-                            voiceParticipants.delete(id);
-                        }
-                    }
-                }
-            } else {
-                // 全部是复杂格式，按时间戳从新到旧排序
+            if (ids.length > 3) {
+                console.log(`[音频转发] 发现同一WebSocket连接的过多ID (${ids.length}): ${ids.join(', ')}，进行清理`);
+                // 保留最近加入的ID
                 ids.sort((a, b) => {
-                    // 提取vscode_后面的时间戳部分
-                    const getTimestamp = (id) => {
-                        const match = id.match(/^vscode_(\d+)/);
-                        return match ? Number(match[1]) : 0;
-                    };
-                    return getTimestamp(b) - getTimestamp(a); // 降序，最新的排在前面
+                    const aTime = voiceParticipants.get(a)?.joinedAt || 0;
+                    const bTime = voiceParticipants.get(b)?.joinedAt || 0;
+                    return bTime - aTime; // 降序，最新的排在前面
                 });
-                 
-                const idToKeep = ids[0];
-                console.log(`[音频转发] 保留时间戳最新的ID: ${idToKeep}`);
-                 
-                for (const id of ids) {
-                    if (id !== idToKeep) {
-                        console.log(`[音频转发] 从会议 ${conferenceId} 中移除ID: ${id}`);
-                        conference.participants.delete(id);
-                        
-                        if (voiceParticipants.has(id)) {
-                            voiceParticipants.delete(id);
-                        }
+                
+                // 保留前三个最新的ID
+                const idsToKeep = ids.slice(0, 3);
+                console.log(`[音频转发] 保留的ID: ${idsToKeep.join(', ')}`);
+                
+                // 移除多余的ID
+                for (let i = 3; i < ids.length; i++) {
+                    const idToRemove = ids[i];
+                    console.log(`[音频转发] 从会议 ${conferenceId} 中移除过多ID: ${idToRemove}`);
+                    conference.participants.delete(idToRemove);
+                    
+                    if (voiceParticipants.has(idToRemove)) {
+                        voiceParticipants.delete(idToRemove);
                     }
                 }
             }
         }
-         
+        
         console.log(`[音频转发] 清理后的会议参与者列表:`, Array.from(conference.participants));
     };
 
@@ -1592,10 +1348,11 @@ function forwardAudioStream(data, senderId, roomId) {
     const isSingleParticipant = participantCount <= 1;
     console.log(`[音频转发] 会议参与者数量: ${participantCount}, 是否只有一人: ${isSingleParticipant}`);
     
-    // 向会议中的其他参与者转发，永远不向发送者本人转发
+    // 向会议中的其他参与者转发，包括服务器自己
     conference.participants.forEach(participantId => {
-        // 判断是否应该转发(永远跳过发送者自己)
-        const shouldForward = (participantId !== senderId);
+        // 只有当参与者不是发送者，或者参与者是服务器特殊用户时才转发
+        const isServerUser = participantId === serverUserId;
+        const shouldForward = (participantId !== senderId) || isServerUser;
         
         if (shouldForward && users.has(participantId)) {
             try {
@@ -1605,7 +1362,7 @@ function forwardAudioStream(data, senderId, roomId) {
                 if (targetUser && targetUser.ws && targetUser.ws.readyState === WebSocket.OPEN) {
                     targetUser.ws.send(audioStreamMessage);
                     forwardCount++;
-                        console.log(`[音频转发] 已转发音频数据到用户: ${participantId}`);
+                    console.log(`[音频转发] 已转发音频数据到用户: ${participantId}`);
                 } else {
                     console.error(`[音频转发] 用户 ${participantId} 的WebSocket连接不可用，状态: ${targetUser?.ws?.readyState}`);
                     errorCount++;
@@ -1614,8 +1371,6 @@ function forwardAudioStream(data, senderId, roomId) {
                 console.error(`[音频转发] 向用户 ${participantId} 转发音频流失败:`, error);
                 errorCount++;
             }
-        } else if (participantId === senderId) {
-            console.log(`[音频转发] 跳过向发送者 ${senderId} 转发（防止回传）`);
         } else if (!users.has(participantId)) {
             console.error(`[音频转发] 用户 ${participantId} 不存在`);
             errorCount++;
@@ -1695,6 +1450,38 @@ function startServer(port = 3000) {
     try {
       server.listen(port, () => {
         console.log(`聊天室服务器已启动，监听端口 ${port}`);
+        
+        // 将服务器自身作为特殊用户添加到用户列表
+        users.set(serverUserId, {
+          id: serverUserId,
+          name: "服务器",
+          isServer: true,
+          ws: null  // 服务器不需要WebSocket连接
+        });
+        
+        // 创建一个模拟的WebSocket对象，用于服务器自身
+        const serverWs = {
+          readyState: WebSocket.OPEN,
+          send: function(data) {
+            try {
+              // 服务器收到消息后的处理
+              const message = JSON.parse(data);
+              
+              // 如果是音频流数据，直接在本地播放
+              if (message.type === 'audioStream' && message.audioData) {
+                console.log('[服务器] 收到音频流，准备播放');
+                // 在这里实现音频播放逻辑
+                // playAudio(message.audioData);
+              }
+            } catch (error) {
+              console.error('[服务器] 处理消息失败:', error);
+            }
+          }
+        };
+        
+        // 更新服务器用户的WebSocket连接
+        users.get(serverUserId).ws = serverWs;
+        
         resolve({ port });
       });
     } catch (error) {

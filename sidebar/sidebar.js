@@ -1053,6 +1053,14 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
     statusElement.textContent = statusData.status === 'connected' ? '已连接' : '运行中';
         statusElement.className = 'status-online';
         
+        // 保存服务器IP和端口到DOM元素的data属性
+        if (statusData.ipAddress) {
+            statusElement.setAttribute('data-ip', statusData.ipAddress);
+        }
+        if (statusData.port) {
+            statusElement.setAttribute('data-port', statusData.port);
+        }
+        
         // 主机模式下的UI状态
     if (startButton) startButton.disabled = true;
     if (stopButton) stopButton.disabled = false;
@@ -1086,6 +1094,10 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
         statusElement.textContent = '离线';
         statusElement.className = 'status-offline';
         
+        // 清除服务器IP和端口信息
+        statusElement.removeAttribute('data-ip');
+        statusElement.removeAttribute('data-port');
+        
         // 主机模式下的UI状态
     if (startButton) startButton.disabled = false;
     if (stopButton) stopButton.disabled = true;
@@ -1103,6 +1115,10 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
 } else if (statusData.status === 'error') {
     statusElement.textContent = '错误: ' + (statusData.error || '未知错误');
         statusElement.className = 'status-offline';
+        
+        // 清除服务器IP和端口信息
+        statusElement.removeAttribute('data-ip');
+        statusElement.removeAttribute('data-port');
         
         // 主机模式下的UI状态
     if (startButton) startButton.disabled = false;
@@ -1775,11 +1791,24 @@ function startAudioStream(conferenceId) {
         return;
     }
     
-    // 通过VSCode命令调用外部录音脚本，开启流模式
+    // 获取服务器IP和端口
+    const serverStatus = document.getElementById('chat-server-status');
+    let ipAddress = 'localhost';
+    let port = 3000;
+    
+    // 从服务器状态元素中获取IP地址和端口
+    if (serverStatus) {
+        ipAddress = serverStatus.getAttribute('data-ip') || 'localhost';
+        port = serverStatus.getAttribute('data-port') || 3000;
+    }
+    
+    console.log(`启动音频流，连接到服务器: ${ipAddress}:${port}, 会议ID: ${conferenceId}`);
+    
+    // 通过VSCode命令调用外部录音脚本，开启流模式，传递服务器地址和端口
     vscode.postMessage({
         command: 'executeStreamCommand',
         script: 'chatroom/recordAudio.js',
-        args: ['-stream', '-conferenceId', conferenceId]
+        args: ['-stream', '-conferenceId', conferenceId, '-address', ipAddress, '-port', port]
     });
 }
 

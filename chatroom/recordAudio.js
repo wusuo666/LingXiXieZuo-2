@@ -9,9 +9,12 @@ const WavEncoder = require('wav-encoder');
 const WavDecoder = require('wav-decoder');
 const AudioBuffer = require('audio-buffer');
 const os = require('os');
+const dns = require('dns');
 
 // 全局变量
 let conferenceId = 'default';
+let serverPort = 3000; // 默认WebSocket服务器端口
+let serverAddress = 'localhost'; // 默认地址
 
 // 全局音频处理设置
 const audioSettings = {
@@ -56,8 +59,6 @@ const audioSettings = {
 // 检查命令行参数
 const args = process.argv.slice(2);
 const streamMode = args.includes('-stream');
-let serverPort = 3000; // 默认WebSocket服务器端口
-let serverAddress = 'localhost'; // 默认地址
 
 // 处理音频质量参数
 const qualityIndex = args.indexOf('-quality');
@@ -549,6 +550,23 @@ async function streamAudio() {
         }
     }
     
+    // 直接从命令行参数解析服务器地址和端口
+    const portIndex = args.indexOf('-port');
+    if (portIndex !== -1 && args.length > portIndex + 1) {
+        serverPort = parseInt(args[portIndex + 1], 10);
+        console.error(`使用命令行指定的服务器端口: ${serverPort}`);
+    } else {
+        console.error(`使用默认服务器端口: ${serverPort}`);
+    }
+    
+    const addressIndex = args.indexOf('-address');
+    if (addressIndex !== -1 && args.length > addressIndex + 1) {
+        serverAddress = args[addressIndex + 1];
+        console.error(`使用命令行指定的服务器地址: ${serverAddress}`);
+    } else {
+        console.error(`警告: 未指定服务器地址，使用默认值localhost。可能无法连接到正确服务器，请使用-address参数指定服务器IP。`);
+    }
+    
     return new Promise((resolve, reject) => {
         try {
             // 初始化麦克风
@@ -753,24 +771,21 @@ async function streamAudio() {
                                 type: 'audioStream',
                                 audioData: base64Audio,
                                 sequence: sequenceNumber++,
+                                // 确保会议ID总是存在，无论如何都要添加
+                                conferenceId: conferenceId || 'default',
                                 format: {
-                                    sampleRate: adjustedSampleRate, // 使用校准后的采样率
+                                    sampleRate: adjustedSampleRate,
                                     numChannels: audioSettings.numChannels,
                                     bitsPerSample: audioSettings.bitsPerSample,
-                                    isWav: true, // 标记为WAV格式
+                                    isWav: true,
                                     enhanced: audioSettings.enhancementEnabled
                                 },
                                 timestamp: Date.now()
                             };
                             
-                            // 如果指定了会议ID，添加到消息中
-                            if (typeof conferenceId !== 'undefined' && conferenceId) {
-                                audioMessage.conferenceId = conferenceId;
-                            }
-                            
                             // 发送JSON格式的音频数据
                             const msgStr = JSON.stringify(audioMessage);
-                            console.log(`发送音频消息，序列号: ${sequenceNumber-1}, 大小: ${msgStr.length} 字节`);
+                            console.log(`发送音频消息到${serverAddress}:${serverPort}，会议ID: ${audioMessage.conferenceId}，序列号: ${sequenceNumber-1}`);
                             ws.send(msgStr);
                         } catch (err) {
                             console.error('发送音频数据失败:', err);

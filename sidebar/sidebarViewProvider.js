@@ -69,20 +69,6 @@ class LingxiSidebarProvider {
                 try {
                     const message = JSON.parse(event.data);
                     console.log('收到WebSocket消息:', message);
-                    
-                    console.log(111111111111111);
-                    console.log(111111111111111);
-                    console.log(111111111111111);
-                    console.log(111111111111111);
-                    console.log(111111111111111);
-                    console.log(111111111111111);
-                    console.log(111111111111111);
-                    console.log(111111111111111);
-                    console.log(111111111111111);
-                    console.log(111111111111111);
-                    console.log(111111111111111);
-                    console.log(message);
-                    console.log(message.type);
 
                     // 处理不同类型的消息
                     switch (message.type) {

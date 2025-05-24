@@ -507,3 +507,50 @@ module.exports = {
   joinRoom,
   setAudioProcessingOptions
 };
+
+// 封装WebSocket通信
+function sendWebSocketMessage(type, data) {
+  if (!wsClient || wsClient.readyState !== WebSocket.OPEN) {
+    console.error('WebSocket未连接');
+    return false;
+  }
+  
+  try {
+    const message = {...data, type, timestamp: Date.now()};
+    wsClient.send(JSON.stringify(message));
+    return true;
+  } catch (err) {
+    console.error('发送WebSocket消息失败:', err.message);
+    return false;
+  }
+}
+
+// 简化语音会议操作函数
+function createVoiceConference(conferenceId) {
+  return sendWebSocketMessage('voiceConference', {
+    action: 'create',
+    conferenceId: conferenceId || `conference_${Date.now()}`
+  });
+}
+
+function joinVoiceConference(conferenceId) {
+  return sendWebSocketMessage('voiceConference', {
+    action: 'join',
+    conferenceId,
+    name: currentUserName
+  });
+}
+
+function leaveVoiceConference(conferenceId) {
+  return sendWebSocketMessage('voiceConference', {
+    action: 'leave',
+    conferenceId
+  });
+}
+
+function toggleMicrophoneMute(conferenceId, muted) {
+  return sendWebSocketMessage('voiceConference', {
+    action: muted ? 'mute' : 'unmute',
+    conferenceId
+  });
+}

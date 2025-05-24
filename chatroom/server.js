@@ -347,273 +347,36 @@ wss.on('connection', (ws) => {
   // 处理消息
   ws.on('message', (message) => {
     try {
-      let msgType = '未知';
-      let msgSize = message.length;
+      const data = JSON.parse(message);
+      const messageType = data.type || '未知';
+      logMessageReceived(messageType, message.length, data);
       
-      try {
-        // 尝试解析消息类型，但不中断处理
-        const previewData = JSON.parse(message);
-        msgType = previewData.type || '未知';
-        console.log(`[消息] 收到 ${msgType} 类型消息, 大小: ${msgSize} 字节`);
-        
-        // 如果是音频流消息，输出更多详细信息
-        if (previewData.type === 'audioStream') {
-          console.log(`[音频流] 收到音频数据, 序列号: ${previewData.sequence}, 大小: ${previewData.audioData ? previewData.audioData.length : 0} 字节, 会议ID: ${previewData.conferenceId}`);
-        }
-      } catch (previewError) {
-        console.log(`[消息] 收到无法解析的消息, 大小: ${msgSize} 字节`);
+      // 优先处理音频流消息
+      if (messageType === 'audioStream') {
+        handleAudioStreamMessage(ws, data, userId, currentRoom);
+        return;
       }
       
-      const data = JSON.parse(message);
-      
-      switch (data.type) {
+      // 其他类型消息处理
+      switch (messageType) {
         case 'join':
-          // 用户加入聊天室
-          userId = data.userId || `user_${Date.now()}`;
-          currentRoom = data.roomId || 'default';
-          
-          console.log(`[加入] 用户 ${data.name || '匿名用户'} (ID: ${userId}) 加入聊天室 ${currentRoom}`);
-          
-          // 初始化聊天室
-          if (!chatRooms.has(currentRoom)) {
-            chatRooms.set(currentRoom, new Set());
-            console.log(`[聊天室] 创建新聊天室: ${currentRoom}`);
-          }
-          
-          // 清理可能存在的重复连接
-          cleanupDuplicateConnections(userId);
-          
-          // 添加用户到聊天室
-          chatRooms.get(currentRoom).add(userId);
-          users.set(userId, { 
-            ws, 
-            name: data.name || '匿名用户',
-            avatar: data.avatar || null
-          });
-          
-          console.log(`[聊天室] 当前聊天室 ${currentRoom} 的用户数: ${chatRooms.get(currentRoom).size}`);
-          
-          // 广播用户加入消息
-          broadcastToRoom(currentRoom, {
-            type: 'system',
-            content: `${users.get(userId).name} 加入了聊天室`,
-            timestamp: Date.now(),
-            users: getUsersInRoom(currentRoom)
-          }, userId);
+          handleJoinMessage(ws, data);
           break;
           
-          case 'message':
-            // 发送消息到聊天室
-            if (userId && currentRoom) {
-              // 确保用户存在且有name属性
-              const senderName = users.has(userId) ? users.get(userId).name : '未知用户';
-              
-              broadcastToRoom(currentRoom, {
-                type: 'message',
-                userId: userId,
-                sender: {
-                  id: userId,
-                  name: senderName
-                },
-                content: data.content,
-                timestamp: Date.now()
-              }, userId);
-            }
-            break;
-        
-        // 音频流相关消息处理
-        case 'audioStream':
-          // 直接转发音频流数据
-          if (userId && currentRoom && data.conferenceId) {
-            console.log(`[音频流] 准备转发音频流, 用户: ${userId}, 会议: ${data.conferenceId}, 序列号: ${data.sequence}`);
-            forwardAudioStream(data, userId, currentRoom);
-          } else {
-            console.log(`[音频流] 转发条件不满足: userId=${userId}, currentRoom=${currentRoom}, conferenceId=${data.conferenceId}`);
-            
-            // 检查会议ID是否存在
-            if (data.conferenceId) {
-              // 尝试通过WebSocket连接查找用户ID和房间ID
-              let foundUserId = null;
-              let foundRoomId = null;
-              
-              // 遍历所有用户，查找匹配当前WebSocket连接的用户
-              const connectedIds = [];
-              for (const [id, user] of users.entries()) {
-                if (user.ws === ws) {
-                  connectedIds.push(id);
-                }
-              }
-              
-              // 按优先级排序，优先使用vscode_开头的ID
-              if (connectedIds.length > 0) {
-                connectedIds.sort((a, b) => getPriorityValueForId(b) - getPriorityValueForId(a));
-                foundUserId = connectedIds[0];
-                
-                // 查找此ID所在的房间
-                for (const [roomId, roomUsers] of chatRooms.entries()) {
-                  if (roomUsers.has(foundUserId)) {
-                    foundRoomId = roomId;
-                    break;
-                  }
-                }
-              }
-              
-              // 如果找到了用户ID和房间ID，则使用它们进行转发
-              if (foundUserId && foundRoomId) {
-                console.log(`[音频流] 已找到用户和房间信息: userId=${foundUserId}, roomId=${foundRoomId}`);
-                userId = foundUserId;
-                currentRoom = foundRoomId;
-                forwardAudioStream(data, userId, currentRoom);
-              } else {
-                // 没有找到已注册的用户和房间，使用Web Socket上的 userId 和 roomId
-                console.log(`[音频流] 未找到用户和房间信息，尝试使用WebSocket上的信息`);
-                
-                // 使用WebSocket上已关联的userId和roomId（如果有的话）
-                if (ws.userId && ws.roomId) {
-                  userId = ws.userId;
-                  currentRoom = ws.roomId;
-                  console.log(`[音频流] 使用WebSocket上关联的用户ID: ${userId}, 房间ID: ${currentRoom}`);
-                } else {
-                  // 如果WebSocket上也没有关联ID，才创建新的临时ID
-                  console.log(`[音频流] WebSocket上没有关联的ID，创建临时用户和房间`);
-                
-                  // 优先使用会议ID作为房间ID
-                currentRoom = data.conferenceId; // 使用会议ID作为房间ID
-                  
-                  // 尝试从用户的Cookie或Session找出已有ID（模拟实现，实际代码中没有这个功能）
-                  // 如果完全找不到，才生成新的ID
-                  userId = `user_${Date.now()}`;
-                
-                // 保存到WebSocket对象
-                ws.userId = userId;
-                ws.roomId = currentRoom;
-                }
-                
-                // 清理可能存在的重复连接
-                cleanupDuplicateConnections(userId);
-                
-                // 确保用户存在于用户列表中
-                if (!users.has(userId)) {
-                // 将用户添加到用户列表
-                users.set(userId, {
-                  ws,
-                  name: `用户_${userId.substring(0, 8)}`,
-                  avatar: null
-                });
-                }
-                
-                // 创建或更新聊天室
-                if (!chatRooms.has(currentRoom)) {
-                  chatRooms.set(currentRoom, new Set());
-                  console.log(`[聊天室] 创建新聊天室: ${currentRoom}`);
-                }
-                
-                // 添加用户到聊天室
-                chatRooms.get(currentRoom).add(userId);
-                
-                console.log(`[音频流] 已使用/创建用户和房间: userId=${userId}, roomId=${currentRoom}`);
-                
-                // 使用用户ID和房间ID转发音频流
-                forwardAudioStream(data, userId, currentRoom);
-              }
-            } else {
-              // 如果没有会议ID，返回错误消息
-              ws.send(JSON.stringify({
-                type: 'error',
-                content: '音频流消息缺少会议ID',
-                timestamp: Date.now()
-              }));
-            }
-          }
+        case 'message':
+          handleTextMessage(ws, data, userId, currentRoom);
           break;
           
         case 'audioMessage':
-          // 处理语音消息
-          if (userId && currentRoom) {
-            // 验证base64编码的WAV音频数据
-            if (data.audioData && typeof data.audioData === 'string') {
-              console.log(`接收到来自 ${users.get(userId).name} 的语音消息，大小: ${data.audioData.length} 字符`);
-              
-              // 广播语音消息到聊天室
-              broadcastToRoom(currentRoom, {
-                type: 'audioMessage',
-                userId: userId,
-                sender: {
-                  id: userId,
-                  name: users.get(userId).name
-                },
-                audioData: data.audioData,
-                duration: data.duration || 0, // 语音时长（秒）
-                timestamp: Date.now(),
-                id: data.id || `audio_${Date.now()}_${Math.floor(Math.random() * 1000)}`, // 保存传入的ID或生成新ID
-                audioFilename: data.audioFilename // 保存文件名
-              }, userId);
-            } else {
-              // 向发送者返回错误消息
-              ws.send(JSON.stringify({
-                type: 'error',
-                content: '语音消息格式错误，请确保发送base64编码的WAV音频数据',
-                timestamp: Date.now()
-              }));
-            }
-          }
+          handleAudioMessage(ws, data, userId, currentRoom);
           break;
           
         case 'privateMessage':
-          // 私聊消息
-          if (userId && data.targetId && users.has(data.targetId)) {
-            const targetWs = users.get(data.targetId).ws;
-            const message = {
-              type: 'privateMessage',
-              userId: userId,
-              sender: users.get(userId).name,
-              content: data.content,
-              timestamp: Date.now()
-            };
-            
-            // 发送给目标用户
-            targetWs.send(JSON.stringify(message));
-            // 发送给自己的确认
-            ws.send(JSON.stringify({
-              ...message,
-              isSent: true
-            }));
-          }
+          handlePrivateMessage(ws, data, userId);
           break;
           
         case 'privateAudioMessage':
-          // 私聊语音消息
-          if (userId && data.targetId && users.has(data.targetId)) {
-            // 验证base64编码的WAV音频数据
-            if (data.audioData && typeof data.audioData === 'string') {
-              const targetWs = users.get(data.targetId).ws;
-              const message = {
-                type: 'privateAudioMessage',
-                userId: userId,
-                sender: users.get(userId).name,
-                audioData: data.audioData,
-                duration: data.duration || 0,
-                timestamp: Date.now()
-              };
-              
-              console.log(`发送私聊语音消息从 ${users.get(userId).name} 到 ${users.get(data.targetId).name}`);
-              
-              // 发送给目标用户
-              targetWs.send(JSON.stringify(message));
-              // 发送给自己的确认
-              ws.send(JSON.stringify({
-                ...message,
-                isSent: true
-              }));
-            } else {
-              // 向发送者返回错误消息
-              ws.send(JSON.stringify({
-                type: 'error',
-                content: '私聊语音消息格式错误，请确保发送base64编码的WAV音频数据',
-                timestamp: Date.now()
-              }));
-            }
-          }
+          handlePrivateAudioMessage(ws, data, userId);
           break;
           
         case 'canvas':
@@ -621,24 +384,14 @@ wss.on('connection', (ws) => {
           break;
           
         case 'voiceConference':
-          // 处理语音会议相关消息
-          console.log(`[会议] 收到会议消息, 用户: ${userId}, 动作: ${data.action}, 会议ID: ${data.conferenceId}`);
           handleVoiceConferenceMessage(ws, data, userId, currentRoom);
           break;
+          
+        default:
+          sendErrorToClient(ws, `未知的消息类型: ${messageType}`);
       }
     } catch (error) {
-      console.error('[处理错误] 处理消息时出错:', error);
-      
-      // 尝试向客户端发送错误信息
-      try {
-        ws.send(JSON.stringify({
-          type: 'error',
-          content: `服务器处理消息时出错: ${error.message}`,
-          timestamp: Date.now()
-        }));
-      } catch (sendError) {
-        console.error('[处理错误] 发送错误消息失败:', sendError);
-      }
+      handleMessageError(ws, error);
     }
   });
 
@@ -681,6 +434,288 @@ wss.on('connection', (ws) => {
     console.error(`[连接错误] WebSocket错误, 用户: ${userId || '未知'}:`, error);
   });
 });
+
+/**
+ * 记录接收到的消息
+ */
+function logMessageReceived(type, size, data) {
+  console.log(`[消息] 收到 ${type} 类型消息, 大小: ${size} 字节`);
+  
+  // 特殊类型的详细日志
+  if (type === 'audioStream') {
+    console.log(`[音频流] 收到音频数据, 序列号: ${data.sequence}, 大小: ${data.audioData?.length || 0} 字节`);
+  }
+}
+
+/**
+ * 处理用户加入消息
+ */
+function handleJoinMessage(ws, data) {
+  // 获取用户ID和房间ID
+  userId = data.userId || `user_${Date.now()}`;
+  currentRoom = data.roomId || 'default';
+  
+  console.log(`[加入] 用户 ${data.name || '匿名用户'} (ID: ${userId}) 加入聊天室 ${currentRoom}`);
+  
+  // 初始化聊天室
+  if (!chatRooms.has(currentRoom)) {
+    chatRooms.set(currentRoom, new Set());
+  }
+
+  // 添加用户到聊天室
+  chatRooms.get(currentRoom).add(userId);
+  users.set(userId, { 
+    ws, 
+    name: data.name || '匿名用户',
+    avatar: data.avatar || null
+  });
+  
+  // 将ID关联到WebSocket对象上
+  ws.userId = userId;
+  ws.roomId = currentRoom;
+  
+  // 广播用户加入消息
+  broadcastToRoom(currentRoom, {
+    type: 'system',
+    content: `${users.get(userId).name} 加入了聊天室`,
+    timestamp: Date.now(),
+    users: getUsersInRoom(currentRoom)
+  }, userId);
+}
+
+/**
+ * 处理文本消息
+ */
+function handleTextMessage(ws, data, userId, roomId) {
+  if (!userId || !roomId) return;
+  
+  const senderName = users.has(userId) ? users.get(userId).name : '未知用户';
+  
+  broadcastToRoom(roomId, {
+    type: 'message',
+    userId: userId,
+    sender: {
+      id: userId,
+      name: senderName
+    },
+    content: data.content,
+    timestamp: Date.now()
+  }, userId);
+}
+
+/**
+ * 处理音频流消息
+ */
+function handleAudioStreamMessage(ws, data, userId, roomId) {
+  // 必须有会议ID
+  if (!data.conferenceId) {
+    sendErrorToClient(ws, '音频流消息缺少会议ID');
+    return;
+  }
+  
+  // 如果已有用户ID和房间ID，直接处理
+  if (userId && roomId) {
+    forwardAudioStream(data, userId, roomId);
+    return;
+  }
+  
+  // 尝试查找或创建用户身份
+  const userInfo = findOrCreateUserIdentity(ws, data);
+  
+  // 使用找到的用户身份转发音频
+  forwardAudioStream(data, userInfo.userId, userInfo.roomId);
+}
+
+/**
+ * 查找或创建用户身份
+ */
+function findOrCreateUserIdentity(ws, data) {
+  // 首先查找与WebSocket匹配的用户ID
+  const connectedIds = findConnectedUserIds(ws);
+  
+  if (connectedIds.length > 0) {
+    // 找到了已关联的用户，使用优先级最高的ID
+    const foundUserId = connectedIds[0];
+    const foundRoomId = findUserRoom(foundUserId);
+    
+    if (foundRoomId) {
+      return { userId: foundUserId, roomId: foundRoomId };
+    }
+  }
+  
+  // 使用WebSocket对象上已关联的ID
+  if (ws.userId && ws.roomId) {
+    return { userId: ws.userId, roomId: ws.roomId };
+  }
+  
+  // 创建新用户身份
+  const newUserId = `user_${Date.now()}`;
+  const newRoomId = data.conferenceId; // 使用会议ID作为房间ID
+  
+  // 保存到WebSocket对象
+  ws.userId = newUserId;
+  ws.roomId = newRoomId;
+  
+  // 创建用户和房间
+  ensureUserAndRoomExist(ws, newUserId, newRoomId);
+  
+  return { userId: newUserId, roomId: newRoomId };
+}
+
+/**
+ * 查找与WebSocket关联的所有用户ID
+ */
+function findConnectedUserIds(ws) {
+  const connectedIds = [];
+  
+  for (const [id, user] of users.entries()) {
+    if (user.ws === ws) {
+      connectedIds.push(id);
+    }
+  }
+  
+  // 按优先级排序
+  return connectedIds.sort((a, b) => getPriorityValueForId(b) - getPriorityValueForId(a));
+}
+
+/**
+ * 查找用户所在的房间
+ */
+function findUserRoom(userId) {
+  for (const [roomId, roomUsers] of chatRooms.entries()) {
+    if (roomUsers.has(userId)) {
+      return roomId;
+    }
+  }
+  return null;
+}
+
+/**
+ * 确保用户和房间存在
+ */
+function ensureUserAndRoomExist(ws, userId, roomId) {
+  // 清理重复连接
+  cleanupDuplicateConnections(userId);
+  
+  // 创建用户
+  if (!users.has(userId)) {
+    users.set(userId, {
+      ws,
+      name: `用户_${userId.substring(0, 8)}`,
+      avatar: null
+    });
+  }
+  
+  // 创建房间
+  if (!chatRooms.has(roomId)) {
+    chatRooms.set(roomId, new Set());
+  }
+  
+  // 添加用户到房间
+  chatRooms.get(roomId).add(userId);
+}
+
+/**
+ * 处理语音消息
+ */
+function handleAudioMessage(ws, data, userId, roomId) {
+  if (!userId || !roomId || !data.audioData || typeof data.audioData !== 'string') {
+    sendErrorToClient(ws, '语音消息格式错误');
+    return;
+  }
+  
+  broadcastToRoom(roomId, {
+    type: 'audioMessage',
+    userId: userId,
+    sender: {
+      id: userId,
+      name: users.get(userId).name
+    },
+    audioData: data.audioData,
+    duration: data.duration || 0,
+    timestamp: Date.now(),
+    id: data.id || `audio_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    audioFilename: data.audioFilename
+  }, userId);
+}
+
+/**
+ * 处理私聊消息
+ */
+function handlePrivateMessage(ws, data, userId) {
+  if (!userId || !data.targetId || !users.has(data.targetId)) {
+    return;
+  }
+  
+  const message = {
+    type: 'privateMessage',
+    userId: userId,
+    sender: users.get(userId).name,
+    content: data.content,
+    timestamp: Date.now()
+  };
+  
+  // 发送给目标用户
+  users.get(data.targetId).ws.send(JSON.stringify(message));
+  
+  // 发送确认给发送者
+  ws.send(JSON.stringify({
+    ...message,
+    isSent: true
+  }));
+}
+
+/**
+ * 处理私聊语音消息
+ */
+function handlePrivateAudioMessage(ws, data, userId) {
+  if (!userId || !data.targetId || !users.has(data.targetId) || 
+      !data.audioData || typeof data.audioData !== 'string') {
+    sendErrorToClient(ws, '私聊语音消息格式错误');
+    return;
+  }
+  
+  const message = {
+    type: 'privateAudioMessage',
+    userId: userId,
+    sender: users.get(userId).name,
+    audioData: data.audioData,
+    duration: data.duration || 0,
+    timestamp: Date.now()
+  };
+  
+  // 发送给目标用户
+  users.get(data.targetId).ws.send(JSON.stringify(message));
+  
+  // 发送确认给发送者
+  ws.send(JSON.stringify({
+    ...message,
+    isSent: true
+  }));
+}
+
+/**
+ * 处理消息错误
+ */
+function handleMessageError(ws, error) {
+  console.error('[处理错误] 处理消息时出错:', error);
+  sendErrorToClient(ws, `服务器处理消息时出错: ${error.message}`);
+}
+
+/**
+ * 发送错误消息给客户端
+ */
+function sendErrorToClient(ws, errorMessage) {
+  try {
+    ws.send(JSON.stringify({
+      type: 'error',
+      content: errorMessage,
+      timestamp: Date.now()
+    }));
+  } catch (error) {
+    console.error('[处理错误] 发送错误消息失败:', error);
+  }
+}
 
 /**
  * 处理画布相关消息
@@ -1147,69 +1182,46 @@ function handleVoiceConferenceLeave(userId, conferenceId) {
 }
 
 /**
- * 转发音频流数据到会议中的其他参与者
- * @param {Object} data 音频流数据
+ * 转发音频流到会议参与者
+ * @param {Object} data 音频数据和元信息
  * @param {string} senderId 发送者ID
- * @param {string} roomId 聊天室ID
+ * @param {string} roomId 房间ID
  */
 function forwardAudioStream(data, senderId, roomId) {
-    const conferenceId = data.conferenceId;
-    
-    // 检查并清理可能存在的重复ID - 确保同一个WebSocket连接只关联一个用户ID
-    // 优先保留聊天室已有的ID
-    if (senderId) {
-        // 查找其他可能关联到同一个WebSocket连接的ID
-        const senderWs = users.get(senderId)?.ws;
-        if (senderWs) {
-            // 遍历所有用户寻找同一个WebSocket连接
-            const sameWsIds = [];
-            for (const [id, user] of users.entries()) {
-                if (user.ws === senderWs) {
-                    sameWsIds.push(id);
-                }
-            }
-            
-            // 如果找到多个ID使用同一WebSocket连接，进行清理
-            if (sameWsIds.length > 1) {
-                console.log(`[音频转发] 发现WebSocket连接有多个ID: ${sameWsIds.join(', ')}`);
-                console.log(`[音频转发] 当前使用ID: ${senderId}`);
-                
-                // 保留当前senderId，清理其他ID
-                for (const id of sameWsIds) {
-                    if (id !== senderId) {
-                        console.log(`[音频转发] 清理重复ID: ${id}`);
-                    
-                    // 从所有房间中移除该ID
-                    for (const [rid, roomUsers] of chatRooms.entries()) {
-                        if (roomUsers.has(id)) {
-                            roomUsers.delete(id);
-                                console.log(`[音频转发] 已从房间 ${rid} 移除重复ID: ${id}`);
-                        }
-                    }
-                    
-                    // 从会议中移除该ID
-                    if (voiceParticipants.has(id)) {
-                        const oldConfId = voiceParticipants.get(id).conferenceId;
-                            console.log(`[音频转发] 已从会议 ${oldConfId} 移除重复ID: ${id}`);
-                            voiceParticipants.delete(id);
-                    }
-                    }
-                }
-            }
+    // 简化的音频消息，只保留必要字段
+    const audioMessage = {
+        type: 'audioStream',
+        conferenceId: data.conferenceId,
+        senderId,
+        senderName: users.get(senderId)?.name || 'Unknown',
+        audioData: data.audioData,
+        sequence: data.sequence || 0,
+        // 移除非必要字段，保留格式信息
+        format: {
+            sampleRate: data.format?.sampleRate || 44100,
+            numChannels: data.format?.numChannels || 1
         }
-    }
+    };
     
-    console.log(`[音频转发] 准备转发音频流数据，大小: ${data.audioData ? data.audioData.length : 0} 字节，` +
-                `发送者: ${senderId}, 会议ID: ${conferenceId}`);
+    // 一次性检查会议状态
+    const conference = getOrCreateConference(data.conferenceId, senderId, roomId);
+    if (!conference) return;
     
-    // 检查会议是否存在，如果不存在则自动创建
+    // 一次性检查用户状态
+    if (isUserMutedOrInactive(senderId, data.conferenceId)) return;
+    
+    // 直接发送给所有活跃参与者
+    sendToActiveParticipants(conference, audioMessage, senderId);
+}
+
+/**
+ * 确保会议存在，不存在则创建
+ */
+function getOrCreateConference(conferenceId, creatorId, roomId) {
     if (!voiceConferences.has(conferenceId)) {
-        console.log(`[音频转发] 会议 ${conferenceId} 不存在，自动创建`);
-        
-        // 创建新会议
         voiceConferences.set(conferenceId, {
             id: conferenceId,
-            creator: senderId,
+            creator: creatorId,
             roomId: roomId,
             participants: new Set(),
             createdAt: Date.now()
@@ -1220,166 +1232,76 @@ function forwardAudioStream(data, senderId, roomId) {
             type: 'voiceConference',
             action: 'created',
             conferenceId: conferenceId,
-            creatorId: senderId,
-            creatorName: users.get(senderId).name,
+            creatorId: creatorId,
+            creatorName: users.get(creatorId)?.name || 'Unknown',
             timestamp: Date.now()
-        }, null);
-    }
-    
-    // 获取会议实例
-    const conference = voiceConferences.get(conferenceId);
-    
-    // 清理会议中的重复ID，保持与会议加入逻辑一致
-    const cleanupDuplicateParticipants = () => {
-        // 简化重复ID检测逻辑，保留当前活跃的连接
-        const wsToIds = new Map(); 
-        const activeIds = new Set();
-        
-        // 识别活跃的连接
-        for (const participantId of conference.participants) {
-            if (users.has(participantId)) {
-                const userWs = users.get(participantId).ws;
-                if (userWs && userWs.readyState === WebSocket.OPEN) {
-                    activeIds.add(participantId);
-                    
-                    // 仍然跟踪相同WebSocket的多个ID，但不急于清理
-                    if (!wsToIds.has(userWs)) {
-                        wsToIds.set(userWs, []);
-                    }
-                    wsToIds.get(userWs).push(participantId);
-                }
-            }
-        }
-        
-        // 只有当同一WebSocket有超过3个ID时才考虑清理，这样可以容忍少量重复
-        for (const [ws, ids] of wsToIds.entries()) {
-            if (ids.length > 3) {
-                console.log(`[音频转发] 发现同一WebSocket连接的过多ID (${ids.length}): ${ids.join(', ')}，进行清理`);
-                // 保留最近加入的ID
-                ids.sort((a, b) => {
-                    const aTime = voiceParticipants.get(a)?.joinedAt || 0;
-                    const bTime = voiceParticipants.get(b)?.joinedAt || 0;
-                    return bTime - aTime; // 降序，最新的排在前面
-                });
-                
-                // 保留前三个最新的ID
-                const idsToKeep = ids.slice(0, 3);
-                console.log(`[音频转发] 保留的ID: ${idsToKeep.join(', ')}`);
-                
-                // 移除多余的ID
-                for (let i = 3; i < ids.length; i++) {
-                    const idToRemove = ids[i];
-                    console.log(`[音频转发] 从会议 ${conferenceId} 中移除过多ID: ${idToRemove}`);
-                    conference.participants.delete(idToRemove);
-                    
-                    if (voiceParticipants.has(idToRemove)) {
-                        voiceParticipants.delete(idToRemove);
-                    }
-                }
-            }
-        }
-        
-        console.log(`[音频转发] 清理后的会议参与者列表:`, Array.from(conference.participants));
-    };
-
-    // 执行清理
-    cleanupDuplicateParticipants();
-    
-    // 检查发送者是否已经是会议参与者，如果不是则自动加入
-    if (!voiceParticipants.has(senderId) || 
-        voiceParticipants.get(senderId).conferenceId !== conferenceId) {
-        
-        console.log(`[音频转发] 发送者 ${senderId} 不是会议 ${conferenceId} 的参与者，自动加入`);
-        
-        // 如果发送者已在其它会议中，先让其离开
-        if (voiceParticipants.has(senderId)) {
-            const oldConferenceId = voiceParticipants.get(senderId).conferenceId;
-            handleVoiceConferenceLeave(senderId, oldConferenceId);
-        }
-        
-        // 添加发送者为会议参与者
-        voiceParticipants.set(senderId, {
-            conferenceId: conferenceId,
-            isMuted: false,
-            joinedAt: Date.now()
         });
-        
-        // 将发送者添加到会议参与者列表
-        conference.participants.add(senderId);
-        
-        // 再次执行清理，确保新加入的用户不会创建重复ID
-        cleanupDuplicateParticipants();
-        
-        console.log(`[音频转发] 已将发送者 ${senderId} 添加到会议 ${conferenceId}`);
     }
-    
-    // 检查发送者是否处于静音状态
-    if (voiceParticipants.has(senderId) && voiceParticipants.get(senderId).isMuted) {
-        console.log(`[音频转发] 用户 ${senderId} 已静音，不转发音频`);
-        return; // 静音状态不转发音频
-    }
-    
-    const participantCount = conference.participants.size;
-    
-    console.log(`[音频转发] 准备向 ${participantCount-1} 个参与者转发音频流，序列号: ${data.sequence || 0}`);
-    
-    // 记录所有参与者
-    console.log(`[音频转发] 会议参与者列表:`, Array.from(conference.participants));
-    
-    // 创建转发消息
-    const audioStreamMessage = JSON.stringify({
-        type: 'audioStream',
-        conferenceId: conferenceId,
-        senderId: senderId,
-        senderName: users.get(senderId).name,
-        audioData: data.audioData,
-        sequence: data.sequence || 0,
-        format: data.format || { sampleRate: 44100, numChannels: 1, bitsPerSample: 16 },
-        timestamp: Date.now()
-    });
-    
-    // 记录转发消息的基本信息（不包含实际数据，以避免日志过大）
-    console.log(`[音频转发] 音频流消息已创建，大小: ${audioStreamMessage.length} 字节`);
-    
-    let forwardCount = 0;
-    let errorCount = 0;
-    
-    // 判断是否只有一个参与者（即发送者自己）
-    const isSingleParticipant = participantCount <= 1;
-    console.log(`[音频转发] 会议参与者数量: ${participantCount}, 是否只有一人: ${isSingleParticipant}`);
-    
-    // 向会议中的其他参与者转发，包括服务器自己
-    conference.participants.forEach(participantId => {
-        // 只有当参与者不是发送者，或者参与者是服务器特殊用户时才转发
-        const isServerUser = participantId === serverUserId;
-        const shouldForward = (participantId !== senderId) || isServerUser;
-        
-        if (shouldForward && users.has(participantId)) {
-            try {
-                const targetUser = users.get(participantId);
-                
-                // 检查目标用户的WebSocket连接是否仍然有效
-                if (targetUser && targetUser.ws && targetUser.ws.readyState === WebSocket.OPEN) {
+}
 
-                    console.log(audioStreamMessage);
-                    targetUser.ws.send(audioStreamMessage);
-                    forwardCount++;
-                    console.log(`[音频转发] 已转发音频数据到用户: ${participantId}`);
-                } else {
-                    console.error(`[音频转发] 用户 ${participantId} 的WebSocket连接不可用，状态: ${targetUser?.ws?.readyState}`);
-                    errorCount++;
-                }
-            } catch (error) {
-                console.error(`[音频转发] 向用户 ${participantId} 转发音频流失败:`, error);
-                errorCount++;
-            }
-        } else if (!users.has(participantId)) {
-            console.error(`[音频转发] 用户 ${participantId} 不存在`);
-            errorCount++;
-        }
-    });
+/**
+ * 检查用户是否被静音或不活跃
+ * @param {string} userId 用户ID
+ * @param {string} conferenceId 会议ID
+ * @returns {boolean} 如果用户被静音或不活跃则返回true
+ */
+function isUserMutedOrInactive(userId, conferenceId) {
+    // 检查用户是否存在
+    if (!users.has(userId)) {
+        console.log(`用户 ${userId} 不存在，视为不活跃`);
+        return true;
+    }
     
-    console.log(`[音频转发] 音频流转发完成，成功: ${forwardCount}，失败: ${errorCount}，序列号: ${data.sequence || 0}`);
+    // 检查用户是否在会议中
+    if (!voiceParticipants.has(userId)) {
+        console.log(`用户 ${userId} 不在任何会议中，视为不活跃`);
+        return true;
+    }
+    
+    // 检查用户是否在正确的会议中
+    const userConferenceInfo = voiceParticipants.get(userId);
+    if (userConferenceInfo.conferenceId !== conferenceId) {
+        console.log(`用户 ${userId} 在其他会议中: ${userConferenceInfo.conferenceId}`);
+        return true;
+    }
+    
+    // 检查用户是否被静音
+    if (userConferenceInfo.isMuted) {
+        console.log(`用户 ${userId} 已静音`);
+        return true;
+    }
+    
+    // 检查用户WebSocket连接是否活跃
+    const userWs = users.get(userId).ws;
+    if (!userWs || userWs.readyState !== WebSocket.OPEN) {
+        console.log(`用户 ${userId} WebSocket连接不活跃`);
+        return true;
+    }
+    
+    // 用户活跃且未静音
+    return false;
+}
+
+function sendToActiveParticipants(conference, message, excludeId) {
+    const messageStr = JSON.stringify(message);
+    let sentCount = 0;
+    
+    // 高效遍历并发送
+    for (const participantId of conference.participants) {
+        if (participantId === excludeId) continue;
+        
+        const participant = users.get(participantId);
+        if (!participant?.ws || participant.ws.readyState !== WebSocket.OPEN) continue;
+        
+        try {
+            participant.ws.send(messageStr);
+            sentCount++;
+        } catch (error) {
+            // 简化错误处理，只记录错误不中断流程
+        }
+    }
+    
+    return sentCount;
 }
 
 /**

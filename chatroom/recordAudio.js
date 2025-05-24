@@ -29,7 +29,7 @@ const config = {
 
 // 解析命令行参数
 function parseArgs() {
-  const args = process.argv.slice(2);
+const args = process.argv.slice(2);
   const options = {
     streamMode: args.includes('-stream'),
     duration: parseInt(args[0] || '5', 10),
@@ -37,13 +37,13 @@ function parseArgs() {
   };
   
   // 提取服务器参数
-  const portIndex = args.indexOf('-port');
-  if (portIndex !== -1 && args.length > portIndex + 1) {
+    const portIndex = args.indexOf('-port');
+    if (portIndex !== -1 && args.length > portIndex + 1) {
     config.server.port = parseInt(args[portIndex + 1], 10);
-  }
-  
-  const addressIndex = args.indexOf('-address');
-  if (addressIndex !== -1 && args.length > addressIndex + 1) {
+    }
+    
+    const addressIndex = args.indexOf('-address');
+    if (addressIndex !== -1 && args.length > addressIndex + 1) {
     config.server.address = args[addressIndex + 1];
   }
   
@@ -57,7 +57,7 @@ function parseArgs() {
   const userIdIndex = args.indexOf('-userId');
   if (userIdIndex !== -1 && args.length > userIdIndex + 1) {
     options.userId = args[userIdIndex + 1];
-  } else {
+            } else {
     options.userId = findExistingUserId() || `user_${Date.now()}`;
   }
   
@@ -73,7 +73,7 @@ function parseArgs() {
   return options;
 }
 
-// 获取工作区路径
+    // 获取工作区路径
 function getWorkspacePath(args) {
   // 从参数获取
   const workspaceIndex = args.indexOf('-workspace');
@@ -87,26 +87,26 @@ function getWorkspacePath(args) {
 
 // 查找已保存的用户ID
 function findExistingUserId() {
-  const possiblePaths = [
+        const possiblePaths = [
     path.join(os.tmpdir(), 'lingxi-userid'),
     path.join(process.env.HOME || process.env.USERPROFILE, '.lingxi-userid')
   ];
   
-  for (const filePath of possiblePaths) {
-    if (fs.existsSync(filePath)) {
+        for (const filePath of possiblePaths) {
+            if (fs.existsSync(filePath)) {
       try {
-        const userId = fs.readFileSync(filePath, 'utf8').trim();
+                const userId = fs.readFileSync(filePath, 'utf8').trim();
         if (userId) return userId;
       } catch (err) {}
     }
   }
   
-  return null;
+        return null;
 }
 
 // 保存用户ID
 function saveUserId(userId) {
-  try {
+    try {
     fs.writeFileSync(path.join(os.tmpdir(), 'lingxi-userid'), userId);
   } catch (err) {}
 }
@@ -281,9 +281,9 @@ async function recordAudio(options) {
 
 // 音频流功能
 async function streamAudio(options) {
-  return new Promise((resolve, reject) => {
-    const mic = new Mic();
-    let sequenceNumber = 0;
+    return new Promise((resolve, reject) => {
+            const mic = new Mic();
+            let sequenceNumber = 0;
     let streamOutputFile = null;
     
     // 确保用户ID格式正确
@@ -293,8 +293,8 @@ async function streamAudio(options) {
     
     // 确保用户ID有正确的前缀
     if (!options.userId.startsWith('vscode_') && !options.userId.startsWith('user_')) {
-      const isVSCode = process.env.VSCODE_PID || process.env.VSCODE_CWD || 
-                      process.title.toLowerCase().includes('vscode');
+                        const isVSCode = process.env.VSCODE_PID || process.env.VSCODE_CWD || 
+                                        process.title.toLowerCase().includes('vscode');
       options.userId = isVSCode ? `vscode_${options.userId}` : `user_${options.userId}`;
     }
     
@@ -319,8 +319,8 @@ async function streamAudio(options) {
     
     ws.on('open', () => {
       // 发送身份验证 - 确保包含name字段
-      ws.send(JSON.stringify({
-        type: 'join',
+                    ws.send(JSON.stringify({
+                        type: 'join',
         userId: options.userId,
         roomId: 'default',
         name: userName // 使用生成的用户名
@@ -328,35 +328,35 @@ async function streamAudio(options) {
       
       // 发送初始化消息
       const adjustedSampleRate = Math.floor(config.audio.sampleRate / config.audio.calibrationFactor);
-      ws.send(JSON.stringify({
-        type: 'init',
-        role: 'streamer',
-        format: {
+                ws.send(JSON.stringify({
+                    type: 'init',
+                    role: 'streamer',
+                    format: {
           sampleRate: adjustedSampleRate,
           numChannels: config.audio.numChannels,
           bitsPerSample: config.audio.bitsPerSample
         },
         enhancementEnabled: config.audio.enhancementEnabled
-      }));
-      
-      // 开始录音
-      const micStream = mic.startRecording();
-      
+                }));
+                
+                // 开始录音
+                const micStream = mic.startRecording();
+                
       micStream.on('data', (data) => {
-        if (ws.readyState === WebSocket.OPEN) {
+                    if (ws.readyState === WebSocket.OPEN) {
           // 处理音频数据
           const enhancedData = enhanceAudio(data);
           
           // 发送音频流消息 - 确保包含所有必要字段
           ws.send(JSON.stringify({
-            type: 'audioStream',
+                                type: 'audioStream',
             conferenceId: config.conferenceId,
             senderId: options.userId,
             senderName: userName, // 使用生成的用户名
-            sequence: sequenceNumber++,
+                                sequence: sequenceNumber++,
             timestamp: Date.now(),
-            format: {
-              sampleRate: adjustedSampleRate,
+                                format: {
+                                    sampleRate: adjustedSampleRate,
               numChannels: config.audio.numChannels,
               bitsPerSample: config.audio.bitsPerSample,
               isWav: false
@@ -367,38 +367,38 @@ async function streamAudio(options) {
           // 保存到文件
           if (streamOutputFile) {
             streamOutputFile.write(enhancedData);
-          }
-        }
-      });
-      
-      // 错误处理
-      micStream.on('error', (err) => {
-        mic.stopRecording();
+                        }
+                    }
+                });
+                
+                // 错误处理
+                micStream.on('error', (err) => {
+                    mic.stopRecording();
         if (streamOutputFile) streamOutputFile.end();
-        ws.close();
-        reject(err);
-      });
-      
+                    ws.close();
+                    reject(err);
+                });
+                
       // 处理WebSocket关闭
-      ws.on('close', () => {
-        mic.stopRecording();
+                ws.on('close', () => {
+                    mic.stopRecording();
         if (streamOutputFile) streamOutputFile.end();
-        resolve();
-      });
-      
-      // 处理WebSocket错误
-      ws.on('error', (err) => {
-        mic.stopRecording();
+                    resolve();
+                });
+                
+                // 处理WebSocket错误
+                ws.on('error', (err) => {
+                    mic.stopRecording();
         if (streamOutputFile) streamOutputFile.end();
-        reject(err);
-      });
+                    reject(err);
+                });
     });
     
     // 处理WebSocket连接错误
-    ws.on('error', (err) => {
+            ws.on('error', (err) => {
       console.error('WebSocket连接错误:', err.message);
-      reject(err);
-    });
+                reject(err);
+            });
   });
 }
 
@@ -413,22 +413,22 @@ async function main() {
     // 音频流模式
     try {
       await streamAudio(options);
-      process.exit(0);
+            process.exit(0);
     } catch (err) {
       console.error('音频流失败:', err.message);
-      process.exit(1);
+            process.exit(1);
     }
-  } else {
+} else {
     // 录音模式
     try {
       const result = await recordAudio(options);
       process.stdout.write(JSON.stringify(result));
-      process.exit(0);
+                process.exit(0);
     } catch (err) {
       console.error('录音失败:', err.message);
-      process.exit(1);
-    }
-  }
+                process.exit(1);
+            }
+} 
 }
 
 // 启动程序

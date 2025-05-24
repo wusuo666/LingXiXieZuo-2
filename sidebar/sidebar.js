@@ -15,7 +15,7 @@ var globalAudioContext = null;       // 全局音频上下文
 
 /**
  * 侧边栏主逻辑初始化
- * 包含tab切换、AI、剪贴板、画布、MCP、聊天室等所有功能
+ * 包含tab切换、AI、剪贴板、MCP、聊天室等所有功能
  */
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -37,7 +37,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化语音录制按钮和定时器显示
     voiceRecordBtn = document.getElementById('voice-record-btn');
     voiceRecordTimer = document.querySelector('.voice-record-timer');
-    console.log('voiceRecordBtn:', voiceRecordBtn, 'voiceRecordTimer:', voiceRecordTimer);
     if (voiceRecordTimer) voiceRecordTimer.style.display = 'none';
     console.log(222222222222);
 
@@ -47,6 +46,31 @@ document.addEventListener('DOMContentLoaded', function() {
         const message = event.data;
         console.log('收到消息:', message);
         
+        if (message.command === 'memoFilesList') {
+            const files = message.files || [];
+            if (files.length === 0) {
+                if (window.vscode) {
+                    window.vscode.postMessage({ command: 'showError', text: '未找到任何会议纪要文件！' });
+                }
+                return;
+            }
+            // 让 extension 弹出选择框
+            window.vscode.postMessage({ command: 'requestMemoFilePick', files });
+        }
+        // 新增监听，收到 extension 选中的文件后再发 aiSummaryMemo
+        if (message.command === 'memoFilePicked') {
+            if (message.file) {
+                window.vscode.postMessage({ command: 'aiSummaryMemo', file: message.file });
+            }
+        }
+
+        if (message.command === 'memoSummaryResult') {
+            // 展示AI总结结果
+            if (window.vscode) {
+                window.vscode.postMessage({ command: 'showInfo', text: 'AI总结结果：\n' + message.summary });
+            }
+        }
+
         if (message.command === 'apiKeyStatus') {
             const statusElement = document.getElementById('zhipuai-api-key-status');
             if (statusElement) {
@@ -99,16 +123,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // 聊天消息响应
         if (message.command === 'chatResponse') {
             // 添加助手响应到聊天界面
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
             
             console.log(message);
             const messagesContainer = document.querySelector('.chat-messages');
@@ -1012,6 +1026,14 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // AI总结纪要按钮事件监听
+    document.getElementById('ai-summary-memo-btn').addEventListener('click', function() {
+        // 请求后端列出所有纪要文件
+        if (window.vscode) {
+            window.vscode.postMessage({ command: 'listMemoFiles' });
+        }
+    });
 }); 
 
 
@@ -1029,6 +1051,14 @@ function updateServerStatus(statusData) {
 if (statusData.status === 'running' || statusData.status === 'connected') {
     statusElement.textContent = statusData.status === 'connected' ? '已连接' : '运行中';
         statusElement.className = 'status-online';
+        
+        // 保存服务器IP和端口到DOM元素的data属性
+        if (statusData.ipAddress) {
+            statusElement.setAttribute('data-ip', statusData.ipAddress);
+        }
+        if (statusData.port) {
+            statusElement.setAttribute('data-port', statusData.port);
+        }
         
         // 主机模式下的UI状态
     if (startButton) startButton.disabled = true;
@@ -1063,6 +1093,10 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
         statusElement.textContent = '离线';
         statusElement.className = 'status-offline';
         
+        // 清除服务器IP和端口信息
+        statusElement.removeAttribute('data-ip');
+        statusElement.removeAttribute('data-port');
+        
         // 主机模式下的UI状态
     if (startButton) startButton.disabled = false;
     if (stopButton) stopButton.disabled = true;
@@ -1080,6 +1114,10 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
 } else if (statusData.status === 'error') {
     statusElement.textContent = '错误: ' + (statusData.error || '未知错误');
         statusElement.className = 'status-offline';
+        
+        // 清除服务器IP和端口信息
+        statusElement.removeAttribute('data-ip');
+        statusElement.removeAttribute('data-port');
         
         // 主机模式下的UI状态
     if (startButton) startButton.disabled = false;
@@ -1752,11 +1790,24 @@ function startAudioStream(conferenceId) {
         return;
     }
     
-    // 通过VSCode命令调用外部录音脚本，开启流模式
+    // 获取服务器IP和端口
+    const serverStatus = document.getElementById('chat-server-status');
+    let ipAddress = 'localhost';
+    let port = 3000;
+    
+    // 从服务器状态元素中获取IP地址和端口
+    if (serverStatus) {
+        ipAddress = serverStatus.getAttribute('data-ip') || 'localhost';
+        port = serverStatus.getAttribute('data-port') || 3000;
+    }
+    
+    console.log(`启动音频流，连接到服务器: ${ipAddress}:${port}, 会议ID: ${conferenceId}`);
+    
+    // 通过VSCode命令调用外部录音脚本，开启流模式，传递服务器地址和端口
     vscode.postMessage({
         command: 'executeStreamCommand',
         script: 'chatroom/recordAudio.js',
-        args: ['-stream', '-conferenceId', conferenceId]
+        args: ['-stream', '-conferenceId', conferenceId, '-address', ipAddress, '-port', port]
     });
 }
 

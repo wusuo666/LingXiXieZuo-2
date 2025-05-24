@@ -220,12 +220,44 @@
                                             <p>向Excalidraw画布添加基本形状</p>
                                             <div class="tool-params">
                                                 <div class="param"><span class="param-name">name</span>: 画布名称</div>
-                                                <div class="param"><span class="param-name">shapeType</span>: 形状类型: rectangle, ellipse, diamond, line, arrow, text</div>
+                                                <div class="param"><span class="param-name">shapeType</span>: 形状类型: rectangle, ellipse, diamond, text</div>
                                                 <div class="param"><span class="param-name">x</span>: X坐标位置</div>
                                                 <div class="param"><span class="param-name">y</span>: Y坐标位置</div>
                                                 <div class="param"><span class="param-name">color</span>: 颜色代码，如 #000000 或 #ff0000</div>
                                             </div>
                                             <div class="tool-example">例如: 在flowchart画布上添加一个矩形，位置(100,100)，颜色蓝色</div>
+                                        </div>
+
+                                        <div class="tool-item">
+                                            <h4>添加线条 (addLine)</h4>
+                                            <p>向Excalidraw画布添加普通线条</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">x</span>: 起始X坐标</div>
+                                                <div class="param"><span class="param-name">y</span>: 起始Y坐标</div>
+                                                <div class="param"><span class="param-name">endX</span>: 结束X坐标</div>
+                                                <div class="param"><span class="param-name">endY</span>: 结束Y坐标</div>
+                                                <div class="param"><span class="param-name">color</span>: 线条颜色（默认为黑色）</div>
+                                                <div class="param"><span class="param-name">strokeWidth</span>: 线条宽度（默认为1）</div>
+                                                <div class="param"><span class="param-name">strokeStyle</span>: 线条样式（默认为solid，可选：solid, dashed, dotted）</div>
+                                            </div>
+                                            <div class="tool-example">例如: 在flowchart画布上添加一条从(100,100)到(200,200)的虚线</div>
+                                        </div>
+
+                                        <div class="tool-item">
+                                            <h4>添加箭头 (addArrow)</h4>
+                                            <p>向Excalidraw画布添加带箭头的线条</p>
+                                            <div class="tool-params">
+                                                <div class="param"><span class="param-name">name</span>: 画布名称</div>
+                                                <div class="param"><span class="param-name">x</span>: 起始X坐标</div>
+                                                <div class="param"><span class="param-name">y</span>: 起始Y坐标</div>
+                                                <div class="param"><span class="param-name">endX</span>: 结束X坐标</div>
+                                                <div class="param"><span class="param-name">endY</span>: 结束Y坐标</div>
+                                                <div class="param"><span class="param-name">color</span>: 箭头颜色（默认为黑色）</div>
+                                                <div class="param"><span class="param-name">startArrowhead</span>: 起始箭头样式（可选，如 "arrow", "bar", "dot" 等）</div>
+                                                <div class="param"><span class="param-name">endArrowhead</span>: 结束箭头样式（默认为 "arrow"）</div>
+                                            </div>
+                                            <div class="tool-example">例如: 在flowchart画布上添加一个从(100,100)到(200,200)的双向箭头</div>
                                         </div>
                                         
                                         <div class="tool-item">
@@ -455,6 +487,9 @@
                             </button>
                             <button id="add-memo-btn" class="canvas-button right-btn">
                                 添加纪要
+                            </button>
+                            <button id="ai-summary-memo-btn" class="canvas-button right-btn">
+                                AI总结纪要
                             </button>
                         </div>
                         <div class="canvas-list-container">

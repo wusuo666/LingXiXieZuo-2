@@ -15,7 +15,7 @@ var globalAudioContext = null;       // 全局音频上下文
 
 /**
  * 侧边栏主逻辑初始化
- * 包含tab切换、AI、剪贴板、画布、MCP、聊天室等所有功能
+ * 包含tab切换、AI、剪贴板、MCP、聊天室等所有功能
  */
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -47,6 +47,31 @@ document.addEventListener('DOMContentLoaded', function() {
         const message = event.data;
         console.log('收到消息:', message);
         
+        if (message.command === 'memoFilesList') {
+            const files = message.files || [];
+            if (files.length === 0) {
+                if (window.vscode) {
+                    window.vscode.postMessage({ command: 'showError', text: '未找到任何会议纪要文件！' });
+                }
+                return;
+            }
+            // 让 extension 弹出选择框
+            window.vscode.postMessage({ command: 'requestMemoFilePick', files });
+        }
+        // 新增监听，收到 extension 选中的文件后再发 aiSummaryMemo
+        if (message.command === 'memoFilePicked') {
+            if (message.file) {
+                window.vscode.postMessage({ command: 'aiSummaryMemo', file: message.file });
+            }
+        }
+
+        if (message.command === 'memoSummaryResult') {
+            // 展示AI总结结果
+            if (window.vscode) {
+                window.vscode.postMessage({ command: 'showInfo', text: 'AI总结结果：\n' + message.summary });
+            }
+        }
+
         if (message.command === 'apiKeyStatus') {
             const statusElement = document.getElementById('zhipuai-api-key-status');
             if (statusElement) {
@@ -99,16 +124,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // 聊天消息响应
         if (message.command === 'chatResponse') {
             // 添加助手响应到聊天界面
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
-            console.log(4444444444444444444444444444);
             
             console.log(message);
             const messagesContainer = document.querySelector('.chat-messages');
@@ -1011,6 +1026,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 setTimeout(bindMeetingButtons, 0); // 等待DOM渲染后再绑定
             }
         });
+    });
+
+    // AI总结纪要按钮事件监听
+    document.getElementById('ai-summary-memo-btn').addEventListener('click', function() {
+        // 请求后端列出所有纪要文件
+        if (window.vscode) {
+            window.vscode.postMessage({ command: 'listMemoFiles' });
+        }
     });
 }); 
 

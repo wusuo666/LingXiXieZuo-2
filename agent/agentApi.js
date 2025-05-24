@@ -595,6 +595,38 @@ function getConfig() {
     return { ...config };
 }
 
+/**
+ * 使用 DeepSeek V3 对会议纪要进行总结
+ * @param {string} memoText 会议纪要原文
+ * @returns {Promise<string>} 总结结果
+ */
+async function summarizeMemoWithDeepseek(memoText) {
+    if (!config.deepseekApiKey) {
+        throw new Error('未配置DeepSeek API Key');
+    }
+    if (!memoText || typeof memoText !== 'string') {
+        throw new Error('无效的会议纪要内容');
+    }
+    const prompt = `请对以下会议纪要内容进行总结，要求简明扼要、条理清晰：\n${memoText}`;
+    const client = deepseekClient || initDeepSeekClient();
+    try {
+        const completion = await client.chat.completions.create({
+            model: config.deepseekModel || 'deepseek-chat',
+            messages: [
+                { role: 'system', content: '你是一名会议纪要总结助手。' },
+                { role: 'user', content: prompt }
+            ],
+            temperature: config.temperature,
+            top_p: config.topP,
+            max_tokens: config.maxTokens
+        });
+        const result = completion.choices?.[0]?.message?.content || '';
+        return result.trim();
+    } catch (e) {
+        throw new Error('调用DeepSeek总结失败: ' + (e.message || e.toString()));
+    }
+}
+
 // 导出模块接口
 module.exports = {
     updateConfig,
@@ -608,5 +640,6 @@ module.exports = {
     getConversationHistory,    // 导出获取对话历史函数
     clearConversationHistory,  // 导出清除对话历史函数
     setCurrentSessionId: (id) => { currentSessionId = id; },  // 设置当前会话ID的函数
-    getConfig  // 导出获取配置的函数
+    getConfig,  // 导出获取配置的函数
+    summarizeMemoWithDeepseek
 };

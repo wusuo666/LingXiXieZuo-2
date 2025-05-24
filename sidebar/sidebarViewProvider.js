@@ -1375,6 +1375,19 @@ class LingxiSidebarProvider {
                         console.error('打开画布文件失败:', error);
                     }
                 }
+            } else if (message.command === 'requestMemoFilePick') {
+                const files = message.files || [];
+                if (files.length === 0) return;
+                // 构造 QuickPickItems
+                const items = files.map(f => ({ label: f, description: '', detail: f }));
+                const selected = await vscode.window.showQuickPick(items, {
+                    placeHolder: '请选择要总结的会议纪要文件',
+                    ignoreFocusOut: true
+                });
+                if (selected && selected.label) {
+                    this._webviewView.webview.postMessage({ command: 'memoFilePicked', file: selected.label });
+                }
+                return;
             }
         });
     }
@@ -2270,6 +2283,107 @@ class LingxiSidebarProvider {
                     // 向画布添加纪要
                     await this.addMemoToCanvas();
                     break;
+                case 'listMemoFiles': {
+                    // 枚举 workspace/yuyin/output/ 下所有 meeting_*.txt 文件
+                    let memoFiles = [];
+                    try {
+                        let searchDirs = [];
+                        if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                            searchDirs.push(path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, 'yuyin', 'output'));
+                        } else {
+                            searchDirs.push(path.join(process.cwd(), 'yuyin', 'output'));
+                        }
+                        for (const dir of searchDirs) {
+                            if (fs.existsSync(dir)) {
+                                const files = fs.readdirSync(dir);
+                                memoFiles = memoFiles.concat(files.filter(f => /^meeting_.*\.txt$/.test(f)));
+                            }
+                        }
+                    } catch (e) {
+                        console.error('查找纪要文件出错:', e);
+                    }
+                    this._webviewView.webview.postMessage({ command: 'memoFilesList', files: memoFiles });
+                    break;
+                }
+                case 'aiSummaryMemo': {
+                    // 读取指定纪要文件内容，调用 agentApi 的 deepseekV3 总结接口
+                    const file = message.file;
+                    let fileContent = '';
+                    try {
+                        // file 已为 yuyin/output/meeting_*.txt 的相对路径或文件名，需拼接 workspace/yuyin/output 路径
+                        let filePath = file;
+                        if (!path.isAbsolute(filePath)) {
+                            if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                                const dir = vscode.workspace.workspaceFolders[0].uri.fsPath;
+                                filePath = path.join(dir, 'yuyin', 'output', file);
+                            } else {
+                                filePath = path.join(process.cwd(), 'yuyin', 'output', file);
+                            }
+                        }
+                        if (fs.existsSync(filePath)) {
+                            fileContent = fs.readFileSync(filePath, 'utf8');
+                        } else {
+                            vscode.window.showErrorMessage('未找到文件: ' + file);
+                            this._webviewView.webview.postMessage({ command: 'memoSummaryResult', summary: '未找到文件: ' + file });
+                            return;
+                        }
+                    } catch (e) {
+                        vscode.window.showErrorMessage('读取文件失败: ' + e.message);
+                        this._webviewView.webview.postMessage({ command: 'memoSummaryResult', summary: '读取文件失败: ' + e.message });
+                        return;
+                    }
+                    // 检查API Key
+                    const config = agentApi.getConfig();
+                    if (!config.deepseekApiKey) {
+                        vscode.window.showErrorMessage('未配置API Key');
+                        this._webviewView.webview.postMessage({ command: 'memoSummaryResult', summary: '未配置API Key' });
+                        return;
+                    }
+                    // 只取主要文本部分（如有需要可进一步提取）
+                    let summary = '';
+                    try {
+                        summary = await agentApi.summarizeMemoWithDeepseek(fileContent);
+                    } catch (e) {
+                        vscode.window.showErrorMessage('AI总结失败: ' + e.message);
+                        this._webviewView.webview.postMessage({ command: 'memoSummaryResult', summary: 'AI总结失败: ' + e.message });
+                        return;
+                    }
+                    if (!summary || typeof summary !== 'string' || summary.trim() === '') {
+                        vscode.window.showErrorMessage('AI总结失败：未获得有效输出');
+                        this._webviewView.webview.postMessage({ command: 'memoSummaryResult', summary: 'AI总结失败：未获得有效输出' });
+                        return;
+                    }
+                    // 解析会议编号
+                    let meetingId = 'unknown';
+                    const match = file.match(/meeting_(\d+)_transcript\.txt/);
+                    if (match && match[1]) {
+                        meetingId = match[1];
+                    } else {
+                        // 兼容 meeting_编号.txt
+                        const match2 = file.match(/meeting_(\d+)\.txt/);
+                        if (match2 && match2[1]) meetingId = match2[1];
+                    }
+                    // 构造保存路径
+                    let savePath = '';
+                    if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+                        const dir = vscode.workspace.workspaceFolders[0].uri.fsPath;
+                        savePath = path.join(dir, 'yuyin', 'output', `meeting_summarized_${meetingId}.txt`);
+                    } else {
+                        savePath = path.join(process.cwd(), 'yuyin', 'output', `meeting_summarized_${meetingId}.txt`);
+                    }
+                    // 写入总结内容
+                    try {
+                        fs.writeFileSync(savePath, summary, 'utf8');
+                        vscode.window.showInformationMessage(`AI总结结果已保存到: ${savePath}`);
+                    } catch (e) {
+                        vscode.window.showErrorMessage('保存AI总结结果失败: ' + e.message);
+                        this._webviewView.webview.postMessage({ command: 'memoSummaryResult', summary: '保存AI总结结果失败: ' + e.message });
+                        return;
+                    }
+                    // 通知前端
+                    this._webviewView.webview.postMessage({ command: 'memoSummaryResult', summary });
+                    return;
+                }
             }
         });
     }

@@ -3121,9 +3121,20 @@ class LingxiSidebarProvider {
                     selectedAsrFile = selectedFileItem.file.path;
                     console.log(`用户选择了ASR文件: ${selectedAsrFile}`);
                     
-                    // 从选中的文件中提取句子
-                    asrSentences = await this.extractSentencesFromAsrResult(selectedAsrFile);
-                    console.log(`从ASR结果文件中提取了 ${asrSentences.length} 个句子`);
+                    // 检查文件名是否以meeting_summarized开头
+                    const fileName = path.basename(selectedAsrFile);
+                    if (fileName.startsWith('meeting_summarized')) {
+                        // 对于meeting_summarized前缀的文件，直接读取全部内容
+                        const content = await vscode.workspace.fs.readFile(vscode.Uri.file(selectedAsrFile));
+                        const contentText = Buffer.from(content).toString('utf8');
+                        // 将整个文件内容作为一个句子
+                        asrSentences = [contentText];
+                        console.log('检测到meeting_summarized文件，将使用完整内容');
+                    } else {
+                        // 对于其他文件，使用原有的提取方式
+                        asrSentences = await this.extractSentencesFromAsrResult(selectedAsrFile);
+                        console.log(`从ASR结果文件中提取了 ${asrSentences.length} 个句子`);
+                    }
                 } else {
                     console.log('用户取消了选择ASR文件');
                 }
@@ -3184,27 +3195,35 @@ class LingxiSidebarProvider {
             let memoText = "666"; // 默认文本
             
             if (asrSentences.length > 0) {
-                // 创建选项列表，让用户选择要添加的句子
-                const sentenceItems = asrSentences.map((sentence, index) => ({
-                    label: `段落 ${index + 1}`,
-                    description: sentence.length > 50 ? sentence.substring(0, 50) + '...' : sentence,
-                    detail: sentence,
-                    picked: true // 默认全选
-                }));
-                
-                // 显示多选框，让用户选择要包含的句子
-                const selectedSentences = await vscode.window.showQuickPick(sentenceItems, {
-                    placeHolder: '选择要添加到纪要的内容（可多选）',
-                    canPickMany: true, // 启用多选
-                    ignoreFocusOut: true
-                });
-                
-                if (!selectedSentences || selectedSentences.length === 0) {
-                    // 用户取消选择或未选择任何句子，使用默认文本
-                    vscode.window.showInformationMessage("未选择任何内容，将使用默认文本");
+                // 检查是否来自meeting_summarized文件
+                const fileName = path.basename(selectedAsrFile);
+                if (fileName.startsWith('meeting_summarized')) {
+                    // 对于meeting_summarized文件，直接使用全部内容
+                    memoText = asrSentences[0];
                 } else {
-                    // 合并选中的句子
-                    memoText = selectedSentences.map(item => item.detail).join('\n');
+                    // 对于其他文件，使用原有的选择方式
+                    // 创建选项列表，让用户选择要添加的句子
+                    const sentenceItems = asrSentences.map((sentence, index) => ({
+                        label: `段落 ${index + 1}`,
+                        description: sentence.length > 50 ? sentence.substring(0, 50) + '...' : sentence,
+                        detail: sentence,
+                        picked: true // 默认全选
+                    }));
+                    
+                    // 显示多选框，让用户选择要包含的句子
+                    const selectedSentences = await vscode.window.showQuickPick(sentenceItems, {
+                        placeHolder: '选择要添加到纪要的内容（可多选）',
+                        canPickMany: true, // 启用多选
+                        ignoreFocusOut: true
+                    });
+                    
+                    if (!selectedSentences || selectedSentences.length === 0) {
+                        // 用户取消选择或未选择任何句子，使用默认文本
+                        vscode.window.showInformationMessage("未选择任何内容，将使用默认文本");
+                    } else {
+                        // 合并选中的句子
+                        memoText = selectedSentences.map(item => item.detail).join('\n');
+                    }
                 }
             } else {
                 vscode.window.showInformationMessage("未找到ASR结果文件或文件为空，将使用默认文本");
@@ -3290,11 +3309,12 @@ class LingxiSidebarProvider {
             if (rectIndex !== -1 || textIndex !== -1) {
                 const choice = await vscode.window.showQuickPick(
                     [
-                        { label: '是', description: '替换现有纪要' },
-                        { label: '否', description: '保留现有纪要，添加新纪要' }
+                        { label: '替换', description: '替换现有纪要' },
+                        { label: '保留', description: '保留现有纪要，添加新纪要' },
+                        { label: '增加', description: '在现有纪要基础上增加新内容' }
                     ],
                     {
-                        placeHolder: '新文件中已存在纪要，是否替换？',
+                        placeHolder: '新文件中已存在纪要，请选择操作方式',
                         ignoreFocusOut: true
                     }
                 );
@@ -3304,7 +3324,7 @@ class LingxiSidebarProvider {
                     return;
                 }
                 
-                if (choice.label === '是') {
+                if (choice.label === '替换') {
                     // 替换现有纪要
                     if (rectIndex !== -1) {
                         canvasJson.elements[rectIndex] = newRectElement;
@@ -3312,7 +3332,7 @@ class LingxiSidebarProvider {
                     if (textIndex !== -1) {
                         canvasJson.elements[textIndex] = newTextElement;
                     }
-                } else {
+                } else if (choice.label === '保留') {
                     // 保留现有纪要，将其ID改为永久ID
                     const timestamp = Date.now();
                     
@@ -3329,6 +3349,35 @@ class LingxiSidebarProvider {
                     // 添加新纪要
                     canvasJson.elements.push(newRectElement);
                     canvasJson.elements.push(newTextElement);
+                } else if (choice.label === '增加') {
+                    // 在现有纪要基础上增加新内容
+                    if (textIndex !== -1) {
+                        // 获取现有文本内容
+                        const existingText = canvasJson.elements[textIndex].text;
+                        // 添加分隔线和新内容
+                        const newText = existingText + '\n----------\n' + newTextElement.text;
+                        // 更新文本元素
+                        canvasJson.elements[textIndex].text = newText;
+                        
+                        // 计算新文本的行数
+                        const newLineCount = newText.split('\n').length;
+                        const originalLineCount = existingText.split('\n').length;
+                        const addedLines = newLineCount - originalLineCount;
+                        
+                        // 调整矩形大小以适应新内容
+                        if (rectIndex !== -1) {
+                            // 保持原有的行高（约20像素）
+                            const lineHeight = 20;
+                            // 计算需要增加的高度
+                            const heightIncrease = addedLines * lineHeight;
+                            // 增加矩形高度
+                            canvasJson.elements[rectIndex].height += heightIncrease;
+                            
+                            // 保持文本元素的位置和大小不变
+                            canvasJson.elements[textIndex].fontSize = canvasJson.elements[textIndex].fontSize || 16;
+                            canvasJson.elements[textIndex].lineHeight = canvasJson.elements[textIndex].lineHeight || 1.2;
+                        }
+                    }
                 }
             } else {
                 // 不存在纪要元素，直接添加
@@ -3390,14 +3439,32 @@ class LingxiSidebarProvider {
                 Buffer.from(JSON.stringify(canvasJson, null, 2), 'utf8')
             );
             
-            // 等待文件写入完成
-            await new Promise(resolve => setTimeout(resolve, 300));
-            
-            // 打开新创建的文件
-            await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(newFilePath));
+            // 删除原始画布
+            try {
+                await vscode.workspace.fs.delete(vscode.Uri.file(originalFilePath));
+                console.log(`已删除原始画布: ${originalFilePath}`);
+            } catch (deleteError) {
+                console.error('删除原始画布失败:', deleteError);
+                vscode.window.showWarningMessage(`删除原始画布失败: ${deleteError.message}`);
+            }
             
             // 显示成功消息
-            vscode.window.showInformationMessage(`已成功创建带有纪要的画布副本: ${newFileName}`);
+            vscode.window.showInformationMessage('纪要添加成功，原始画布已删除');
+            
+            // 询问用户是否要打开新画布
+            const openOptions = [
+                { label: '是', description: '打开新画布' },
+                { label: '否', description: '稍后手动打开' }
+            ];
+
+            const openChoice = await vscode.window.showQuickPick(openOptions, {
+                placeHolder: '是否要打开新画布？'
+            });
+
+            if (openChoice && openChoice.label === '是') {
+                // 打开新画布
+                await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(newFilePath));
+            }
             
         } catch (error) {
             console.error('添加纪要到画布失败:', error);

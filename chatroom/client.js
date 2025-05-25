@@ -3,7 +3,7 @@ const readline = require('readline'); // 用于命令行交互测试
 
 let wsClient = null;
 let currentRoomId = 'default'; // 默认房间ID
-let currentUserId = null; // 默认用户ID
+let currentUserId = `client_${Date.now()}`; // 默认用户ID
 let currentUserName = 'TestClientUser'; // 默认用户名
 let reconnectAttempts = 0;
 let maxReconnectAttempts = 3;
@@ -24,7 +24,7 @@ const rl = readline.createInterface({
  * @param {string} ipAddress 服务器IP地址
  * @returns {WebSocket} WebSocket 实例
  */
-function connectToServer(port = 3000, roomId = 'default', userId = null, userName = 'TestClientUser', ipAddress = 'localhost') {
+function connectToServer(port = 3000, roomId = 'default', userId = `client_${Date.now()}`, userName = 'TestClientUser', ipAddress = 'localhost') {
   if (wsClient && wsClient.readyState === WebSocket.OPEN) {
     console.log('已经连接到服务器。');
     return wsClient;
@@ -38,25 +38,6 @@ function connectToServer(port = 3000, roomId = 'default', userId = null, userNam
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
-  }
-
-  // 生成或使用提供的userId，优先使用vscode_前缀
-  if (!userId) {
-    const timestamp = Date.now();
-    // 如果运行在VSCode环境中或应用程序名称包含vscode
-    if (process.env.VSCODE_PID || process.env.VSCODE_CWD || process.title.toLowerCase().includes('vscode')) {
-      userId = `vscode_${timestamp}`;
-    } else {
-      userId = `client_${timestamp}`;
-    }
-  } else if (!userId.startsWith('vscode_') && !userId.startsWith('user_') && !userId.startsWith('client_')) {
-    // 如果用户ID没有标准前缀，添加vscode_前缀
-    const originalId = userId;
-    if (process.env.VSCODE_PID || process.env.VSCODE_CWD || process.title.toLowerCase().includes('vscode')) {
-      userId = `vscode_${originalId}`;
-    } else {
-      userId = `client_${originalId}`;
-    }
   }
 
   const serverUrl = `ws://${ipAddress}:${port}`;
@@ -85,7 +66,7 @@ function connectToServer(port = 3000, roomId = 'default', userId = null, userNam
       
       try {
         wsClient.send(JSON.stringify(joinMessage));
-        console.log(`尝试加入房间: ${currentRoomId}，用户ID: ${currentUserId}, 用户名为: ${currentUserName}`);
+        console.log(`尝试加入房间: ${currentRoomId}，用户名为: ${currentUserName}`);
         
         // 检查readline状态后再调用promptForMessage
         if (!rl.closed) {
@@ -507,50 +488,3 @@ module.exports = {
   joinRoom,
   setAudioProcessingOptions
 };
-
-// 封装WebSocket通信
-function sendWebSocketMessage(type, data) {
-  if (!wsClient || wsClient.readyState !== WebSocket.OPEN) {
-    console.error('WebSocket未连接');
-    return false;
-  }
-  
-  try {
-    const message = {...data, type, timestamp: Date.now()};
-    wsClient.send(JSON.stringify(message));
-    return true;
-  } catch (err) {
-    console.error('发送WebSocket消息失败:', err.message);
-    return false;
-  }
-}
-
-// 简化语音会议操作函数
-function createVoiceConference(conferenceId) {
-  return sendWebSocketMessage('voiceConference', {
-    action: 'create',
-    conferenceId: conferenceId || `conference_${Date.now()}`
-  });
-}
-
-function joinVoiceConference(conferenceId) {
-  return sendWebSocketMessage('voiceConference', {
-    action: 'join',
-    conferenceId,
-    name: currentUserName
-  });
-}
-
-function leaveVoiceConference(conferenceId) {
-  return sendWebSocketMessage('voiceConference', {
-    action: 'leave',
-    conferenceId
-  });
-}
-
-function toggleMicrophoneMute(conferenceId, muted) {
-  return sendWebSocketMessage('voiceConference', {
-    action: muted ? 'mute' : 'unmute',
-    conferenceId
-  });
-}

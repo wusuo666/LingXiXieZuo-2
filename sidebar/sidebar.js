@@ -1052,12 +1052,10 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
     statusElement.textContent = statusData.status === 'connected' ? '已连接' : '运行中';
         statusElement.className = 'status-online';
         
-        // 保存服务器IP和端口到DOM元素的data属性
+        // 保存服务器地址到dataset，供音频流功能使用
         if (statusData.ipAddress) {
-            statusElement.setAttribute('data-ip', statusData.ipAddress);
-        }
-        if (statusData.port) {
-            statusElement.setAttribute('data-port', statusData.port);
+            statusElement.dataset.ipAddress = statusData.ipAddress;
+            statusElement.dataset.port = statusData.port;
         }
         
         // 主机模式下的UI状态
@@ -1093,9 +1091,9 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
         statusElement.textContent = '离线';
         statusElement.className = 'status-offline';
         
-        // 清除服务器IP和端口信息
-        statusElement.removeAttribute('data-ip');
-        statusElement.removeAttribute('data-port');
+        // 移除服务器地址信息
+        delete statusElement.dataset.ipAddress;
+        delete statusElement.dataset.port;
         
         // 主机模式下的UI状态
     if (startButton) startButton.disabled = false;
@@ -1115,9 +1113,9 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
     statusElement.textContent = '错误: ' + (statusData.error || '未知错误');
         statusElement.className = 'status-offline';
         
-        // 清除服务器IP和端口信息
-        statusElement.removeAttribute('data-ip');
-        statusElement.removeAttribute('data-port');
+        // 移除服务器地址信息
+        delete statusElement.dataset.ipAddress;
+        delete statusElement.dataset.port;
         
         // 主机模式下的UI状态
     if (startButton) startButton.disabled = false;
@@ -1790,24 +1788,23 @@ function startAudioStream(conferenceId) {
         return;
     }
     
-    // 获取服务器IP和端口
-    const serverStatus = document.getElementById('chat-server-status');
-    let ipAddress = 'localhost';
-    let port = 3000;
+    // 获取当前连接的服务器地址
+    let serverAddress = 'localhost'; // 默认值
     
-    // 从服务器状态元素中获取IP地址和端口
-    if (serverStatus) {
-        ipAddress = serverStatus.getAttribute('data-ip') || 'localhost';
-        port = serverStatus.getAttribute('data-port') || 3000;
+    // 尝试从服务器状态中获取IP地址
+    const serverStatus = document.getElementById('chat-server-status');
+    if (serverStatus && serverStatus.dataset.ipAddress) {
+        serverAddress = serverStatus.dataset.ipAddress;
+        console.log(`[音频流] 使用当前连接的服务器地址: ${serverAddress}`);
+    } else {
+        console.warn('[音频流] 无法获取当前连接的服务器地址，使用默认值localhost');
     }
     
-    console.log(`启动音频流，连接到服务器: ${ipAddress}:${port}, 会议ID: ${conferenceId}`);
-    
-    // 通过VSCode命令调用外部录音脚本，开启流模式，传递服务器地址和端口
+    // 通过VSCode命令调用外部录音脚本，开启流模式
     vscode.postMessage({
         command: 'executeStreamCommand',
         script: 'chatroom/recordAudio.js',
-        args: ['-stream', '-conferenceId', conferenceId, '-address', ipAddress, '-port', port]
+        args: ['-stream', '-address', serverAddress, '-conferenceId', conferenceId]
     });
 }
 

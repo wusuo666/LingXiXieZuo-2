@@ -3588,6 +3588,62 @@ class LingxiSidebarProvider {
             return [];
         }
     }
+
+    /**
+     * 在webview中处理收到的消息
+     * @param {*} message 
+     */
+    _handleMessage(message) {
+        // 根据消息类型处理不同的消息
+        switch (message.command) {
+            case 'sendAgentQuery':
+                this._handleAgentQuery(message.query);
+                break;
+            // ... existing cases ...
+        }
+    }
+
+    /**
+     * 显示Agent消息
+     * @param {string} message 消息内容
+     */
+    displayAgentMessage(message) {
+        if (this._webviewView) {
+            this._webviewView.webview.postMessage({
+                command: 'agentResponse',
+                response: message
+            });
+        }
+    }
+
+    /**
+     * 更新工具调用状态
+     * @param {string} command 命令名称 ('toolCallStarted' 或 'toolCallCompleted')
+     * @param {object} data 工具调用相关数据
+     */
+    updateToolCallStatus(command, data) {
+        if (this._webviewView) {
+            this._webviewView.webview.postMessage({
+                command: command,
+                ...data
+            });
+        }
+    }
+
+    /**
+     * 更新Agent思考状态
+     * @param {boolean} isThinking 是否正在思考
+     * @param {string} thinkingId 思考会话ID
+     */
+    updateAgentThinking(isThinking, thinkingId) {
+        if (this._webviewView) {
+            this._webviewView.webview.postMessage({
+                command: 'agentThinking',
+                isThinking: isThinking,
+                thinkingId: thinkingId
+            });
+        }
+    }
 }
 
 module.exports = LingxiSidebarProvider;

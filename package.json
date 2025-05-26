@@ -2,7 +2,14 @@
   "name": "lingxixiezuo",
   "displayName": "灵犀协作",
   "description": "灵犀协作 - VS Code 协同编程插件",
-  "version": "0.0.1",
+  "publisher": "BUPT-ProgrammingDesigner-LingXiXieZuo",
+  "version": "0.0.3",
+  "icon": "LingXiXieZuo.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wusuo666/LingXiXieZuo-2.git"
+  },
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -69,7 +76,6 @@
     "socket.io": "^4.8.1",
     "speaker": "^0.5.5",
     "uuid": "^9.0.1",
-    "vscode": "^1.1.37",
     "wav-decoder": "^1.3.0",
     "wav-encoder": "^1.3.0",
     "ws": "^8.18.2",
@@ -84,6 +90,7 @@
     "eslint": "^8.54.0",
     "glob": "^10.3.10",
     "mocha": "^10.2.0",
-    "typescript": "^5.3.2"
+    "typescript": "^5.3.2",
+    "vscode": "^1.1.37"
   }
 }

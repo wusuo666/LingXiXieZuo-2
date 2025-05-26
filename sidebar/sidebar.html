@@ -57,13 +57,6 @@
                                     <button id="connect-to-server" class="action-button">连接服务器</button>
                                     <button id="disconnect-from-server" class="action-button" disabled>断开连接</button>
                                 </div>
-                                <div class="room-actions" style="margin-top: 6px; display: none;" id="room-control">
-                                    <div class="room-info">
-                                        <span>当前房间:</span>
-                                        <span id="current-room-id">default</span>
-                                    </div>
-                                    <button id="leave-room" class="action-button">离开聊天室</button>
-                                </div>
                             </div>
                         </div>
                         <div class="user-settings">
@@ -481,14 +474,14 @@
                             <h3>协同画布</h3>
                             <p>创建和管理可共享的流程图、架构图等</p>
                         </div>
-                        <div class="canvas-tools" style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 0;">
-                            <button id="canvas-action-btn" class="canvas-button left-btn">
+                        <div class="canvas-tools" style="display: flex; justify-content: center; align-items: center; gap: 16px; width: 100%; margin-bottom: 10px;">
+                            <button id="canvas-action-btn" class="canvas-button">
                                 新建画布
                             </button>
-                            <button id="add-memo-btn" class="canvas-button right-btn">
+                            <button id="add-memo-btn" class="canvas-button">
                                 添加纪要
                             </button>
-                            <button id="ai-summary-memo-btn" class="canvas-button right-btn">
+                            <button id="ai-summary-memo-btn" class="canvas-button">
                                 AI总结纪要
                             </button>
                         </div>
@@ -512,13 +505,13 @@
             height: 100vh;
             width: 100%;
             font-family: "Segoe UI", Arial, sans-serif;
-            background: #1e1e1e;
+            background: var(--vscode-editor-background);
         }
         .tab-header {
             display: flex;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid var(--vscode-panel-border);
             width: 100%;
-            background: #232323;
+            background: var(--vscode-sideBar-background);
         }
         .tab-button {
             flex: 1 1 0;
@@ -529,18 +522,18 @@
             cursor: pointer;
             outline: none;
             font-size: 15px;
-            color: #bbb;
+            color: var(--vscode-foreground);
             transition: background 0.2s, color 0.2s, border-bottom 0.2s;
         }
         .tab-button.active {
             border-bottom: 2.5px solid #3794ff;
-            color: #fff;
-            background: #232323;
+            color: var(--vscode-editor-foreground);
+            background: var(--vscode-sideBar-background);
             font-weight: bold;
         }
         .tab-button:not(.active):hover {
-            background: #252526;
-            color: #fff;
+            background: var(--vscode-list-hoverBackground);
+            color: var(--vscode-list-hoverForeground);
         }
         .tab-content {
             flex: 1 1 auto;
@@ -570,10 +563,10 @@
             gap: 4px;
         }
         .clip-history-item {
-            background: #232323;
+            background: var(--vscode-sideBar-background);
             border-radius: 4px;
             padding: 8px 12px;
-            color: #bbb;
+            color: var(--vscode-foreground);
             cursor: pointer;
             font-size: 14px;
             border: 1px solid transparent;
@@ -598,24 +591,24 @@
         }
         .clip-history-item .clip-time {
             font-size: 12px;
-            color: #888;
+            color: var(--vscode-descriptionForeground);
             margin-left: 8px;
             flex-shrink: 0;
         }
         .clip-history-item:hover, .clip-history-item.selected {
-            background: #2a2d2e;
+            background: var(--vscode-list-hoverBackground);
             border: 1px solid #3794ff;
-            color: #fff;
+            color: var(--vscode-editor-foreground);
         }
         .clip-preview {
             margin-top: 14px;
-            background: #232323;
+            background: var(--vscode-sideBar-background);
             border-radius: 4px;
             padding: 12px;
-            color: #fff;
+            color: var(--vscode-editor-foreground);
             min-height: 40px;
             font-size: 15px;
-            border: 1px solid #333;
+            border: 1px solid var(--vscode-panel-border);
             word-break: break-all;
             display: none;
         }
@@ -642,8 +635,8 @@
             align-items: center;
             gap: 8px;
             padding: 12px 8px;
-            background: #1e1e1e;
-            border-top: 1px solid #333;
+            background: var(--vscode-editor-background);
+            border-top: 1px solid var(--vscode-panel-border);
             flex-shrink: 0;
             position: sticky;
             bottom: 0;
@@ -653,21 +646,27 @@
             width: 100%;
             box-sizing: border-box;
         }
-        .chat-input {
+        .chat-input-bar textarea.chat-input {
             flex: 1;
             min-width: 0;
-            background: #232323;
-            color: #fff;
-            border: 1px solid #333;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
             border-radius: 8px;
             padding: 10px 14px;
             font-size: 15px;
             outline: none;
-            transition: border 0.2s;
+            transition: border 0.2s, height 0.2s;
             width: 100%;
             box-sizing: border-box;
+            max-height: 150px;
+            min-height: 42px;
+            resize: none;
+            overflow-y: hidden;
+            font-family: inherit;
+            line-height: 1.5;
         }
-        .chat-input:focus {
+        .chat-input-bar textarea.chat-input:focus {
             border: 1.5px solid #3794ff;
         }
         .chat-send {
@@ -687,7 +686,7 @@
             background: linear-gradient(135deg, #1177bb, #0e639c);
         }
         .live-share-style {
-            background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);
+            background: linear-gradient(180deg, var(--vscode-sideBar-background) 0%, var(--vscode-editor-background) 100%);
             border-radius: 0;
             box-shadow: none;
             padding: 0;
@@ -753,7 +752,7 @@
             margin-bottom: 2px;
         }
         .sender {
-            color: #bbb;
+            color: var(--vscode-descriptionForeground);
             font-size: 13px;
             font-weight: 500;
             margin-top: 2px;
@@ -779,8 +778,8 @@
         .chat-bubble {
             position: relative;
             max-width: 100%;
-            background: #232323;
-            color: #fff;
+            background: var(--vscode-sideBar-background);
+            color: var(--vscode-editor-foreground);
             padding: 12px 16px;
             border-radius: 18px 18px 18px 6px;
             font-size: 15px;
@@ -793,7 +792,7 @@
         }
         .chat-bubble.left {
             border-bottom-left-radius: 6px;
-            background: #232323;
+            background: var(--vscode-sideBar-background);
         }
         .chat-bubble.right {
             border-bottom-right-radius: 6px;
@@ -802,7 +801,7 @@
         }
         .chat-time {
             font-size: 11px;
-            color: #8a8a8a;
+            color: var(--vscode-descriptionForeground);
             margin-top: 2px;
         }
         .chat-row.right .chat-time {
@@ -813,7 +812,7 @@
             margin-left: 5px;
         }
         .canvas-pane {
-            background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);
+            background: linear-gradient(180deg, var(--vscode-sideBar-background) 0%, var(--vscode-editor-background) 100%);
             border-radius: 0;
             box-shadow: none;
             padding: 0;
@@ -835,45 +834,50 @@
             margin-bottom: 20px;
         }
         .canvas-info h3 {
-            color: #fff;
+            color: var(--vscode-editor-foreground);
             font-size: 18px;
             margin-bottom: 10px;
             font-weight: 500;
         }
         .canvas-info p {
-            color: #bbb;
+            color: var(--vscode-descriptionForeground);
             font-size: 14px;
             line-height: 1.6;
         }
         .canvas-tools {
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
+            gap: 16px;
             width: 100%;
-            gap: 0;
-        }
-        .canvas-button.left-btn {
-            margin-right: auto;
-        }
-        .canvas-button.right-btn {
-            margin-left: auto;
+            margin-bottom: 10px;
         }
         .canvas-button {
+            min-width: 120px;
+            flex: 1 1 0;
+            text-align: center;
+            font-size: 15px;
+            padding: 12px 0;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s, border 0.2s;
+        }
+        #canvas-action-btn {
             background: linear-gradient(135deg, #3794ff 60%, #4ec9b0 100%);
             color: #fff;
-            border: none;
-            border-radius: 8px;
-            padding: 12px 20px;
-            font-size: 15px;
-            cursor: pointer;
+            font-weight: bold;
+        }
+        #add-memo-btn, #ai-summary-memo-btn {
+            background: var(--vscode-editor-background);
+            color: var(--vscode-button-background);
+            border: 1.5px solid #3794ff;
             font-weight: 500;
-            transition: background 0.2s, transform 0.1s;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            text-align: center;
+        }
+        #add-memo-btn:hover, #ai-summary-memo-btn:hover {
+            background: #eaf6ff;
+            color: #2176c7;
+            border-color: #2176c7;
         }
         .button-icon {
             font-size: 18px;
@@ -890,11 +894,11 @@
             margin-top: 20px;
         }
         .canvas-list-title {
-            color: #ddd;
+            color: var(--vscode-editor-foreground);
             font-size: 16px;
             margin-bottom: 12px;
             font-weight: 500;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid var(--vscode-panel-border);
             padding-bottom: 8px;
         }
         .canvas-list {
@@ -903,13 +907,13 @@
             gap: 10px;
         }
         .canvas-list-empty {
-            color: #888;
+            color: var(--vscode-descriptionForeground);
             font-style: italic;
             padding: 20px 0;
             text-align: center;
         }
         .canvas-item {
-            background: #232323;
+            background: var(--vscode-sideBar-background);
             border-radius: 8px;
             padding: 12px 15px;
             display: flex;
@@ -920,7 +924,7 @@
             cursor: pointer;
         }
         .canvas-item:hover {
-            background: #2a2d2e;
+            background: var(--vscode-list-hoverBackground);
             border-color: #3794ff;
         }
         .canvas-item-icon {
@@ -932,7 +936,7 @@
             min-width: 0;
         }
         .canvas-item-title {
-            color: #fff;
+            color: var(--vscode-editor-foreground);
             font-size: 14.5px;
             margin-bottom: 4px;
             white-space: nowrap;
@@ -940,7 +944,7 @@
             text-overflow: ellipsis;
         }
         .canvas-item-path {
-            color: #888;
+            color: var(--vscode-descriptionForeground);
             font-size: 12px;
             white-space: nowrap;
             overflow: hidden;
@@ -1053,13 +1057,13 @@
             flex-direction: column;
             height: 100%;
             width: 100%;
-            background: linear-gradient(180deg, #23272e 0%, #181a1f 100%);
+            background: linear-gradient(180deg, var(--vscode-sideBar-background) 0%, var(--vscode-editor-background) 100%);
         }
         .inner-tab-header {
             display: flex;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid var(--vscode-panel-border);
             width: 100%;
-            background: rgba(35, 35, 35, 0.5);
+            background: var(--vscode-sideBar-background);
             padding: 0;
             height: 42px;
         }
@@ -1072,18 +1076,18 @@
             cursor: pointer;
             outline: none;
             font-size: 14px;
-            color: #bbb;
+            color: var(--vscode-foreground);
             transition: background 0.2s, color 0.2s, border-bottom 0.2s;
             text-align: center;
         }
         .inner-tab-button.active {
             border-bottom: 2px solid #3794ff;
-            color: #fff;
+            color: var(--vscode-editor-foreground);
             font-weight: bold;
         }
         .inner-tab-button:not(.active):hover {
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
+            background: var(--vscode-list-hoverBackground);
+            color: var(--vscode-list-hoverForeground);
         }
         .inner-tab-content {
             flex: 1 1 auto;
@@ -1118,13 +1122,13 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
         .agent-header h3 {
-            color: #fff;
+            color: var(--vscode-editor-foreground);
             font-size: 16px;
             margin: 0 0 4px 0;
             font-weight: 500;
         }
         .agent-header p {
-            color: #bbb;
+            color: var(--vscode-descriptionForeground);
             font-size: 13px;
             margin: 0;
             line-height: 1.4;
@@ -1163,7 +1167,7 @@
             margin-right: 8px;
         }
         .agent-tool-name {
-            color: #ddd;
+            color: var(--vscode-foreground);
             font-size: 14px;
         }
         .agent-messages {
@@ -1195,13 +1199,13 @@
         }
         .agent-welcome-text h4 {
             margin: 0 0 4px 0;
-            color: #fff;
+            color: var(--vscode-editor-foreground);
             font-weight: 500;
             font-size: 15px;
         }
         .agent-welcome-text p {
             margin: 0;
-            color: #bbb;
+            color: var(--vscode-descriptionForeground);
             line-height: 1.4;
             font-size: 13px;
         }
@@ -1261,14 +1265,14 @@
             margin-left: auto;
         }
         .agent-message-assistant .agent-message-content {
-            background: #2d2d2d;
-            color: #fff;
+            background: var(--vscode-sideBar-background);
+            color: var(--vscode-editor-foreground);
             border-bottom-left-radius: 4px;
         }
         .agent-message-pre {
             white-space: pre-wrap;
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-            background: #1e1e1e;
+            background: var(--vscode-editor-background);
             padding: 10px;
             border-radius: 5px;
             border-left: 3px solid #3794ff;
@@ -1331,7 +1335,7 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
         .settings-header h3 {
-            color: #fff;
+            color: var(--vscode-editor-foreground);
             font-size: 18px;
             margin: 0;
             font-weight: 500;
@@ -1349,7 +1353,7 @@
         .settings-title {
             font-size: 16px;
             font-weight: 500;
-            color: #fff;
+            color: var(--vscode-editor-foreground);
             margin-bottom: 12px;
             padding-bottom: 8px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -1362,7 +1366,7 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
         .settings-label {
-            color: #ddd;
+            color: var(--vscode-foreground);
             font-size: 14px;
         }
         .settings-control {
@@ -1370,9 +1374,9 @@
             align-items: center;
         }
         .settings-input {
-            background: #232323;
-            color: #fff;
-            border: 1px solid #444;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
             border-radius: 4px;
             padding: 6px 8px;
             font-size: 14px;
@@ -1401,12 +1405,12 @@
         }
         .api-key-status-text {
             font-style: italic;
-            color: #888;
+            color: var(--vscode-descriptionForeground);
         }
         .settings-select {
-            background: #232323;
-            color: #fff;
-            border: 1px solid #444;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
             border-radius: 4px;
             padding: 6px 24px 6px 8px;
             font-size: 14px;
@@ -1620,7 +1624,7 @@
         }
         
         /* 确保按钮有足够的空间 */
-        .connection-actions .action-button, .room-actions .action-button {
+        .connection-actions .action-button {
             flex: 1;
             min-width: 90px;
             margin: 0 3px;
@@ -1880,9 +1884,9 @@
         .agent-input-bar textarea.chat-input {
             flex: 1;
             min-width: 0;
-            background: #232323;
-            color: #fff;
-            border: 1px solid #333;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
             border-radius: 8px;
             padding: 10px 14px;
             font-size: 15px;
@@ -1906,9 +1910,9 @@
         .voice-conference-container {
           margin: 15px 0;
           padding: 10px;
-          border: 1px solid #444;
+          border: 1px solid var(--vscode-panel-border);
           border-radius: 5px;
-          background-color: #2a2a2a;
+          background-color: var(--vscode-sideBar-background);
         }
         
         .voice-conference-header {
@@ -1921,11 +1925,12 @@
         .voice-conference-header h3 {
           margin: 0;
           font-size: 16px;
+          color: var(--vscode-editor-foreground);
         }
         
         .voice-conference-status {
           font-size: 12px;
-          color: #aaa;
+          color: var(--vscode-descriptionForeground);
         }
         
         .voice-conference-controls {
@@ -1948,7 +1953,7 @@
         }
         
         .conference-btn:disabled {
-          background-color: #666;
+          background-color: var(--vscode-disabledForeground);
           cursor: not-allowed;
         }
         
@@ -1961,22 +1966,23 @@
         #conference-id-input {
           flex: 1;
           padding: 5px;
-          background-color: #3c3c3c;
-          color: #fff;
-          border: 1px solid #555;
+          background-color: var(--vscode-input-background);
+          color: var(--vscode-input-foreground);
+          border: 1px solid var(--vscode-input-border);
           border-radius: 3px;
         }
         
         .active-conference-info {
           margin: 10px 0;
           padding: 8px;
-          background-color: #333;
+          background-color: var(--vscode-panel-background);
           border-radius: 3px;
         }
         
         .conference-id-display {
           margin-bottom: 8px;
           font-size: 13px;
+          color: var(--vscode-editor-foreground);
         }
         
         .mic-control {
@@ -1995,11 +2001,12 @@
         }
         
         #toggle-mic-btn.muted {
-          background-color: #555;
+          background-color: var(--vscode-disabledForeground);
         }
         
         .mic-status {
           font-size: 12px;
+          color: var(--vscode-editor-foreground);
         }
         
         .conference-participants {
@@ -2009,7 +2016,7 @@
         .conference-participants h4 {
           margin: 0 0 8px 0;
           font-size: 14px;
-          color: #ccc;
+          color: var(--vscode-descriptionForeground);
         }
         
         #participants-list {
@@ -2020,7 +2027,7 @@
         
         #participants-list li {
           padding: 5px;
-          border-bottom: 1px solid #444;
+          border-bottom: 1px solid var(--vscode-panel-border);
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -2032,11 +2039,12 @@
         
         .participant-name {
           flex: 1;
+          color: var(--vscode-editor-foreground);
         }
         
         .participant-status {
           font-size: 12px;
-          color: #aaa;
+          color: var(--vscode-descriptionForeground);
         }
         
         .speaking-indicator {
@@ -2192,8 +2200,134 @@
                 text-align: center;
             }
         }
+        /* 工具调用样式 */
+        .agent-tool-call {
+            margin: 8px 0 8px 15px;
+            padding: 10px;
+            background: var(--vscode-editor-background);
+            border-left: 3px solid #3794ff;
+            border-radius: 0 5px 5px 0;
+            font-size: 13px;
+        }
+        
+        .tool-call-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        
+        .tool-call-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        
+        .tool-call-name {
+            flex: 1;
+            font-weight: 500;
+            color: var(--vscode-editor-foreground);
+        }
+        
+        .tool-call-status {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+        
+        .tool-call-status.pending {
+            background: #3794ff33;
+            color: #3794ff;
+        }
+        
+        .tool-call-status.success {
+            background: #4ec9b033;
+            color: #4ec9b0;
+        }
+        
+        .tool-call-status.error {
+            background: #f4433633;
+            color: #f44336;
+        }
+        
+        .tool-call-args {
+            margin-top: 6px;
+            background: var(--vscode-sideBar-background);
+            padding: 8px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        
+        .tool-call-args pre {
+            margin: 0;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--vscode-editor-foreground);
+            white-space: pre-wrap;
+        }
+        
+        .tool-call-result {
+            margin-top: 6px;
+            background: var(--vscode-sideBar-background);
+            padding: 8px;
+            border-radius: 4px;
+            border-left: 3px solid #4ec9b0;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        
+        .tool-call-result pre {
+            margin: 0;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--vscode-editor-foreground);
+            white-space: pre-wrap;
+        }
     </style>
     
     <script src="sidebar.js"></script>
+    <script>
+    // agent输入框 shift+回车换行，回车发送
+    const agentInput = document.getElementById('agent-input');
+    const agentSendBtn = document.getElementById('agent-send');
+    if(agentInput) {
+      agentInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          agentSendBtn.click();
+        }
+      });
+      agentInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+      });
+    }
+
+    // 聊天室输入框：input改为textarea，shift+回车换行，回车发送
+    const chatInputBar = document.querySelector('.chat-input-bar');
+    if(chatInputBar) {
+      const oldInput = chatInputBar.querySelector('input.chat-input');
+      if(oldInput) {
+        const textarea = document.createElement('textarea');
+        textarea.className = 'chat-input';
+        textarea.placeholder = oldInput.placeholder;
+        textarea.rows = 1;
+        textarea.style.resize = 'none';
+        textarea.style.overflowY = 'hidden';
+        oldInput.parentNode.replaceChild(textarea, oldInput);
+        // 自动高度
+        textarea.addEventListener('input', function() {
+          this.style.height = 'auto';
+          this.style.height = (this.scrollHeight) + 'px';
+        });
+        // 回车发送，shift+回车换行
+        const sendBtn = chatInputBar.querySelector('#chat-send');
+        textarea.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendBtn.click();
+          }
+        });
+      }
+    }
+    </script>
 </body>
 </html>

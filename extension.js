@@ -1,5 +1,4 @@
 const vscode = require('vscode');
-const { copyToClipboard, getClipboardHistory, readFromClipboard, filterClipboardHistoryByContext } = require('./clipboard');
 const LingxiSidebarProvider = require('./sidebar/sidebarViewProvider');
 const fs = require('fs');
 const { exec } = require('child_process');
@@ -10,6 +9,9 @@ const { createAndOpenDrawio } = require('./createDrawio');
 const { setExcalidrawDir } = require('./agent/server.js');
 const { spawn } = require('child_process');
 const { runASR } = require('./pyyuyin/ifasr-nodejs');
+
+// 创建全局变量以便在其他模块中访问sidebarProvider
+global.sidebarProvider = null;
 
 /**
  * 创建并打开Draw.io文件
@@ -251,6 +253,9 @@ async function activate(context) {
     // 注册灵犀协作侧边栏视图
     // 包含协作区(聊天室、Agent、设置)、剪贴板历史和协同画布三个主要功能区域
     const sidebarProvider = new LingxiSidebarProvider(context);
+    
+    // 设置全局变量，使其他模块可以访问sidebarProvider
+    global.sidebarProvider = sidebarProvider;
     
     // 将侧边栏提供者实例传递给startServer
     setSidebarProvider(sidebarProvider);

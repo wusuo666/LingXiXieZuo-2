@@ -7,6 +7,7 @@ const path = require('path');
 const chatRooms = new Map(); // 存储多个聊天室
 const users = new Map(); // 存储用户信息
 const canvasVersions = new Map(); // 画布版本集合
+const userIdMap = new Map(); // 用户ID映射，关联同一用户的多个ID
 
 // 存储画布内容
 const canvasStore = new Map();
@@ -255,6 +256,9 @@ wss.on('connection', (ws) => {
       if (id !== newUserId && user.ws === ws && !id.startsWith('user_')) {
         console.log(`[连接清理] 发现重复的非user_前缀ID: ${id}，准备清理`);
         
+        // 在清理前，先记录ID映射关系
+        createUserIdMapping(newUserId, id);
+        
         // 从所有房间中移除
         for (const [roomId, roomUsers] of chatRooms.entries()) {
           if (roomUsers.has(id)) {
@@ -338,24 +342,24 @@ wss.on('connection', (ws) => {
           }, userId);
           break;
           
-          case 'message':
-            // 发送消息到聊天室
-            if (userId && currentRoom) {
-              // 确保用户存在且有name属性
-              const senderName = users.has(userId) ? users.get(userId).name : '未知用户';
-              
-              broadcastToRoom(currentRoom, {
-                type: 'message',
-                userId: userId,
-                sender: {
-                  id: userId,
-                  name: senderName
-                },
-                content: data.content,
-                timestamp: Date.now()
-              }, userId);
-            }
-            break;
+        case 'message':
+          // 发送消息到聊天室
+          if (userId && currentRoom) {
+            // 确保用户存在且有name属性
+            const senderName = users.has(userId) ? users.get(userId).name : '未知用户';
+            
+            broadcastToRoom(currentRoom, {
+              type: 'message',
+              userId: userId,
+              sender: {
+                id: userId,
+                name: senderName
+              },
+              content: data.content,
+              timestamp: Date.now()
+            }, userId);
+          }
+          break;
         
         // 音频流相关消息处理
         case 'audioStream':
@@ -1109,6 +1113,31 @@ function handleVoiceConferenceLeave(userId, conferenceId) {
 function forwardAudioStream(data, senderId, roomId) {
     const conferenceId = data.conferenceId;
     
+    // 开始新的音频转发流程，记录详细日志
+    console.log(`\n[音频转发] ===== 开始新的音频转发流程 =====`);
+    console.log(`[音频转发] 发送者ID: ${senderId}, 会议ID: ${conferenceId}`);
+    
+    // 检查会议是否存在
+    if (!voiceConferences.has(conferenceId)) {
+        console.log(`[音频转发] 会议 ${conferenceId} 不存在，将自动创建`);
+    } else {
+        // 会议存在，检查参与者ID映射关系
+        const participants = Array.from(voiceConferences.get(conferenceId).participants);
+        console.log(`[音频转发] 会议参与者列表: (${participants.length}) ${JSON.stringify(participants)}`);
+        
+        // 主动检测和建立ID映射关系
+        detectAndMapUserIds(participants);
+        
+        // 分析会议中可能存在的同一用户的不同ID
+        const userGroups = analyzeConferenceParticipants(participants);
+        console.log(`[音频转发] 分析结果: 检测到 ${userGroups.length} 个不同用户`);
+        
+        // 打印每个用户组及其ID
+        userGroups.forEach((group, index) => {
+            console.log(`[音频转发] 用户 #${index+1} 的ID: ${JSON.stringify(group)}`);
+        });
+    }
+    
     // 检查并清理可能存在的重复ID - 确保同一个WebSocket连接只关联一个用户ID
     // 优先保留user开头的ID
     if (senderId.startsWith('user_')) {
@@ -1117,28 +1146,11 @@ function forwardAudioStream(data, senderId, roomId) {
         if (senderWs) {
             // 遍历所有用户寻找同一个WebSocket连接
             for (const [id, user] of users.entries()) {
-                // 如果找到其他ID使用相同的WebSocket连接(但不是user_前缀的)，则清理它
+                // 如果找到其他ID使用相同的WebSocket连接(但不是user_前缀的)，则建立映射关系
                 if (id !== senderId && user.ws === senderWs && !id.startsWith('user_')) {
-                    console.log(`[音频转发] 发现WebSocket连接重复的ID，清理旧ID: ${id}`);
-                    
-                    // 从所有房间中移除该ID
-                    for (const [rid, roomUsers] of chatRooms.entries()) {
-                        if (roomUsers.has(id)) {
-                            roomUsers.delete(id);
-                            console.log(`[音频转发] 已从房间 ${rid} 移除旧ID: ${id}`);
-                        }
-                    }
-                    
-                    // 从会议中移除该ID
-                    if (voiceParticipants.has(id)) {
-                        const oldConfId = voiceParticipants.get(id).conferenceId;
-                        handleVoiceConferenceLeave(id, oldConfId);
-                        console.log(`[音频转发] 已从会议 ${oldConfId} 移除旧ID: ${id}`);
-                    }
-                    
-                    // 从用户列表中移除
-                    users.delete(id);
-                    console.log(`[音频转发] 已完成清理旧ID: ${id}`);
+                    console.log(`[音频转发] 发现WebSocket连接重复的ID，记录映射关系: ${senderId} ⟷ ${id}`);
+                    // 创建ID映射关系
+                    createUserIdMapping(senderId, id);
                 }
             }
         }
@@ -1171,41 +1183,6 @@ function forwardAudioStream(data, senderId, roomId) {
         }, null);
     }
     
-    // 清理会议中非user开头的ID
-    if (voiceConferences.has(conferenceId)) {
-        const conference = voiceConferences.get(conferenceId);
-        const participantsToRemove = [];
-        
-        // 首先收集需要移除的参与者
-        for (const participantId of conference.participants) {
-            // 检查该参与者是否存在user_开头的WebSocket连接重复ID
-            if (!participantId.startsWith('user_') && users.has(participantId)) {
-                const participantWs = users.get(participantId).ws;
-                let hasUserPrefixId = false;
-                
-                // 查找是否有user_前缀的ID使用相同WebSocket连接
-                for (const [id, user] of users.entries()) {
-                    if (id.startsWith('user_') && user.ws === participantWs) {
-                        console.log(`[音频转发] 会议中发现非user前缀ID ${participantId} 与user前缀ID ${id} 使用同一WebSocket`);
-                        hasUserPrefixId = true;
-                        break;
-                    }
-                }
-                
-                // 如果存在user_前缀的重复ID，则标记移除非user_前缀的ID
-                if (hasUserPrefixId) {
-                    participantsToRemove.push(participantId);
-                }
-            }
-        }
-        
-        // 然后移除这些参与者
-        for (const idToRemove of participantsToRemove) {
-            console.log(`[音频转发] 从会议 ${conferenceId} 移除非user前缀ID: ${idToRemove}`);
-            handleVoiceConferenceLeave(idToRemove, conferenceId);
-        }
-    }
-    
     // 检查发送者是否已经是会议参与者，如果不是则自动加入
     if (!voiceParticipants.has(senderId) || 
         voiceParticipants.get(senderId).conferenceId !== conferenceId) {
@@ -1222,13 +1199,31 @@ function forwardAudioStream(data, senderId, roomId) {
         voiceParticipants.set(senderId, {
             conferenceId: conferenceId,
             isMuted: false,
-            joinedAt: Date.now()
+            joinedAt: Date.now(),
+            echoTipSent: false // 标记是否已发送回声提示
         });
         
         // 将发送者添加到会议参与者列表
         voiceConferences.get(conferenceId).participants.add(senderId);
         
         console.log(`[音频转发] 已将发送者 ${senderId} 添加到会议 ${conferenceId}`);
+        
+        // 如果是vscode_前缀ID，检查是否有相关联的user_前缀ID也在此会议中
+        if (senderId.startsWith('vscode_')) {
+            const userIds = getUserAllIds(senderId);
+            for (const relatedId of userIds) {
+                if (relatedId !== senderId && voiceParticipants.has(relatedId)) {
+                    console.log(`[音频转发] 检测到关联ID ${relatedId} 已在会议中，更新状态`);
+                    
+                    // 确保关联ID的参与状态与当前ID一致
+                    voiceParticipants.get(relatedId).conferenceId = conferenceId;
+                    voiceParticipants.get(relatedId).joinedAt = Date.now();
+                    
+                    // 添加到会议参与者列表
+                    voiceConferences.get(conferenceId).participants.add(relatedId);
+                }
+            }
+        }
     }
     
     // 检查发送者是否处于静音状态
@@ -1244,6 +1239,9 @@ function forwardAudioStream(data, senderId, roomId) {
     
     // 记录所有参与者
     console.log(`[音频转发] 会议参与者列表:`, Array.from(conference.participants));
+    
+    // 打印当前的用户ID映射表
+    printUserIdMappings();
     
     // 创建转发消息
     const audioStreamMessage = JSON.stringify({
@@ -1269,8 +1267,25 @@ function forwardAudioStream(data, senderId, roomId) {
     
     // 向会议中的其他参与者转发
     conference.participants.forEach(participantId => {
-        // 检查是否为同一用户的不同ID (vscode_前缀和user_前缀)
+        // 获取参与者的所有关联ID
+        const participantAllIds = getUserAllIds(participantId);
+        // 获取发送者的所有关联ID
+        const senderAllIds = getUserAllIds(senderId);
+        
+        // 检查是否为同一用户的不同ID
         let isSameUser = participantId === senderId;
+        
+        // 检查是否存在ID映射关系
+        if (!isSameUser) {
+            // 如果参与者的任何ID与发送者的任何ID匹配，则视为同一用户
+            for (const sId of senderAllIds) {
+                if (participantAllIds.includes(sId)) {
+                    isSameUser = true;
+                    console.log(`[音频转发] 检测到同一用户的不同ID: ${senderId} 与 ${participantId} 通过映射关系`);
+                    break;
+                }
+            }
+        }
         
         // 检查前缀情况下的ID匹配
         if (!isSameUser && users.has(participantId) && users.has(senderId)) {
@@ -1282,6 +1297,12 @@ function forwardAudioStream(data, senderId, roomId) {
             if (participantWs === senderWs) {
                 isSameUser = true;
                 console.log(`[音频转发] 检测到同一用户的不同ID: ${senderId} 与 ${participantId} 使用同一WebSocket`);
+                
+                // 创建ID映射关系
+                createUserIdMapping(
+                    participantId.startsWith('user_') ? participantId : senderId, 
+                    participantId.startsWith('vscode_') ? participantId : senderId
+                );
             }
         }
         
@@ -1319,6 +1340,261 @@ function forwardAudioStream(data, senderId, roomId) {
     });
     
     console.log(`[音频转发] 音频流转发完成，成功: ${forwardCount}，失败: ${errorCount}，序列号: ${data.sequence || 0}`);
+}
+
+/**
+ * 分析会议参与者列表，识别同一用户的不同ID
+ * @param {string[]} participants 参与者ID列表
+ * @returns {Array<string[]>} 用户组数组，每个组包含属于同一用户的所有ID
+ */
+function analyzeConferenceParticipants(participants) {
+    const userGroups = [];
+    const processedIds = new Set();
+    
+    // 先尝试通过ID前缀匹配建立映射关系
+    detectAndMapUserIds(participants);
+    
+    // 遍历所有参与者
+    for (const id of participants) {
+        // 如果此ID已被处理，跳过
+        if (processedIds.has(id)) continue;
+        
+        // 获取此ID关联的所有ID
+        const relatedIds = getUserAllIds(id);
+        
+        // 筛选出当前会议中存在的ID
+        const groupInConference = relatedIds.filter(relId => 
+            participants.includes(relId)
+        );
+        
+        // 标记这些ID为已处理
+        groupInConference.forEach(relId => processedIds.add(relId));
+        
+        // 添加到用户组列表
+        userGroups.push(groupInConference);
+    }
+    
+    return userGroups;
+}
+
+/**
+ * 检测并映射会议中可能属于同一用户的不同ID
+ * @param {string[]} participants 参与者ID列表
+ */
+function detectAndMapUserIds(participants) {
+    console.log(`[用户映射] 开始分析会议中的用户ID关系...`);
+    
+    // 按前缀分组ID
+    const userPrefixIds = participants.filter(id => id.startsWith('user_'));
+    const vscodePrefixIds = participants.filter(id => id.startsWith('vscode_'));
+    
+    console.log(`[用户映射] 识别到 ${userPrefixIds.length} 个user_前缀ID和 ${vscodePrefixIds.length} 个vscode_前缀ID`);
+    
+    // 如果user_和vscode_前缀ID各只有一个，很可能是同一个用户
+    if (userPrefixIds.length === 1 && vscodePrefixIds.length === 1) {
+        const userId = userPrefixIds[0];
+        const vscodeId = vscodePrefixIds[0];
+        
+        // 检查是否已经有映射关系
+        const existingMap = isSameUser(userId, vscodeId);
+        if (!existingMap) {
+            console.log(`[用户映射] 检测到可能的同一用户: ${userId} 和 ${vscodeId}`);
+            
+            // 尝试通过WebSocket连接进一步确认
+            if (users.has(userId) && users.has(vscodeId)) {
+                const userWs = users.get(userId).ws;
+                const vscodeWs = users.get(vscodeId).ws;
+                
+                // 检查IP地址和其他特征
+                const userIp = userWs._socket?.remoteAddress;
+                const vscodeIp = vscodeWs._socket?.remoteAddress;
+                
+                if (userIp && vscodeIp && userIp === vscodeIp) {
+                    console.log(`[用户映射] IP地址匹配: ${userIp}，确认为同一用户`);
+                    createUserIdMapping(userId, vscodeId);
+                } else {
+                    // 没有直接证据，但仍然可能是同一用户
+                    console.log(`[用户映射] IP地址不匹配或无法获取，但仍可能是同一用户`);
+                    
+                    // 检查时间戳特征
+                    const userTime = extractTimestamp(userId);
+                    const vscodeTime = extractTimestamp(vscodeId);
+                    
+                    if (userTime && vscodeTime) {
+                        const timeDiff = Math.abs(userTime - vscodeTime);
+                        // 如果时间戳相差不超过10秒，很可能是同一用户
+                        if (timeDiff < 10000) {
+                            console.log(`[用户映射] 时间戳相近 (相差${timeDiff}ms)，确认为同一用户`);
+                            createUserIdMapping(userId, vscodeId);
+                        } else {
+                            console.log(`[用户映射] 时间戳相差过大 (${timeDiff}ms)，可能是不同用户`);
+                            
+                            // 如果仅有这两个ID在会议中，时间戳虽然不同，但更可能是同一个用户
+                            if (participants.length === 2) {
+                                console.log(`[用户映射] 会议中仅有这两个ID，假定为同一用户`);
+                                createUserIdMapping(userId, vscodeId);
+                            }
+                        }
+                    } else {
+                        // 无法提取时间戳，但仍然可能是同一用户
+                        console.log(`[用户映射] 无法提取时间戳，无法确定关系`);
+                        
+                        // 如果会议中只有这两个ID，假设它们是同一用户
+                        if (participants.length === 2) {
+                            console.log(`[用户映射] 会议中仅有这两个ID，假定为同一用户`);
+                            createUserIdMapping(userId, vscodeId);
+                        }
+                    }
+                }
+            } else {
+                console.log(`[用户映射] 无法获取WebSocket连接信息`);
+                
+                // 如果会议中只有这两个ID，假设它们是同一用户
+                if (participants.length === 2) {
+                    console.log(`[用户映射] 会议中仅有这两个ID，假定为同一用户`);
+                    createUserIdMapping(userId, vscodeId);
+                }
+            }
+        } else {
+            console.log(`[用户映射] ${userId} 和 ${vscodeId} 已存在映射关系`);
+        }
+    } else if (participants.length === 2 && 
+              ((userPrefixIds.length === 2 && vscodePrefixIds.length === 0) || 
+               (userPrefixIds.length === 0 && vscodePrefixIds.length === 2))) {
+        // 特殊情况：两个相同前缀的ID
+        const id1 = participants[0];
+        const id2 = participants[1];
+        
+        // 如果时间戳接近，可能是同一用户在不同时间连接
+        const time1 = extractTimestamp(id1);
+        const time2 = extractTimestamp(id2);
+        
+        if (time1 && time2) {
+            const timeDiff = Math.abs(time1 - time2);
+            if (timeDiff < 5000) { // 5秒内的连接
+                console.log(`[用户映射] 检测到时间接近的相同前缀ID: ${id1} 和 ${id2}，可能是同一用户`);
+                createUserIdMapping(id1, id2);
+            }
+        }
+    } else if (userPrefixIds.length > 0 && vscodePrefixIds.length > 0) {
+        // 多个不同前缀ID，尝试通过WebSocket连接和时间戳特征匹配
+        console.log(`[用户映射] 复杂场景：多个不同前缀ID，尝试通过特征匹配`);
+        
+        // 为每个用户前缀ID尝试找到匹配的vscode前缀ID
+        for (const userId of userPrefixIds) {
+            // 先检查是否已有映射
+            let hasMapping = false;
+            for (const vscodeId of vscodePrefixIds) {
+                if (isSameUser(userId, vscodeId)) {
+                    hasMapping = true;
+                    break;
+                }
+            }
+            
+            if (!hasMapping) {
+                // 尝试通过WebSocket和时间戳匹配
+                let bestMatch = null;
+                let smallestTimeDiff = Infinity;
+                
+                for (const vscodeId of vscodePrefixIds) {
+                    // 检查WebSocket连接
+                    if (users.has(userId) && users.has(vscodeId) && 
+                        users.get(userId).ws === users.get(vscodeId).ws) {
+                        bestMatch = vscodeId;
+                        break;
+                    }
+                    
+                    // 检查时间戳
+                    const userTime = extractTimestamp(userId);
+                    const vscodeTime = extractTimestamp(vscodeId);
+                    
+                    if (userTime && vscodeTime) {
+                        const timeDiff = Math.abs(userTime - vscodeTime);
+                        if (timeDiff < smallestTimeDiff) {
+                            smallestTimeDiff = timeDiff;
+                            bestMatch = vscodeId;
+                        }
+                    }
+                }
+                
+                // 如果找到最佳匹配且时间差小于10秒
+                if (bestMatch && smallestTimeDiff < 10000) {
+                    console.log(`[用户映射] 找到最佳匹配: ${userId} ⟷ ${bestMatch} (时间差: ${smallestTimeDiff}ms)`);
+                    createUserIdMapping(userId, bestMatch);
+                } else if (bestMatch) {
+                    console.log(`[用户映射] 找到可能的匹配: ${userId} ⟷ ${bestMatch} (时间差较大: ${smallestTimeDiff}ms)`);
+                    // 如果只有两个ID且时间差不超过30秒，仍然建立映射
+                    if (participants.length === 2 || smallestTimeDiff < 30000) {
+                        createUserIdMapping(userId, bestMatch);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 从ID中提取时间戳
+ * @param {string} id 用户ID
+ * @returns {number|null} 提取的时间戳，如果无法提取则返回null
+ */
+function extractTimestamp(id) {
+    // 尝试从ID中提取时间戳部分
+    const match = id.match(/(\d{13})/);
+    if (match && match[1]) {
+        return parseInt(match[1], 10);
+    }
+    return null;
+}
+
+/**
+ * 检查两个ID是否属于同一用户
+ * @param {string} id1 第一个用户ID
+ * @param {string} id2 第二个用户ID
+ * @returns {boolean} 如果两个ID属于同一用户，则返回true
+ */
+function isSameUser(id1, id2) {
+    if (id1 === id2) return true;
+    
+    // 检查直接映射
+    if (userIdMap.get(id1) === id2 || userIdMap.get(id2) === id1) {
+        return true;
+    }
+    
+    // 检查是否使用同一个WebSocket连接
+    if (users.has(id1) && users.has(id2)) {
+        return users.get(id1).ws === users.get(id2).ws;
+    }
+    
+    return false;
+}
+
+/**
+ * 打印当前的用户ID映射表
+ */
+function printUserIdMappings() {
+    console.log(`\n[用户映射] ===== 当前用户ID映射表 =====`);
+    console.log(`[用户映射] 总映射数: ${userIdMap.size}`);
+    
+    // 收集有关联的映射
+    const uniqueMappings = new Map();
+    for (const [sourceId, targetId] of userIdMap.entries()) {
+        // 确保每对映射只打印一次
+        const key = [sourceId, targetId].sort().join('↔');
+        if (!uniqueMappings.has(key)) {
+            uniqueMappings.set(key, { sourceId, targetId });
+        }
+    }
+    
+    // 打印映射
+    if (uniqueMappings.size === 0) {
+        console.log(`[用户映射] 暂无映射关系`);
+    } else {
+        let index = 1;
+        for (const { sourceId, targetId } of uniqueMappings.values()) {
+            console.log(`[用户映射] ${index++}: ${sourceId} ↔ ${targetId}`);
+        }
+    }
 }
 
 /**
@@ -1362,6 +1638,54 @@ function getConferenceParticipants(conferenceId) {
       joinedAt: participant ? participant.joinedAt : Date.now()
     };
   });
+}
+
+/**
+ * 创建用户ID映射，将vscode_前缀ID和user_前缀ID建立关联
+ * @param {string} userId 通常以user_开头的ID
+ * @param {string} vsCodeId 通常以vscode_开头的ID
+ */
+function createUserIdMapping(userId, vsCodeId) {
+  // 只处理符合命名规范的ID
+  if (!userId || !vsCodeId) return;
+  
+  // 记录正向映射
+  userIdMap.set(userId, vsCodeId);
+  // 记录反向映射
+  userIdMap.set(vsCodeId, userId);
+  
+  console.log(`[用户映射] 创建ID映射关系: ${userId} ⟷ ${vsCodeId}`);
+}
+
+/**
+ * 查找用户ID映射关系
+ * @param {string} id 任意用户ID
+ * @returns {string[]} 包含该用户所有关联ID的数组
+ */
+function getUserAllIds(id) {
+  if (!id) return [];
+  
+  const result = new Set([id]); // 先加入ID本身
+  
+  // 查找直接映射
+  if (userIdMap.has(id)) {
+    result.add(userIdMap.get(id));
+    
+    // 查找二级映射
+    const secondId = userIdMap.get(id);
+    if (userIdMap.has(secondId)) {
+      result.add(userIdMap.get(secondId));
+    }
+  }
+  
+  // 查找可能的反向映射
+  for (const [sourceId, targetId] of userIdMap.entries()) {
+    if (targetId === id) {
+      result.add(sourceId);
+    }
+  }
+  
+  return [...result];
 }
 
 // 启动服务器函数

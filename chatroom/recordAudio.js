@@ -35,7 +35,18 @@ const audioSettings = {
         ]
     },
     // 实际音频采集校准系数 - 根据实验校准
-    calibrationFactor: 1.35  // 理论时长与实际时长的比例因子
+    calibrationFactor: 1.35,  // 理论时长与实际时长的比例因子
+    // 回声消除设置
+    echoCancellation: {
+        enabled: true,       // 启用回声消除
+        strength: 0.9        // 回声消除强度（0-1）
+    },
+    // 噪声抑制设置
+    noiseSuppression: {
+        enabled: true,       // 启用噪声抑制
+        threshold: 0.05,     // 噪声阈值
+        reduction: 0.7       // 噪声抑制强度
+    }
 };
 
 // 检查命令行参数

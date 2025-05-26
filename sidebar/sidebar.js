@@ -12,6 +12,7 @@ var recordingTimer = null;           // 录音计时器
 var currentUserId = 'unknown_user';  // 当前用户ID
 var currentlyPlayingAudio = null;    // 当前正在播放的音频
 var globalAudioContext = null;       // 全局音频上下文
+let echoCancellationEnabled = true; // 默认启用回声消除
 
 /**
  * 侧边栏主逻辑初始化
@@ -790,11 +791,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         if (window.vscode) {
-            window.vscode.postMessage({
-                command: 'connectToChatServer',
-                ipAddress: serverAddress,
-                port: port
-            });
+            window.vscode.postMessage({ command: 'connectToChatServer', port: serverPort, ipAddress: serverAddress });
             document.getElementById('connect-to-server').disabled = true;
             document.getElementById('disconnect-from-server').disabled = false;
             const statusElement = document.getElementById('chat-server-status');
@@ -807,15 +804,11 @@ document.addEventListener('DOMContentLoaded', function() {
             window.vscode.postMessage({ command: 'disconnectFromChatServer' });
             document.getElementById('connect-to-server').disabled = false;
             document.getElementById('disconnect-from-server').disabled = true;
-            document.getElementById('room-control').style.display = 'none';
+            // 移除对room-control的引用
         }
     });
-    document.getElementById('leave-room').addEventListener('click', function() {
-        if (window.vscode) {
-            window.vscode.postMessage({ command: 'leaveRoom' });
-            document.getElementById('room-control').style.display = 'none';
-        }
-    });
+    // 移除leave-room按钮的事件监听器
+    
     // 复制连接信息
     document.getElementById('copy-connection').addEventListener('click', function() {
         const connectionUrl = document.getElementById('server-connection-url').textContent;
@@ -916,7 +909,12 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('save-deepseek-api-key-btn').addEventListener('click', function() {
         const apiKey = document.getElementById('deepseek-api-key-input').value.trim();
         if (apiKey) {
-            window.vscode.postMessage({ command: 'saveDeepSeekApiKey', apiKey });
+            if (window.vscode) {
+                window.vscode.postMessage({ command: 'saveDeepSeekApiKey', apiKey });
+                // 显示正在保存状态
+                document.getElementById('deepseek-api-key-status').textContent = '正在保存...';
+                document.getElementById('deepseek-api-key-status').style.color = '#FFA500';
+            }
         } else {
             document.getElementById('deepseek-api-key-status').textContent = '请输入有效的API Key';
             document.getElementById('deepseek-api-key-status').style.color = '#ff0000';
@@ -925,12 +923,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // DeepSeek模型选择
     document.getElementById('deepseek-model-select').addEventListener('change', function() {
         const model = this.value;
-        window.vscode.postMessage({ command: 'setDeepSeekModel', model });
+        if (window.vscode) {
+            window.vscode.postMessage({ command: 'setDeepSeekModel', model });
+        }
     });
     // MCP服务器相关
     document.getElementById('enable-mcp-server').addEventListener('change', function() {
         const isEnabled = this.checked;
-        const serverPath = 'server.js';
+        const serverPath = 'server/server.js'; // 修正服务器路径
         if (window.vscode) {
             window.vscode.postMessage({ command: 'toggleMcpServer', isEnabled: isEnabled, serverPath: serverPath });
             const statusElement = document.getElementById('mcp-server-status');
@@ -1045,8 +1045,7 @@ function updateServerStatus(statusData) {
     const disconnectButton = document.getElementById('disconnect-from-server');
     const connectionInfoDiv = document.getElementById('server-connection-info');
     const connectionUrlElement = document.getElementById('server-connection-url');
-    const roomControlDiv = document.getElementById('room-control');
-    const currentRoomElement = document.getElementById('current-room-id');
+    // 移除对room-control相关元素的引用
     
 if (statusData.status === 'running' || statusData.status === 'connected') {
     statusElement.textContent = statusData.status === 'connected' ? '已连接' : '运行中';
@@ -1066,11 +1065,7 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
     if (connectButton) connectButton.disabled = true;
     if (disconnectButton) disconnectButton.disabled = false;
         
-        // 显示房间信息
-    if (statusData.roomId && roomControlDiv && currentRoomElement) {
-            roomControlDiv.style.display = 'flex';
-        currentRoomElement.textContent = statusData.roomId;
-        }
+        // 移除显示房间信息的代码
         
         // 显示连接信息
     if (statusData.port && connectionInfoDiv && connectionUrlElement) {
@@ -1103,8 +1098,7 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
     if (connectButton) connectButton.disabled = false;
     if (disconnectButton) disconnectButton.disabled = true;
         
-        // 隐藏房间控制界面
-    if (roomControlDiv) roomControlDiv.style.display = 'none';
+        // 移除隐藏房间控制界面的代码
         
         // 隐藏连接信息
     if (connectionInfoDiv) connectionInfoDiv.style.display = 'none';
@@ -1125,8 +1119,7 @@ if (statusData.status === 'running' || statusData.status === 'connected') {
     if (connectButton) connectButton.disabled = false;
     if (disconnectButton) disconnectButton.disabled = true;
         
-        // 隐藏房间控制界面
-    if (roomControlDiv) roomControlDiv.style.display = 'none';
+        // 移除隐藏房间控制界面的代码
         
         // 隐藏连接信息
     if (connectionInfoDiv) connectionInfoDiv.style.display = 'none';
@@ -1628,21 +1621,49 @@ function joinConference(conferenceId) {
         return;
     }
     
-    // 发送加入会议请求
-    vscode.postMessage({
-        command: 'sendWebSocketMessage',
-        message: JSON.stringify({
-            type: 'voiceConference',
-            action: 'join',
-            conferenceId: conferenceId
+    // 先初始化回声消除功能
+    setupAudioWithEchoCancellation()
+        .then(() => {
+            console.log('[会议] 回声消除初始化成功，正在加入会议...');
+            
+            // 发送加入会议请求
+            vscode.postMessage({
+                command: 'sendWebSocketMessage',
+                message: JSON.stringify({
+                    type: 'voiceConference',
+                    action: 'join',
+                    conferenceId: conferenceId
+                })
+            });
+            
+            // 更新UI状态
+            updateConferenceUI(true, conferenceId);
+            
+            // 开始音频流传输
+            startAudioStream(conferenceId);
         })
-    });
-    
-    // 更新UI状态
-    updateConferenceUI(true, conferenceId);
-    
-    // 开始音频流传输
-    startAudioStream(conferenceId);
+        .catch(error => {
+            console.error('[会议] 回声消除初始化失败:', error);
+            
+            // 即使回声消除初始化失败，仍然尝试加入会议
+            vscode.postMessage({
+                command: 'sendWebSocketMessage',
+                message: JSON.stringify({
+                    type: 'voiceConference',
+                    action: 'join',
+                    conferenceId: conferenceId
+                })
+            });
+            
+            // 更新UI状态
+            updateConferenceUI(true, conferenceId);
+            
+            // 开始音频流传输，但可能会有回声
+            startAudioStream(conferenceId);
+            
+            // 显示回声消除初始化失败的提示
+            showWarningMessage('回声消除功能初始化失败，可能会有回声');
+        });
 }
 
 // 离开语音会议
@@ -1799,17 +1820,122 @@ function startAudioStream(conferenceId) {
     } else {
         console.warn('[音频流] 无法获取当前连接的服务器地址，使用默认值localhost');
     }
-    
-    // 通过VSCode命令调用外部录音脚本，开启流模式
-    vscode.postMessage({
-        command: 'executeStreamCommand',
-        script: 'chatroom/recordAudio.js',
-        args: ['-stream', '-address', serverAddress, '-conferenceId', conferenceId]
-    });
+
+    // 检查回声消除是否已初始化
+    if (window.echoCancellationStream && window.echoCancellationNodes) {
+        console.log('[音频流] 回声消除已初始化，直接启动音频流');
+        
+        // 通过VSCode命令调用外部录音脚本，开启流模式
+        vscode.postMessage({
+            command: 'executeStreamCommand',
+            script: 'chatroom/recordAudio.js',
+            args: ['-stream', '-address', serverAddress, '-conferenceId', conferenceId]
+        });
+    } else {
+        // 先设置音频约束，启用回声消除
+        setupAudioWithEchoCancellation()
+            .then(() => {
+                // 通过VSCode命令调用外部录音脚本，开启流模式
+                vscode.postMessage({
+                    command: 'executeStreamCommand',
+                    script: 'chatroom/recordAudio.js',
+                    args: ['-stream', '-address', serverAddress, '-conferenceId', conferenceId]
+                });
+            })
+            .catch(error => {
+                console.error('[音频流] 设置回声消除失败:', error);
+                // 出错时也尝试启动音频流，但可能会有回声
+                vscode.postMessage({
+                    command: 'executeStreamCommand',
+                    script: 'chatroom/recordAudio.js',
+                    args: ['-stream', '-address', serverAddress, '-conferenceId', conferenceId]
+                });
+            });
+    }
+}
+
+// 设置带回声消除的音频处理
+async function setupAudioWithEchoCancellation() {
+    try {
+        console.log('[音频] 正在设置回声消除...');
+        
+        // 创建或使用全局AudioContext
+        if (!globalAudioContext) {
+            globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // 请求麦克风访问权限，并明确启用回声消除
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,       // 启用回声消除
+                noiseSuppression: true,       // 启用噪声抑制
+                autoGainControl: true,        // 启用自动增益控制
+                channelCount: 1,              // 单声道
+                sampleRate: 44100,            // 采样率
+            }
+        });
+        
+        console.log('[音频] 成功获取麦克风，已启用回声消除');
+        
+        // 创建媒体流源节点
+        const micSource = globalAudioContext.createMediaStreamSource(stream);
+        
+        // 创建处理节点
+        const processorNode = globalAudioContext.createScriptProcessor(4096, 1, 1);
+        
+        // 连接节点，但不直接连接到destination以避免重复播放
+        micSource.connect(processorNode);
+        
+        // 保存流和节点以便后续使用或清理
+        window.echoCancellationStream = stream;
+        window.echoCancellationNodes = {
+            source: micSource,
+            processor: processorNode
+        };
+        
+        console.log('[音频] 回声消除设置完成');
+        return true;
+    } catch (error) {
+        console.error('[音频] 设置回声消除失败:', error);
+        throw error;
+    }
+}
+
+// 清理回声消除相关资源
+function cleanupEchoCancellation() {
+    try {
+        if (window.echoCancellationNodes) {
+            // 断开节点连接
+            if (window.echoCancellationNodes.processor) {
+                window.echoCancellationNodes.processor.disconnect();
+            }
+            if (window.echoCancellationNodes.source) {
+                window.echoCancellationNodes.source.disconnect();
+            }
+            
+            // 清除节点引用
+            window.echoCancellationNodes = null;
+        }
+        
+        // 停止所有音频轨道
+        if (window.echoCancellationStream) {
+            window.echoCancellationStream.getTracks().forEach(track => {
+                track.stop();
+            });
+            window.echoCancellationStream = null;
+        }
+        
+        console.log('[音频] 回声消除资源已清理');
+    } catch (error) {
+        console.error('[音频] 清理回声消除资源失败:', error);
+    }
 }
 
 // 停止音频流传输
 function stopAudioStream() {
+    // 清理回声消除资源
+    cleanupEchoCancellation();
+    
     // 通知扩展终止音频流进程
     vscode.postMessage({
         command: 'terminateStreamProcess'
@@ -1872,13 +1998,11 @@ function updateMicrophoneUI() {
     if (isMuted) {
         toggleMicBtn.textContent = '取消静音';
         toggleMicBtn.classList.add('muted');
-        micStatus.textContent = '麦克风已静音';
-        micStatus.style.color = '#cc3333';
+        if (micStatus) micStatus.textContent = '已静音';
     } else {
         toggleMicBtn.textContent = '静音';
         toggleMicBtn.classList.remove('muted');
-        micStatus.textContent = '麦克风已开启';
-        micStatus.style.color = '#4CAF50';
+        if (micStatus) micStatus.textContent = '已启用' + (echoCancellationEnabled ? ' (回声消除已开启)' : '');
     }
 }
 
@@ -2173,24 +2297,12 @@ function playAudioStream(message) {
                     }
                 }
             },
-            function(error) {
-                console.error('[调试-播放] Web Audio API解码失败，尝试使用备用方法:', error);
-                fallbackToAllMethods(message.audioData);
+            function(e) {
+                console.error('[调试-播放] 音频解码失败:', e);
             }
         );
     } catch (error) {
-        console.error('[调试-播放] 播放音频流主方法失败:', error);
-        
-        try {
-            // 尝试所有可能的播放方法
-            fallbackToAllMethods(message.audioData);
-        } catch (backupError) {
-            console.error('[调试-播放] 所有播放方法都失败:', backupError);
-            vscode.postMessage({
-                command: 'showError',
-                text: '无法播放音频：' + backupError.message
-            });
-        }
+        console.error('[调试-播放] 处理音频流出错:', error);
     }
 }
 
@@ -2590,4 +2702,263 @@ function handleTextChatMessage(message) {
     messageRow.appendChild(bubbleGroup);
     chatMessages.appendChild(messageRow);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// 显示警告消息
+function showWarningMessage(message) {
+    const msgContainer = document.querySelector('.message-container');
+    if (!msgContainer) return;
+    
+    const msgElement = document.createElement('div');
+    msgElement.className = 'message warning';
+    msgElement.textContent = message;
+    
+    msgContainer.appendChild(msgElement);
+    
+    // 自动清除消息
+    setTimeout(() => {
+        msgElement.classList.add('fade-out');
+        setTimeout(() => {
+            if (msgElement.parentNode === msgContainer) {
+                msgContainer.removeChild(msgElement);
+            }
+        }, 500);
+    }, 5000);
+}
+
+// 当窗口加载完成
+window.addEventListener('load', function() {
+    // 其他现有代码...
+    
+    // 获取DeepSeek API Key状态
+    if (window.vscode) {
+        window.vscode.postMessage({ command: 'getDeepSeekApiKeyStatus' });
+    }
+    
+    // 初始化MCP服务器开关
+    const mcpServerSwitch = document.getElementById('enable-mcp-server');
+    if (mcpServerSwitch) {
+        mcpServerSwitch.addEventListener('change', function() {
+            const isEnabled = this.checked;
+            if (window.vscode) {
+                // 更新状态显示
+                const statusElement = document.getElementById('mcp-server-status');
+                if (statusElement) {
+                    statusElement.textContent = isEnabled ? '正在启动...' : '正在停止...';
+                    statusElement.style.color = '#FFA500'; // 设置为橙色表示进行中
+                }
+                
+                // 发送消息到扩展
+                window.vscode.postMessage({ 
+                    command: 'toggleMcpServer', 
+                    isEnabled: isEnabled,
+                    serverPath: 'server.js' // 指定服务器脚本路径
+                });
+            }
+        });
+    }
+    
+    // 保存DeepSeek API Key按钮
+    const saveDeepseekApiKeyBtn = document.getElementById('save-deepseek-api-key-btn');
+    if (saveDeepseekApiKeyBtn) {
+        saveDeepseekApiKeyBtn.addEventListener('click', function() {
+            const apiKey = document.getElementById('deepseek-api-key-input').value.trim();
+            if (apiKey) {
+                if (window.vscode) {
+                    // 显示正在保存状态
+                    const statusElement = document.getElementById('deepseek-api-key-status');
+                    if (statusElement) {
+                        statusElement.textContent = '正在保存...';
+                        statusElement.style.color = '#FFA500'; // 橙色表示进行中
+                    }
+                    
+                    // 发送消息到扩展
+                    window.vscode.postMessage({ command: 'saveDeepSeekApiKey', apiKey });
+                }
+            } else {
+                // 显示错误状态
+                const statusElement = document.getElementById('deepseek-api-key-status');
+                if (statusElement) {
+                    statusElement.textContent = '请输入有效的API Key';
+                    statusElement.style.color = '#ff3737'; // 红色表示错误
+                }
+            }
+        });
+    }
+});
+
+// 处理从扩展接收的消息
+window.addEventListener('message', event => {
+    const message = event.data;
+    
+    // 处理现有消息...
+    
+    // 处理MCP服务器状态更新消息
+    if (message.command === 'mcpServerStatus') {
+        const statusElement = document.getElementById('mcp-server-status');
+        const switchElement = document.getElementById('enable-mcp-server');
+        
+        if (statusElement) {
+            statusElement.textContent = message.status;
+            
+            // 根据状态设置颜色
+            if (message.status === '运行中') {
+                statusElement.style.color = '#4CAF50'; // 绿色表示成功
+                if (switchElement) switchElement.checked = true;
+            } else if (message.status === '已停止') {
+                statusElement.style.color = 'var(--vscode-foreground)'; // 普通文本颜色
+                if (switchElement) switchElement.checked = false;
+            } else if (message.status === '启动失败') {
+                statusElement.style.color = '#ff3737'; // 红色表示错误
+                if (switchElement) switchElement.checked = false;
+            }
+        }
+    }
+    
+    // 处理DeepSeek API Key状态更新消息
+    if (message.command === 'deepseekApiKeyStatus') {
+        const statusElement = document.getElementById('deepseek-api-key-status');
+        
+        if (statusElement) {
+            if (message.isSet) {
+                statusElement.textContent = 'API Key已设置';
+                statusElement.style.color = '#4CAF50'; // 绿色表示成功
+            } else {
+                if (message.error) {
+                    statusElement.textContent = `错误: ${message.error}`;
+                    statusElement.style.color = '#ff3737'; // 红色表示错误
+                } else {
+                    statusElement.textContent = '未设置API Key';
+                    statusElement.style.color = 'var(--vscode-foreground)'; // 普通文本颜色
+                }
+            }
+        }
+    }
+});
+
+// 当收到来自VSCode的消息
+window.addEventListener('message', event => {
+    const message = event.data;
+    
+    switch (message.command) {
+        case 'agentResponse':
+            console.log('收到Agent响应');
+            handleAgentResponse(message);
+            break;
+        case 'agentThinking':
+            console.log('Agent正在思考...');
+            updateAgentThinking(message.isThinking, message.thinkingId);
+            break;
+        case 'toolCallStarted':
+            console.log('工具调用开始:', message.toolName);
+            displayToolCallStarted(message.toolName, message.toolArgs, message.thinkingId);
+            break;
+        case 'toolCallCompleted':
+            console.log('工具调用完成:', message.toolName, message.success);
+            displayToolCallCompleted(message.toolName, message.success, message.result, message.thinkingId);
+            break;
+        case 'chatServerStatus':
+            console.log('聊天服务器状态更新:', message.status);
+            updateChatServerStatus(message.status, message.info);
+            break;
+        // ... existing message handlers ...
+    }
+});
+
+/**
+ * 显示工具调用开始的UI提示
+ * @param {string} toolName 工具名称
+ * @param {object} toolArgs 工具参数
+ * @param {string} thinkingId 思考ID，用于链接到特定的思考状态
+ */
+function displayToolCallStarted(toolName, toolArgs, thinkingId) {
+    // 获取消息容器
+    const messagesContainer = document.getElementById('agent-messages');
+    if (!messagesContainer) return;
+    
+    // 查找或创建当前思考状态的容器
+    let thinkingElement = document.getElementById(`agent-thinking-${thinkingId}`);
+    
+    // 如果没有找到思考元素，则创建一个
+    if (!thinkingElement) {
+        thinkingElement = document.createElement('div');
+        thinkingElement.id = `agent-thinking-${thinkingId}`;
+        thinkingElement.className = 'agent-thinking';
+        thinkingElement.innerHTML = '思考中...';
+        messagesContainer.appendChild(thinkingElement);
+    }
+    
+    // 创建工具调用元素
+    const toolCallElement = document.createElement('div');
+    toolCallElement.id = `tool-call-${toolName}-${Date.now()}`;
+    toolCallElement.className = 'agent-tool-call';
+    
+    // 格式化参数以便更好地显示
+    let formattedArgs = '';
+    try {
+        formattedArgs = JSON.stringify(toolArgs, null, 2);
+    } catch (e) {
+        formattedArgs = '参数解析错误';
+    }
+    
+    // 设置工具调用元素的内容
+    toolCallElement.innerHTML = `
+        <div class="tool-call-header">
+            <span class="tool-call-icon">🔧</span>
+            <span class="tool-call-name">正在调用: ${toolName}</span>
+            <span class="tool-call-status pending">处理中...</span>
+        </div>
+        <div class="tool-call-args">
+            <pre>${formattedArgs}</pre>
+        </div>
+    `;
+    
+    // 将工具调用元素添加到思考元素之后
+    thinkingElement.appendChild(toolCallElement);
+    
+    // 滚动到底部
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+/**
+ * 更新工具调用完成的UI状态
+ * @param {string} toolName 工具名称
+ * @param {boolean} success 是否成功
+ * @param {string} result 调用结果
+ * @param {string} thinkingId 思考ID
+ */
+function displayToolCallCompleted(toolName, success, result, thinkingId) {
+    // 查找所有工具调用元素
+    const toolCallElements = document.querySelectorAll('.agent-tool-call');
+    
+    // 找到最后一个匹配的工具调用元素
+    let lastMatchingElement = null;
+    for (const element of toolCallElements) {
+        if (element.querySelector('.tool-call-name').textContent.includes(toolName)) {
+            lastMatchingElement = element;
+        }
+    }
+    
+    if (lastMatchingElement) {
+        // 更新状态
+        const statusElement = lastMatchingElement.querySelector('.tool-call-status');
+        if (statusElement) {
+            statusElement.textContent = success ? '✓ 成功' : '✗ 失败';
+            statusElement.className = `tool-call-status ${success ? 'success' : 'error'}`;
+        }
+        
+        // 如果有结果，则显示结果
+        if (result) {
+            const resultElement = document.createElement('div');
+            resultElement.className = 'tool-call-result';
+            resultElement.innerHTML = `<pre>${result}</pre>`;
+            lastMatchingElement.appendChild(resultElement);
+        }
+    }
+    
+    // 获取消息容器并滚动到底部
+    const messagesContainer = document.getElementById('agent-messages');
+    if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
 }

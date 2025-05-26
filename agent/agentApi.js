@@ -118,8 +118,27 @@ async function connectToServer(serverScriptPath, workspaceDir) {
         args.push(workspaceDir);
     }
     
+    // 清理现有进程
+    if (serverProcess) {
+        console.log('关闭现有MCP服务器进程');
+        cleanup();
+    }
+    
     // 启动服务器进程
     serverProcess = spawn(command, args);
+    
+    // 添加进程结束事件处理
+    serverProcess.on('close', (code) => {
+        console.log(`MCP服务器进程已退出，退出码: ${code}`);
+        serverProcess = null;
+        rl = null;
+    });
+    
+    // 添加进程错误事件处理
+    serverProcess.on('error', (err) => {
+        console.error(`MCP服务器进程启动错误: ${err.message}`);
+        throw new Error(`启动MCP服务器失败: ${err.message}`);
+    });
     
     // 创建读写接口
     rl = readline.createInterface({
@@ -132,14 +151,27 @@ async function connectToServer(serverScriptPath, workspaceDir) {
         console.error(`服务器错误: ${data}`);
     });
     
+    // 创建超时Promise
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('连接MCP服务器超时')), 10000);
+    });
+    
     // 初始化与服务器的通信
-    await initialize();
-    
-    // 列出可用工具
-    const tools = await listTools();
-    availableTools = tools;
-    
-    console.log('\n已连接到服务器，支持以下工具:', tools.map(tool => tool.name));
+    try {
+        const initPromise = initialize();
+        await Promise.race([initPromise, timeoutPromise]);
+        
+        // 列出可用工具
+        const tools = await listTools();
+        availableTools = tools;
+        
+        console.log('\n已连接到MCP服务器，支持以下工具:', tools.map(tool => tool.name));
+        return true;
+    } catch (error) {
+        console.error('连接MCP服务器失败:', error);
+        cleanup(); // 清理资源
+        throw error;
+    }
 }
 
 /**
@@ -372,14 +404,46 @@ async function handleAgentQuery(query, sessionId = currentSessionId) {
                         
                         console.log(`调用工具: ${toolName}, 参数:`, toolArgs);
                         
+                        // 添加向前端发送工具调用开始的通知
+                        if (global.sidebarProvider && global.sidebarProvider._webviewView) {
+                            global.sidebarProvider._webviewView.webview.postMessage({
+                                command: 'toolCallStarted',
+                                toolName: toolName,
+                                toolArgs: toolArgs,
+                                thinkingId: sessionId
+                            });
+                        }
+                        
                         // 执行工具调用
                         let result;
                         try {
                             result = await callTool(toolName, toolArgs);
                             console.log('工具调用结果:', result);
+                            
+                            // 添加向前端发送工具调用结果的通知
+                            if (global.sidebarProvider && global.sidebarProvider._webviewView) {
+                                global.sidebarProvider._webviewView.webview.postMessage({
+                                    command: 'toolCallCompleted',
+                                    toolName: toolName,
+                                    success: true,
+                                    result: result.content?.[0]?.text || '工具执行成功',
+                                    thinkingId: sessionId
+                                });
+                            }
                         } catch (error) {
                             console.error(`工具调用错误: ${error.message}`);
                             result = { content: [{ type: 'text', text: `工具调用失败: ${error.message}` }] };
+                            
+                            // 添加向前端发送工具调用失败的通知
+                            if (global.sidebarProvider && global.sidebarProvider._webviewView) {
+                                global.sidebarProvider._webviewView.webview.postMessage({
+                                    command: 'toolCallCompleted',
+                                    toolName: toolName,
+                                    success: false,
+                                    result: `工具调用失败: ${error.message}`,
+                                    thinkingId: sessionId
+                                });
+                            }
                         }
                         
                         // 添加工具结果到消息列表
@@ -441,14 +505,46 @@ async function handleAgentQuery(query, sessionId = currentSessionId) {
                                     
                                     console.log(`调用工具: ${toolName}, 参数:`, toolArgs);
                                     
+                                    // 添加向前端发送工具调用开始的通知
+                                    if (global.sidebarProvider && global.sidebarProvider._webviewView) {
+                                        global.sidebarProvider._webviewView.webview.postMessage({
+                                            command: 'toolCallStarted',
+                                            toolName: toolName,
+                                            toolArgs: toolArgs,
+                                            thinkingId: sessionId
+                                        });
+                                    }
+                                    
                                     // 执行工具调用
                                     let result;
                                     try {
                                         result = await callTool(toolName, toolArgs);
                                         console.log('工具调用结果:', result);
+                                        
+                                        // 添加向前端发送工具调用结果的通知
+                                        if (global.sidebarProvider && global.sidebarProvider._webviewView) {
+                                            global.sidebarProvider._webviewView.webview.postMessage({
+                                                command: 'toolCallCompleted',
+                                                toolName: toolName,
+                                                success: true,
+                                                result: result.content?.[0]?.text || '工具执行成功',
+                                                thinkingId: sessionId
+                                            });
+                                        }
                                     } catch (error) {
                                         console.error(`工具调用错误: ${error.message}`);
                                         result = { content: [{ type: 'text', text: `工具调用失败: ${error.message}` }] };
+                                        
+                                        // 添加向前端发送工具调用失败的通知
+                                        if (global.sidebarProvider && global.sidebarProvider._webviewView) {
+                                            global.sidebarProvider._webviewView.webview.postMessage({
+                                                command: 'toolCallCompleted',
+                                                toolName: toolName,
+                                                success: false,
+                                                result: `工具调用失败: ${error.message}`,
+                                                thinkingId: sessionId
+                                            });
+                                        }
                                     }
                                     
                                     // 添加工具结果到消息列表
@@ -540,12 +636,26 @@ function clearApiKeys() {
  */
 function cleanup() {
     if (serverProcess) {
-        serverProcess.kill();
+        try {
+            // 确保在Windows上正确关闭进程
+            if (process.platform === 'win32') {
+                spawn('taskkill', ['/pid', serverProcess.pid, '/f', '/t']);
+            } else {
+                serverProcess.kill('SIGTERM');
+            }
+        } catch (error) {
+            console.error('关闭MCP服务器进程失败:', error);
+        }
+        serverProcess = null;
     }
     
     if (rl) {
         rl.close();
+        rl = null;
     }
+    
+    availableTools = [];
+    return true;
 }
 
 /**

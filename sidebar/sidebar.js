@@ -13,6 +13,9 @@ var currentUserId = 'unknown_user';  // 当前用户ID
 var currentlyPlayingAudio = null;    // 当前正在播放的音频
 var globalAudioContext = null;       // 全局音频上下文
 let echoCancellationEnabled = true; // 默认启用回声消除
+var isStreamingAudio = false;      // 音频流状态
+var audioSourceNodes = new Map();  // 活动音频源映射
+var conferenceParticipants = [];   // 内部状态数组（不再显示）
 
 /**
  * 侧边栏主逻辑初始化
@@ -1970,8 +1973,8 @@ function updateConferenceUI(isActive, conferenceId = null) {
         isMuted = false;
         updateMicrophoneUI();
         
-        // 清空参与者列表
-        document.getElementById('participants-list').innerHTML = '';
+        // 移除清空参与者列表的代码
+        // document.getElementById('participants-list').innerHTML = '';
     } else {
         // 更新为非活跃状态
         createBtn.disabled = false;
@@ -1984,8 +1987,8 @@ function updateConferenceUI(isActive, conferenceId = null) {
         activeConferenceInfo.style.display = 'none';
         currentConferenceIdSpan.textContent = '';
         
-        // 清空参与者列表
-        document.getElementById('participants-list').innerHTML = '';
+        // 移除清空参与者列表的代码
+        // document.getElementById('participants-list').innerHTML = '';
         conferenceParticipants = [];
     }
 }
@@ -2004,39 +2007,6 @@ function updateMicrophoneUI() {
         toggleMicBtn.classList.remove('muted');
         if (micStatus) micStatus.textContent = '已启用' + (echoCancellationEnabled ? ' (回声消除已开启)' : '');
     }
-}
-
-// 更新参与者列表
-function updateParticipantsList(participants) {
-    if (!Array.isArray(participants)) {
-        return;
-    }
-    
-    conferenceParticipants = participants;
-    const listElement = document.getElementById('participants-list');
-    listElement.innerHTML = '';
-    
-    participants.forEach(participant => {
-        const listItem = document.createElement('li');
-        
-        // 创建参与者名称元素
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'participant-name';
-        nameSpan.textContent = participant.name;
-        
-        // 创建参与者状态元素
-        const statusSpan = document.createElement('span');
-        statusSpan.className = 'participant-status';
-        statusSpan.textContent = participant.isMuted ? '已静音' : '发言中';
-        statusSpan.style.color = participant.isMuted ? '#aaa' : '#4CAF50';
-        
-        // 将元素添加到列表项
-        listItem.appendChild(nameSpan);
-        listItem.appendChild(statusSpan);
-        
-        // 添加到参与者列表
-        listElement.appendChild(listItem);
-    });
 }
 
 // 检查是否连接到聊天服务器
@@ -2065,10 +2035,10 @@ function handleConferenceMessage(message) {
             // 成功创建或加入会议
             updateConferenceUI(true, message.conferenceId);
             
-            // 更新参与者列表
-            if (message.participants) {
-                updateParticipantsList(message.participants);
-            }
+            // 移除更新参与者列表的代码
+            // if (message.participants) {
+            //     updateParticipantsList(message.participants);
+            // }
             break;
             
         case 'left':
@@ -2079,10 +2049,10 @@ function handleConferenceMessage(message) {
         case 'participantJoined':
         case 'participantLeft':
         case 'participantMuted':
-            // 更新参与者列表
-            if (message.participants) {
-                updateParticipantsList(message.participants);
-            }
+            // 移除更新参与者列表的代码
+            // if (message.participants) {
+            //     updateParticipantsList(message.participants);
+            // }
             break;
             
         case 'error':
@@ -2725,116 +2695,6 @@ function showWarningMessage(message) {
         }, 500);
     }, 5000);
 }
-
-// 当窗口加载完成
-window.addEventListener('load', function() {
-    // 其他现有代码...
-    
-    // 获取DeepSeek API Key状态
-    if (window.vscode) {
-        window.vscode.postMessage({ command: 'getDeepSeekApiKeyStatus' });
-    }
-    
-    // 初始化MCP服务器开关
-    const mcpServerSwitch = document.getElementById('enable-mcp-server');
-    if (mcpServerSwitch) {
-        mcpServerSwitch.addEventListener('change', function() {
-            const isEnabled = this.checked;
-            if (window.vscode) {
-                // 更新状态显示
-                const statusElement = document.getElementById('mcp-server-status');
-                if (statusElement) {
-                    statusElement.textContent = isEnabled ? '正在启动...' : '正在停止...';
-                    statusElement.style.color = '#FFA500'; // 设置为橙色表示进行中
-                }
-                
-                // 发送消息到扩展
-                window.vscode.postMessage({ 
-                    command: 'toggleMcpServer', 
-                    isEnabled: isEnabled,
-                    serverPath: 'server.js' // 指定服务器脚本路径
-                });
-            }
-        });
-    }
-    
-    // 保存DeepSeek API Key按钮
-    const saveDeepseekApiKeyBtn = document.getElementById('save-deepseek-api-key-btn');
-    if (saveDeepseekApiKeyBtn) {
-        saveDeepseekApiKeyBtn.addEventListener('click', function() {
-            const apiKey = document.getElementById('deepseek-api-key-input').value.trim();
-            if (apiKey) {
-                if (window.vscode) {
-                    // 显示正在保存状态
-                    const statusElement = document.getElementById('deepseek-api-key-status');
-                    if (statusElement) {
-                        statusElement.textContent = '正在保存...';
-                        statusElement.style.color = '#FFA500'; // 橙色表示进行中
-                    }
-                    
-                    // 发送消息到扩展
-                    window.vscode.postMessage({ command: 'saveDeepSeekApiKey', apiKey });
-                }
-            } else {
-                // 显示错误状态
-                const statusElement = document.getElementById('deepseek-api-key-status');
-                if (statusElement) {
-                    statusElement.textContent = '请输入有效的API Key';
-                    statusElement.style.color = '#ff3737'; // 红色表示错误
-                }
-            }
-        });
-    }
-});
-
-// 处理从扩展接收的消息
-window.addEventListener('message', event => {
-    const message = event.data;
-    
-    // 处理现有消息...
-    
-    // 处理MCP服务器状态更新消息
-    if (message.command === 'mcpServerStatus') {
-        const statusElement = document.getElementById('mcp-server-status');
-        const switchElement = document.getElementById('enable-mcp-server');
-        
-        if (statusElement) {
-            statusElement.textContent = message.status;
-            
-            // 根据状态设置颜色
-            if (message.status === '运行中') {
-                statusElement.style.color = '#4CAF50'; // 绿色表示成功
-                if (switchElement) switchElement.checked = true;
-            } else if (message.status === '已停止') {
-                statusElement.style.color = 'var(--vscode-foreground)'; // 普通文本颜色
-                if (switchElement) switchElement.checked = false;
-            } else if (message.status === '启动失败') {
-                statusElement.style.color = '#ff3737'; // 红色表示错误
-                if (switchElement) switchElement.checked = false;
-            }
-        }
-    }
-    
-    // 处理DeepSeek API Key状态更新消息
-    if (message.command === 'deepseekApiKeyStatus') {
-        const statusElement = document.getElementById('deepseek-api-key-status');
-        
-        if (statusElement) {
-            if (message.isSet) {
-                statusElement.textContent = 'API Key已设置';
-                statusElement.style.color = '#4CAF50'; // 绿色表示成功
-            } else {
-                if (message.error) {
-                    statusElement.textContent = `错误: ${message.error}`;
-                    statusElement.style.color = '#ff3737'; // 红色表示错误
-                } else {
-                    statusElement.textContent = '未设置API Key';
-                    statusElement.style.color = 'var(--vscode-foreground)'; // 普通文本颜色
-                }
-            }
-        }
-    }
-});
 
 // 当收到来自VSCode的消息
 window.addEventListener('message', event => {

@@ -211,145 +211,36 @@ if (!streamMode && canSaveFiles && recordingsDir) {
     console.error('未检测到有效工作区或无写入权限，录音将不会被保存到文件');
 }
 
-/**
- * 处理音频数据，应用增强效果
- * @param {Buffer} audioData 原始音频数据
- * @returns {Promise<Buffer>} 处理后的音频数据
- */
-async function enhanceAudioData(audioData) {
-    try {
-        // 检查数据是否包含WAV头
-        const hasWavHeader = audioData.length > 44 && 
-                             audioData[0] === 82 && audioData[1] === 73 && 
-                             audioData[2] === 70 && audioData[3] === 70; // "RIFF"
-        
-        // 如果没有启用增强，直接返回原始数据
-        if (!audioSettings.enhancementEnabled) {
-            return audioData;
-        }
-        
-        let audioBuffer;
-        
-        if (hasWavHeader) {
-            // 使用WavDecoder解码WAV数据
-            try {
-                const decodedData = await WavDecoder.decode(audioData);
-                const channelData = decodedData.channelData[0]; // 假设是单声道
-                
-                // 应用音频处理
-                const enhancedData = applyAudioEnhancements(channelData);
-                
-                // 重新编码为WAV
-                const wavData = await WavEncoder.encode({
-                    sampleRate: decodedData.sampleRate,
-                    channelData: [enhancedData]
-                });
-                
-                return Buffer.from(wavData);
-            } catch (error) {
-                console.error('WAV解码失败，跳过增强处理:', error);
-                return audioData;
-            }
-        } else {
-            // 直接处理PCM数据
-            // 假设16位单声道PCM数据
-            const sampleCount = audioData.length / 2;
-            const floatSamples = new Float32Array(sampleCount);
-            
-            // 转换Int16PCM到Float32
-            for (let i = 0; i < sampleCount; i++) {
-                floatSamples[i] = audioData.readInt16LE(i * 2) / 32768.0; // 归一化到[-1,1]
-            }
-            
-            // 应用音频处理
-            const enhancedData = applyAudioEnhancements(floatSamples);
-            
-            // 转换回Int16PCM格式
-            const enhancedBuffer = Buffer.alloc(enhancedData.length * 2);
-            for (let i = 0; i < enhancedData.length; i++) {
-                // 限制在有效范围内
-                const value = Math.max(-1, Math.min(1, enhancedData[i]));
-                // 转换回Int16
-                enhancedBuffer.writeInt16LE(Math.round(value * 32767), i * 2);
-            }
-            
-            return enhancedBuffer;
-        }
-    } catch (error) {
-        console.error('音频增强处理失败:', error);
-        // 失败时返回原始数据
-        return audioData;
-    }
-}
-
-/**
- * 应用音频增强处理
- * @param {Float32Array} audioData 浮点音频数据
- * @returns {Float32Array} 处理后的浮点音频数据
- */
-function applyAudioEnhancements(audioData) {
-    // 克隆数据以避免修改原始数据
-    const enhancedData = new Float32Array(audioData);
+// 简化的音频增强
+function enhanceAudioData(audioData) {
+    // 简化后的音频增强逻辑
+    // 将Buffer转换为Float32Array用于处理
+    const buffer = Buffer.from(audioData);
+    const floatData = new Float32Array(buffer.length / 2);
     
-    // 1. 应用语音增强
-    if (audioSettings.voiceEnhancement.enabled) {
-        // 语音增益处理
-        for (let i = 0; i < enhancedData.length; i++) {
-            // 应用非线性增益曲线增强信号(保持小信号特性，增强中等信号)
-            const sample = enhancedData[i];
-            const sign = Math.sign(sample);
-            const abs = Math.abs(sample);
-            
-            // 非线性压缩/增益曲线
-            let processed;
-            if (abs < 0.1) {
-                // 保持小信号完整性
-                processed = sample * audioSettings.voiceEnhancement.gain * 0.8;
-            } else if (abs < 0.4) {
-                // 中等信号增强
-                processed = sign * (Math.pow(abs, 0.8) * audioSettings.voiceEnhancement.gain);
-            } else {
-                // 大信号软饱和压缩
-                const compressed = sign * (1.0 - Math.exp(-(abs - 0.4) * 2));
-                processed = sign * (Math.min(abs * 0.9, compressed) * audioSettings.voiceEnhancement.gain);
-            }
-            
-            // 应用清晰度处理 - 通过增强瞬态
-            if (i > 0) {
-                const diff = Math.abs(enhancedData[i] - enhancedData[i-1]);
-                const clarityBoost = diff * audioSettings.voiceEnhancement.clarity * 0.5;
-                processed += clarityBoost * sign;
-            }
-            
-            // 确保结果在[-1, 1]范围内
-            enhancedData[i] = Math.max(-1, Math.min(1, processed));
-        }
+    // 提取音频样本
+    for (let i = 0; i < buffer.length / 2; i++) {
+      floatData[i] = buffer.readInt16LE(i * 2) / 32768.0;
     }
     
-    // 2. 应用均衡器
-    if (audioSettings.equalizer.enabled) {
-        // 简化的均衡器实现 - 在实际项目中应使用FFT或滤波器组实现
-        // 这里使用简单的峰值检测和增强
-        
-        // 简单的峰值增强
-        for (let i = 0; i < enhancedData.length; i++) {
-            // 人声范围加强 (模拟均衡效果)
-            enhancedData[i] *= 1.2; // 整体提升20%
-            
-            // 确保结果在[-1, 1]范围内
-            enhancedData[i] = Math.max(-1, Math.min(1, enhancedData[i]));
-        }
+    // 简单的音频增强：增益和柔化处理
+    for (let i = 0; i < floatData.length; i++) {
+      // 增益调整
+      floatData[i] *= 1.5;
+      
+      // 软限幅
+      floatData[i] = Math.tanh(floatData[i]);
     }
     
-    // 3. 最终处理 - 轻微饱和度压缩以避免过载
-    for (let i = 0; i < enhancedData.length; i++) {
-        // 软饱和度压缩 (tanh函数模拟)
-        enhancedData[i] = Math.tanh(enhancedData[i] * 0.95);
+    // 转换回Buffer
+    const resultBuffer = Buffer.alloc(floatData.length * 2);
+    for (let i = 0; i < floatData.length; i++) {
+      resultBuffer.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(floatData[i] * 32768))), i * 2);
     }
     
-    return enhancedData;
-}
-
+    return resultBuffer;
+  }
+  
 /**
  * 实时音频流传输函数
  * @returns {Promise<void>}
@@ -372,10 +263,33 @@ async function streamAudio() {
     let streamRecordingFile = null;
     let streamOutputFile = null;
     
+    // 查找conferenceId参数
+    let conferenceId = null;
+    const confIdIndex = args.indexOf('-conferenceId');
+    if (confIdIndex !== -1 && args.length > confIdIndex + 1) {
+        conferenceId = args[confIdIndex + 1];
+        console.error(`指定会议ID: ${conferenceId}`);
+    }
+    
     if (canSaveFiles && recordingsDir) {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const uniqueId = Math.random().toString(36).substring(2, 10);
-        streamRecordingFile = path.join(recordingsDir, `stream_${timestamp}_${uniqueId}.wav`);
+        // 获取当前日期时间并格式化为YYYY-MM-DD_HH-MM-SS
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const formattedTimestamp = `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
+        
+        // 按照要求的格式创建文件名：stream_conference_会议ID_时间戳.wav
+        if (conferenceId) {
+            streamRecordingFile = path.join(recordingsDir, `stream_conference_${conferenceId}_${formattedTimestamp}.wav`);
+        } else {
+            // 如果没有会议ID，则使用随机ID
+            const uniqueId = Math.random().toString(36).substring(2, 10);
+            streamRecordingFile = path.join(recordingsDir, `stream_conference_${uniqueId}_${formattedTimestamp}.wav`);
+        }
         
         try {
             // 创建WAV文件和写入头部 - 使用校准后的采样率
@@ -399,14 +313,6 @@ async function streamAudio() {
             console.error(`尝试连接到WebSocket服务器: ${wsUrl}`);
             
             const ws = new WebSocket(wsUrl);
-            
-            // 查找conferenceId参数
-            let conferenceId = null;
-            const confIdIndex = args.indexOf('-conferenceId');
-            if (confIdIndex !== -1 && args.length > confIdIndex + 1) {
-                conferenceId = args[confIdIndex + 1];
-                console.error(`指定会议ID: ${conferenceId}`);
-            }
             
             // 跟踪发送的数据包序号
             let sequenceNumber = 0;
@@ -983,7 +889,18 @@ async function recordAudio(seconds) {
                             const completeAudio = Buffer.concat([header, finalAudioData]);
                             
                             // 生成一个虚拟文件名以供识别
-                            const virtualFilename = `virtual_recording_${Date.now()}_${Math.random().toString(36).substring(2, 10)}.wav`;
+                            // 获取当前日期时间并格式化为YYYY-MM-DD_HH-MM-SS
+                            const now = new Date();
+                            const year = now.getFullYear();
+                            const month = String(now.getMonth() + 1).padStart(2, '0');
+                            const day = String(now.getDate()).padStart(2, '0');
+                            const hours = String(now.getHours()).padStart(2, '0');
+                            const minutes = String(now.getMinutes()).padStart(2, '0');
+                            const seconds = String(now.getSeconds()).padStart(2, '0');
+                            const formattedTimestamp = `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
+                            
+                            const uniqueId = Math.random().toString(36).substring(2, 10);
+                            const virtualFilename = `virtual_conference_${uniqueId}_${formattedTimestamp}.wav`;
                             
                             // 直接将缓冲区转换为base64
                             const base64Data = completeAudio.toString('base64');

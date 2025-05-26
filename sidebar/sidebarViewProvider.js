@@ -1763,7 +1763,7 @@ class LingxiSidebarProvider {
                         try {
                             // 使用扩展上下文路径找到服务器脚本
                             // 构建服务器脚本的绝对路径
-                            const serverPath = path.join(this._context.extensionPath, 'agent', message.serverPath || 'server.js');
+                            const serverPath = path.join(this._context.extensionPath, 'agent', 'server.js');
                             
                             console.log(`正在启动MCP服务器，脚本路径: ${serverPath}`);
                             

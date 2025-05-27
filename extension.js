@@ -829,6 +829,8 @@ async function activate(context) {
             
             // 生成输出文件名（使用会议ID）
             const outputFileName = `meeting_${selectedConference.conferenceId}_transcript.txt`;
+            console.log(11111111111);
+            console.log(outputFileName);
             const outputPath = path.join(outputDir, outputFileName);
             
             // 创建或清空输出文件

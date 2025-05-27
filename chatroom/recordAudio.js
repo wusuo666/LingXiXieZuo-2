@@ -369,8 +369,8 @@ async function streamAudio(canSaveFiles, recordingsDir) {
         
         // 按照要求的格式创建文件名：stream_conference_会议ID_时间戳.wav
         if (conferenceId) {
-            streamRecordingFile = path.join(recordingsDir, `stream_conference_${conferenceId}_${formattedTimestamp}.wav`);
-            console.error(`将保存流音频到: ${streamRecordingFile}`,`stream_conference_${conferenceId}_${formattedTimestamp}.wav`);
+            streamRecordingFile = path.join(recordingsDir, `stream_${conferenceId}_${formattedTimestamp}.wav`);
+            console.error(`将保存流音频到: ${streamRecordingFile}`,`stream_${conferenceId}_${formattedTimestamp}.wav`);
         } else {
             // 如果没有会议ID，则使用随机ID
             const uniqueId = Math.random().toString(36).substring(2, 10);

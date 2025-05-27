@@ -114,6 +114,13 @@ const streamMode = args.includes('-stream');
 let serverPort = 3000; // 默认WebSocket服务器端口
 let serverAddress = 'localhost'; // 默认地址
 
+// 解析服务器地址参数
+const addressIndex = args.indexOf('-address');
+if (addressIndex !== -1 && args.length > addressIndex + 1) {
+    serverAddress = args[addressIndex + 1];
+    console.error(`使用指定服务器地址: ${serverAddress}`);
+}
+
 // 处理音频质量参数
 const qualityIndex = args.indexOf('-quality');
 if (qualityIndex !== -1 && args.length > qualityIndex + 1) {

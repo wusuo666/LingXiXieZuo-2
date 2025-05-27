@@ -135,13 +135,11 @@ class LingxiSidebarProvider {
                             break;
                             
                         case 'audioMessage':
-                            // 处理语音消息
-                            if (this._webviewView) {
+                            // 处理所有语音消息，包括当前用户自己发送的
                                 this._webviewView.webview.postMessage({
                                     command: 'addAudioMessage',
-                                    message: message
+                                message
                                 });
-                            }
                             break;
                             
                         case 'privateMessage':
@@ -967,18 +965,7 @@ class LingxiSidebarProvider {
                     message
                 });
             } else if (message.type === 'audioMessage') {
-                // 检查是否为当前用户发送的语音消息
-                const isFromCurrentUser = message.sender && 
-                                         message.sender.id && 
-                                         this._userId && 
-                                         message.sender.id === this._userId;
-                
-                if (isFromCurrentUser) {
-                    console.log('已忽略当前用户自己发送的语音消息:', message.id);
-                    return; // 不向前端发送当前用户自己的语音消息
-                }
-                
-                // 处理其他用户的语音消息
+                // 处理所有语音消息，包括当前用户自己发送的
                 this._webviewView.webview.postMessage({
                     command: 'addAudioMessage',
                     message

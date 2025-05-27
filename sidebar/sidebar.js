@@ -16,6 +16,16 @@ let echoCancellationEnabled = true; // 默认启用回声消除
 var isStreamingAudio = false;      // 音频流状态
 var audioSourceNodes = new Map();  // 活动音频源映射
 var conferenceParticipants = [];   // 内部状态数组（不再显示）
+var recordingTimer = null;           // 计时器句柄
+var currentAudioEl = null;           // 当前正在播放的音频元素
+var isListening = false;             // 麦克风状态
+var isPlayingAudioStream = false;    // 是否正在播放音频流
+var audioContext = null;             // 音频上下文
+var audioSourceNode = null;          // 音频源节点
+var audioStreamPlayers = {};         // 音频流播放器
+var canJoinConference = true;        // 是否可以加入会议
+var currentConferenceId = null;      // 当前会议ID
+var audioProcessor = null;           // WebWorker音频处理器
 
 /**
  * 侧边栏主逻辑初始化
@@ -242,13 +252,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // 处理录音结果
         if (message.command === 'audioRecordResult') {
-            const { success, audioData, duration, error } = message;
+            const { success, audioData, duration, error, audioFilename } = message;
+            
+            console.log('收到录音结果:', { 
+                success, 
+                hasAudioData: !!audioData, 
+                duration, 
+                hasError: !!error,
+                audioFilename
+            });
+            
+            // 停止UI更新
+            if (recordingTimer) {
+                clearInterval(recordingTimer);
+                recordingTimer = null;
+            }
+            
+            // 更新UI状态
+            isRecording = false;
+            voiceRecordBtn.classList.remove('recording');
+            voiceRecordTimer.style.display = 'none';
             
             if (success && audioData) {
                 // 获取语音文件名
-                let audioFilename = null;
-                if (message.audioFilename) {
-                    audioFilename = message.audioFilename;
+                let finalAudioFilename = audioFilename;
+                if (finalAudioFilename) {
                     // 创建或更新全局audioFileMap，用于保存语音消息ID和文件名的映射
                     if (!window.audioFileMap) {
                         window.audioFileMap = {};
@@ -256,21 +284,37 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // 创建具有唯一性的消息ID，使用文件名的一部分确保唯一性
                     // 从文件名中提取唯一部分 (格式为 recording_YYYY-MM-DDThh-mm-ss-mmmZ_uniqueId.wav)
-                    const uniquePart = audioFilename.split('_').slice(2).join('_').replace('.wav', '');
+                    const uniquePart = finalAudioFilename.split('_').slice(2).join('_').replace('.wav', '');
                     const messageId = `audio_${uniquePart}`;
                     
                     // 将文件名与生成的消息ID一起保存，确保一一对应
-                    window.audioFileMap[messageId] = audioFilename;
+                    window.audioFileMap[messageId] = finalAudioFilename;
                     
                     // 将文件名和消息ID暂存，当消息发送后会与消息一起使用
-                    window.lastRecordedAudioFilename = audioFilename;
+                    window.lastRecordedAudioFilename = finalAudioFilename;
                     window.lastRecordedMessageId = messageId;
                     
                     console.log('记录语音文件映射:', {
                         messageId,
-                        filename: audioFilename,
+                        filename: finalAudioFilename,
                         时间: new Date().toLocaleTimeString()
                     });
+                } else {
+                    // 如果没有文件名，生成一个
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const uniqueId = Math.random().toString(36).substring(2, 10);
+                    finalAudioFilename = `recording_${timestamp}_${uniqueId}.wav`;
+                    
+                    // 创建消息ID
+                    const messageId = `audio_${uniqueId}`;
+                    
+                    // 保存映射
+                    if (!window.audioFileMap) {
+                        window.audioFileMap = {};
+                    }
+                    window.audioFileMap[messageId] = finalAudioFilename;
+                    window.lastRecordedAudioFilename = finalAudioFilename;
+                    window.lastRecordedMessageId = messageId;
                 }
                 
                 // 发送语音消息，包含录音文件名和消息ID，确保包含当前用户ID
@@ -278,7 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     command: 'sendAudioMessage',
                     audioData: audioData,
                     duration: duration || Math.round((Date.now() - recordingStartTime) / 1000),
-                    audioFilename: audioFilename,
+                    audioFilename: finalAudioFilename,
                     messageId: window.lastRecordedMessageId,
                     userId: currentUserId // 确保包含当前用户ID
                 });
@@ -388,15 +432,26 @@ document.addEventListener('DOMContentLoaded', function() {
     // 开始录制语音消息
     async function startVoiceRecording() {
         try {
+            // 如果已经在录音中，先停止
+            if (isRecording) {
+                console.log('已经在录音中，将先停止当前录音');
+                stopVoiceRecording();
+                // 设置一个短暂的延迟，确保之前的录音已经停止
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                return; // 注意：这里直接返回，不开始新的录音，这样实现单击切换功能
+            }
+            
             isRecording = true;
             voiceRecordBtn.classList.add('recording');
             voiceRecordTimer.style.display = 'block';
             recordingStartTime = Date.now();
             
-            // 更新计时器显示
-            updateRecordingTimer();
+            // 使用setInterval更新计时器显示，而不是在updateRecordingTimer内部设置
+            if (!recordingTimer) {
+                recordingTimer = setInterval(updateRecordingTimer, 100); // 每秒更新一次
+            }
             
-            // 通过VSCode命令调用外部录音脚本
+            // 通过VSCode命令调用开始录音命令
             vscode.postMessage({
                 command: 'executeCommand',
                 commandId: 'lingxixiezuo.recordAudio'
@@ -416,16 +471,40 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 停止录制语音消息
     function stopVoiceRecording() {
-        // 不需要实际停止录音，因为外部脚本会自动停止
-        isRecording = false;
+        if (!isRecording) {
+            console.log('没有在录音中，无需停止');
+            return; // 如果没有在录音中，直接返回
+        }
         
-        // 停止计时器
-        clearTimeout(recordingTimer);
-        recordingTimer = null;
+        console.log('停止录音');
         
         // 更新UI
         voiceRecordBtn.classList.remove('recording');
         voiceRecordTimer.style.display = 'none';
+        
+        // 计算录音时长（以秒为单位）
+        const recordDuration = Math.round((Date.now() - recordingStartTime) / 1000);
+        console.log(`录音时长: ${recordDuration}秒`);
+        
+        // 保存录音结束标志，但不立即重置isRecording，等待录音结果返回后再重置
+        const wasRecording = isRecording;
+        isRecording = false;
+        
+        // 停止计时器
+        if (recordingTimer) {
+            clearInterval(recordingTimer);
+            recordingTimer = null;
+        }
+        
+        // 通过VSCode命令调用停止录音命令
+        if (wasRecording) {
+            vscode.postMessage({
+                command: 'executeCommand',
+                commandId: 'lingxixiezuo.stopRecordAudio'
+            });
+            
+            console.log('已发送停止录音命令');
+        }
     }
 
     document.querySelectorAll('.tab-button').forEach(btn => {
@@ -2623,15 +2702,6 @@ function updateRecordingTimer() {
         `${minutes.toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
     
     voiceRecordTimer.textContent = formattedTime;
-    
-    // 如果录制时间超过1分钟，自动停止
-    if (seconds >= 60) {
-        stopVoiceRecording();
-        return;
-    }
-    
-    // 每100毫秒更新一次计时器
-    recordingTimer = setTimeout(updateRecordingTimer, 100);
 }
 
 /**

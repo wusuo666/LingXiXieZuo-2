@@ -8,107 +8,10 @@ const WebSocket = require('ws');
 const WavEncoder = require('wav-encoder');
 const WavDecoder = require('wav-decoder');
 const AudioBuffer = require('audio-buffer');
+const os = require('os');
 
-// 全局音频处理设置
-const audioSettings = {
-    sampleRate: 44100,      // 采样率
-    numChannels: 1,         // 通道数
-    bitsPerSample: 16,      // 采样位深
-    // 音频增强设置
-    enhancementEnabled: true,   // 整体增强开关
-    voiceEnhancement: {
-        enabled: true,
-        gain: 1.5,         // 语音增益
-        clarity: 1.3       // 清晰度调整
-    },
-    // 均衡器设置 - 针对人声频率增强
-    equalizer: {
-        enabled: true,
-        // 人声增强均衡器 (单位为dB)
-        bands: [
-            { frequency: 100, gain: 1.0 },   // 低频
-            { frequency: 250, gain: 1.5 },   // 低中频 - 温暖度
-            { frequency: 800, gain: 2.0 },   // 中频 - 人声基频
-            { frequency: 2000, gain: 2.5 },  // 中高频 - 清晰度
-            { frequency: 4000, gain: 2.0 },  // 高频 - 明亮度
-            { frequency: 8000, gain: 1.0 }   // 超高频
-        ]
-    },
-    // 实际音频采集校准系数 - 根据实验校准
-    calibrationFactor: 1.35,  // 理论时长与实际时长的比例因子
-    // 回声消除设置
-    echoCancellation: {
-        enabled: true,       // 启用回声消除
-        strength: 0.9        // 回声消除强度（0-1）
-    },
-    // 噪声抑制设置
-    noiseSuppression: {
-        enabled: true,       // 启用噪声抑制
-        threshold: 0.05,     // 噪声阈值
-        reduction: 0.7       // 噪声抑制强度
-    }
-};
-
-// 检查命令行参数
-const args = process.argv.slice(2);
-const streamMode = args.includes('-stream');
-let serverPort = 3000; // 默认WebSocket服务器端口
-let serverAddress = 'localhost'; // 默认地址
-
-// 处理音频质量参数
-const qualityIndex = args.indexOf('-quality');
-if (qualityIndex !== -1 && args.length > qualityIndex + 1) {
-    const quality = args[qualityIndex + 1];
-    if (quality === 'high') {
-        // 高质量设置
-        audioSettings.voiceEnhancement.gain = 1.7;
-        audioSettings.voiceEnhancement.clarity = 2.0;
-        audioSettings.equalizer.bands[2].gain = 2.5; // 增强人声基频
-        audioSettings.equalizer.bands[3].gain = 3.0; // 更多清晰度
-        console.error(`使用高质量音频设置`);
-    } else if (quality === 'low') {
-        // 低质量设置 - 减少处理以节省资源
-        audioSettings.voiceEnhancement.enabled = false;
-        audioSettings.equalizer.enabled = true;
-        audioSettings.equalizer.bands = audioSettings.equalizer.bands.map(band => {
-            return { ...band, gain: Math.min(band.gain, 1.5) };
-        });
-        console.error(`使用低质量音频设置`);
-    }
-    console.error(`音频质量设置为: ${quality}`);
-}
-
-// 如果是流模式，解析端口和地址
-if (streamMode) {
-    // 查找端口参数
-    const portIndex = args.indexOf('-port');
-    if (portIndex !== -1 && args.length > portIndex + 1) {
-        serverPort = parseInt(args[portIndex + 1], 10);
-    }
-    
-    // 查找地址参数
-    const addressIndex = args.indexOf('-address');
-    if (addressIndex !== -1 && args.length > addressIndex + 1) {
-        serverAddress = args[addressIndex + 1];
-    }
-    
-    console.error(`音频流模式启动，服务器: ${serverAddress}:${serverPort}`);
-}
-
-// 如果不是流模式，按原来的逻辑处理录音时长参数
-const duration = streamMode ? 0 : parseInt(args[0] || '5', 10);
-
-// 确保recordings文件夹存在
-// 尝试获取工作区根目录
-let recordingsDir = null;
-let canSaveFiles = false;
-
-// 打印接收到的命令行参数，用于调试
-console.error('接收到的命令行参数:', process.argv);
-console.error('处理后的args:', args);
-
-// 多种方式尝试获取工作区路径
-const getWorkspacePath = () => {
+// 提前定义getWorkspacePath函数，使用函数声明而不是函数表达式
+function getWorkspacePath(args) {
     // 方法1: 从命令行参数获取
     const workspacePathIndex = args.indexOf('-workspace');
     if (workspacePathIndex !== -1 && args.length > workspacePathIndex + 1) {
@@ -159,57 +62,202 @@ const getWorkspacePath = () => {
     // 如果获取路径失败
     console.error('无法确定工作区路径');
     return null;
+}
+
+// 全局音频处理设置
+const audioSettings = {
+    sampleRate: 44100,      // 采样率
+    numChannels: 1,         // 通道数
+    bitsPerSample: 16,      // 采样位深
+    // 音频增强设置
+    enhancementEnabled: true,   // 整体增强开关
+    voiceEnhancement: {
+        enabled: true,
+        gain: 1.5,         // 语音增益
+        clarity: 1.3       // 清晰度调整
+    },
+    // 均衡器设置 - 针对人声频率增强
+    equalizer: {
+        enabled: true,
+        // 人声增强均衡器 (单位为dB)
+        bands: [
+            { frequency: 100, gain: 1.0 },   // 低频
+            { frequency: 250, gain: 1.5 },   // 低中频 - 温暖度
+            { frequency: 800, gain: 2.0 },   // 中频 - 人声基频
+            { frequency: 2000, gain: 2.5 },  // 中高频 - 清晰度
+            { frequency: 4000, gain: 2.0 },  // 高频 - 明亮度
+            { frequency: 8000, gain: 1.0 }   // 超高频
+        ]
+    },
+    // 实际音频采集校准系数 - 根据实验校准
+    calibrationFactor: 1.35,  // 理论时长与实际时长的比例因子
+    // 回声消除设置
+    echoCancellation: {
+        enabled: true,       // 启用回声消除
+        strength: 0.9        // 回声消除强度（0-1）
+    },
+    // 噪声抑制设置
+    noiseSuppression: {
+        enabled: true,       // 启用噪声抑制
+        threshold: 0.05,     // 噪声阈值
+        reduction: 0.7       // 噪声抑制强度
+    }
 };
 
-try {
-    // 获取工作区路径
-    const workspacePath = getWorkspacePath();
-    
-    if (workspacePath) {
-        recordingsDir = path.join(workspacePath, 'recordings');
-        canSaveFiles = true;
-        console.error(`使用工作区路径: ${workspacePath}`);
-        
-        // 确保recordings文件夹存在
-        if (!fs.existsSync(recordingsDir)) {
-            fs.mkdirSync(recordingsDir, { recursive: true });
-            console.error(`创建recordings文件夹: ${recordingsDir}`);
-        }
-        
-        // 测试文件夹写入权限
-        try {
-            const testFilePath = path.join(recordingsDir, 'test.txt');
-            fs.writeFileSync(testFilePath, 'test', { flag: 'w' });
-            console.error(`测试文件写入成功: ${testFilePath}`);
-            // 成功创建测试文件后删除它
-            fs.unlinkSync(testFilePath);
-            console.error('测试文件已删除');
-            // 确认可以写入
-            canSaveFiles = true;
-        } catch (writeErr) {
-            console.error(`测试文件写入失败，没有写入权限: ${writeErr}`);
-            canSaveFiles = false;
-        }
-    } else {
-        console.error('未提供有效的工作区路径，音频将不会被保存到文件');
-        canSaveFiles = false;
+// 状态和命令文件路径
+const recordingStatusFile = path.join(os.tmpdir(), 'audio_recording_status.json');
+const stopCommandFile = path.join(os.tmpdir(), 'audio_recording_stop_command');
+
+// 检查命令行参数
+const args = process.argv.slice(2);
+const streamMode = args.includes('-stream');
+let serverPort = 3000; // 默认WebSocket服务器端口
+let serverAddress = 'localhost'; // 默认地址
+
+// 处理音频质量参数
+const qualityIndex = args.indexOf('-quality');
+if (qualityIndex !== -1 && args.length > qualityIndex + 1) {
+    const quality = args[qualityIndex + 1];
+    if (quality === 'high') {
+        // 高质量设置
+        audioSettings.voiceEnhancement.gain = 1.7;
+        audioSettings.voiceEnhancement.clarity = 2.0;
+        audioSettings.equalizer.bands[2].gain = 2.5; // 增强人声基频
+        audioSettings.equalizer.bands[3].gain = 3.0; // 更多清晰度
+        console.error(`使用高质量音频设置`);
+    } else if (quality === 'low') {
+        // 低质量设置 - 减少处理以节省资源
+        audioSettings.voiceEnhancement.enabled = false;
+        audioSettings.equalizer.enabled = true;
+        audioSettings.equalizer.bands = audioSettings.equalizer.bands.map(band => {
+            return { ...band, gain: Math.min(band.gain, 1.5) };
+        });
+        console.error(`使用低质量音频设置`);
     }
-} catch (error) {
-    console.error('处理工作区路径时出错:', error);
-    canSaveFiles = false;
+    console.error(`音频质量设置为: ${quality}`);
 }
 
-// 音频文件路径（仅用于录音模式且有有效工作区）
-let savedWavFile;
-if (!streamMode && canSaveFiles && recordingsDir) {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    // 添加随机字符串确保唯一性
-    const uniqueId = Math.random().toString(36).substring(2, 10);
-    savedWavFile = path.join(recordingsDir, `recording_${timestamp}_${uniqueId}.wav`);
-    console.error(`将保存录音文件: ${savedWavFile}`);
-} else if (!streamMode) {
-    console.error('未检测到有效工作区或无写入权限，录音将不会被保存到文件');
+// 根据模式执行不同的功能
+if (streamMode) {
+    // 初始化所有必要的变量，再调用startRecording
+    // 确保recordings文件夹存在
+    // 尝试获取工作区根目录
+    let recordingsDir = null;
+    let canSaveFiles = false;
+
+    // 打印接收到的命令行参数，用于调试
+    console.error('接收到的命令行参数:', process.argv);
+    console.error('处理后的args:', args);
+
+    // 多种方式尝试获取工作区路径
+    const workspacePath = getWorkspacePath(args);
+    
+    // 执行音频流传输
+    streamAudio(canSaveFiles, recordingsDir)
+        .then(() => {
+            console.error('音频流传输已完成');
+            process.exit(0);
+        })
+        .catch(error => {
+            console.error('音频流传输失败:', error);
+            process.exit(1);
+        });
+} else {
+    // 检查是否为start或stop命令
+    const command = args[0];
+    
+    if (command === 'start') {
+        console.error('启动无限制录音模式');
+        
+        // 创建录音状态文件
+        try {
+            const statusData = {
+                pid: process.pid,
+                startTime: Date.now(),
+                workspacePath: args[1] || ''
+            };
+            
+            fs.writeFileSync(recordingStatusFile, JSON.stringify(statusData));
+            console.error(`已创建录音状态文件: ${recordingStatusFile}`);
+        } catch (error) {
+            console.error(`创建录音状态文件失败: ${error.message}`);
+            process.exit(1);
+        }
+        
+        // 初始化所有必要的变量，再调用startRecording
+        // 确保recordings文件夹存在
+        // 尝试获取工作区根目录
+        let recordingsDir = null;
+        let canSaveFiles = false;
+
+        // 打印接收到的命令行参数，用于调试
+        console.error('接收到的命令行参数:', process.argv);
+        console.error('处理后的args:', args);
+
+        // 多种方式尝试获取工作区路径
+        const workspacePath = getWorkspacePath(args);
+    
+        if (workspacePath) {
+            recordingsDir = path.join(workspacePath, 'recordings');
+            canSaveFiles = true;
+            console.error(`使用工作区路径: ${workspacePath}`);
+            
+            // 确保recordings文件夹存在
+            if (!fs.existsSync(recordingsDir)) {
+                fs.mkdirSync(recordingsDir, { recursive: true });
+                console.error(`创建recordings文件夹: ${recordingsDir}`);
+            }
+            
+            // 测试文件夹写入权限
+            try {
+                const testFilePath = path.join(recordingsDir, 'test.txt');
+                fs.writeFileSync(testFilePath, 'test', { flag: 'w' });
+                console.error(`测试文件写入成功: ${testFilePath}`);
+                // 成功创建测试文件后删除它
+                fs.unlinkSync(testFilePath);
+                console.error('测试文件已删除');
+                // 确认可以写入
+                canSaveFiles = true;
+            } catch (writeErr) {
+                console.error(`测试文件写入失败，没有写入权限: ${writeErr}`);
+                canSaveFiles = false;
+            }
+        } else {
+            console.error('未提供有效的工作区路径，音频将不会被保存到文件');
+        canSaveFiles = false;
+    }
+
+    // 音频文件路径（仅用于录音模式且有有效工作区）
+    let savedWavFile;
+            if (canSaveFiles && recordingsDir) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        // 添加随机字符串确保唯一性
+        const uniqueId = Math.random().toString(36).substring(2, 10);
+        savedWavFile = path.join(recordingsDir, `recording_${timestamp}_${uniqueId}.wav`);
+        console.error(`将保存录音文件: ${savedWavFile}`);
+            } else {
+        console.error('未检测到有效工作区或无写入权限，录音将不会被保存到文件');
+    }
+        
+        // 现在所有变量都初始化好了，可以安全地调用startRecording
+        startRecording(canSaveFiles, recordingsDir, savedWavFile);
+    } else if (command === 'stop') {
+        console.error('执行停止录音命令');
+        stopRecording();
+    }
 }
+
+// 确保recordings文件夹存在
+// 尝试获取工作区根目录
+let recordingsDir = null;
+let canSaveFiles = false;
+
+// 打印接收到的命令行参数，用于调试
+console.error('接收到的命令行参数:', process.argv);
+console.error('处理后的args:', args);
+
+// 多种方式尝试获取工作区路径
+const workspacePath = getWorkspacePath(args);
 
 // 简化的音频增强
 function enhanceAudioData(audioData) {
@@ -245,7 +293,7 @@ function enhanceAudioData(audioData) {
  * 实时音频流传输函数
  * @returns {Promise<void>}
  */
-async function streamAudio() {
+async function streamAudio(canSaveFiles, recordingsDir) {
     console.error('开始音频流传输...');
 
     console.error('流模式参数检查:');
@@ -640,46 +688,95 @@ async function streamAudio() {
 }
 
 /**
- * 录制音频的函数
- * @param {number} seconds 录制时长(秒)
- * @returns {Promise<Object>} 返回包含音频文件的base64编码和文件名的对象
+ * 无限制录音函数 - 开始录音直到收到停止命令
  */
-async function recordAudio(seconds) {
-    console.error(`开始录制音频，时长${seconds}秒...`);
+async function startRecording(canSaveFiles, recordingsDir, savedWavFile) {
+    console.error(`开始无限制录音...`);
     
-    return new Promise((resolve, reject) => {
-        try {
-            // 创建输出文件流（如果可以保存文件）
+    // 调试变量
+    console.error(`调试: canSaveFiles=${canSaveFiles}, recordingsDir=${recordingsDir}, savedWavFile=${savedWavFile}`);
+    
+    // 删除可能存在的旧停止命令文件
+    try {
+        if (fs.existsSync(stopCommandFile)) {
+            fs.unlinkSync(stopCommandFile);
+            console.error('删除旧的停止命令文件');
+        }
+    } catch (error) {
+        console.error(`删除旧停止命令文件失败: ${error.message}`);
+    }
+    
+    // 设置信号处理，用于接收停止信号
+    process.on('SIGTERM', () => {
+        console.error('收到SIGTERM信号，停止录音');
+        finishRecording();
+    });
+    
+    process.on('SIGINT', () => {
+        console.error('收到SIGINT信号，停止录音');
+        finishRecording();
+    });
+    
+    // 创建自定义信号用于内部通信
+    process.on('message', (msg) => {
+        if (msg === 'stop') {
+            console.error('收到停止录音消息');
+            finishRecording();
+        }
+    });
+    
+    // 添加调试输出，确保这些变量已经被初始化
+    console.error(`调试: canSaveFiles=${canSaveFiles}, recordingsDir=${recordingsDir}, savedWavFile=${savedWavFile}`);
+    
             let outputFile = null;
+    try {
             if (canSaveFiles && savedWavFile) {
+            console.error(`尝试创建输出文件: ${savedWavFile}`);
                 outputFile = fs.createWriteStream(savedWavFile);
                 outputFile.write(createWavHeader());
                 console.error(`将录音保存到: ${savedWavFile}`);
-            } else {
-                console.error('不保存录音文件，只处理音频数据');
+        }
+    } catch (fileError) {
+        console.error(`创建输出文件失败: ${fileError.message}`);
+        console.error(`错误堆栈: ${fileError.stack}`);
             }
             
             // 记录数据大小，用于后续更新头部
             let dataSize = 0;
             
             // 初始化麦克风
-            const mic = new Mic();
+    let mic = null;
+    try {
+        console.error("尝试初始化麦克风...");
+        mic = new Mic();
             console.error("麦克风已初始化，请开始说话...");
+    } catch (micError) {
+        console.error(`麦克风初始化失败: ${micError.message}`);
+        console.error(`错误堆栈: ${micError.stack}`);
+        if (outputFile) outputFile.end();
+        console.log(JSON.stringify({
+            success: false,
+            error: `麦克风初始化失败: ${micError.message}`
+        }));
+        process.exit(1);
+    }
             
             // 处理收集的音频数据段
             let audioChunks = [];
             
             // 用于跟踪实际录音开始的时间
             let recordingStartTime = null;
+    let micStream = null;
             
-            // 确保我们录制足够的时间
-            const targetDuration = seconds * 1000; // 目标时长(毫秒)
-            
+    try {
             // 开始录音
-            const micStream = mic.startRecording();
+        console.error("尝试启动录音流...");
+        micStream = mic.startRecording();
+        console.error("录音流启动成功");
             
-            // 数据处理
+        // 数据处理逻辑与原有代码保持一致
             micStream.on('data', (data) => {
+            try {
                 // 第一次收到数据时开始计时
                 if (recordingStartTime === null) {
                     recordingStartTime = Date.now();
@@ -689,52 +786,103 @@ async function recordAudio(seconds) {
                 dataSize += data.length;
                 // 存储音频段，稍后处理
                 audioChunks.push(data);
+                
+                // 定期记录数据大小
+                if (audioChunks.length % 10 === 0) {
+                    console.error(`已收集 ${audioChunks.length} 个音频数据块，总大小: ${dataSize} 字节`);
+                }
+            } catch (dataError) {
+                console.error(`处理音频数据块时出错: ${dataError.message}`);
+                console.error(`错误堆栈: ${dataError.stack}`);
+            }
             });
             
             // 错误处理
             micStream.on('error', (err) => {
-                console.error('录音错误:', err);
+            console.error(`录音流错误: ${err.message}`);
+            console.error(`错误堆栈: ${err.stack || '无堆栈信息'}`);
+            try {
                 mic.stopRecording();
                 if (outputFile) outputFile.end();
-                reject(err);
+            } catch (stopError) {
+                console.error(`停止录音时出错: ${stopError.message}`);
+            }
+            console.error(JSON.stringify({
+                success: false,
+                error: err.message
+            }));
+            process.exit(1);
             });
-            
-            // 使用递归检查函数，确保录制足够的时间
-            const checkRecordingDuration = () => {
-                // 如果还没开始收到数据，继续等待
-                if (recordingStartTime === null) {
-                    console.error('等待麦克风开始收集数据...');
-                    setTimeout(checkRecordingDuration, 100);
-                    return;
-                }
-                
-                // 计算已经录制的时间
-                const elapsedTime = Date.now() - recordingStartTime;
-                
-                // 如果还没达到目标时长，继续等待
-                if (elapsedTime < targetDuration) {
-                    const remaining = targetDuration - elapsedTime;
-                    console.error(`已录制 ${elapsedTime}ms，还需 ${remaining}ms 达到目标 ${targetDuration}ms`);
-                    setTimeout(checkRecordingDuration, Math.min(remaining, 1000));
-                    return;
-                }
-                
-                // 达到目标时长，完成录音
-                console.error(`录音已达到目标时长 ${targetDuration}ms，实际录制了 ${elapsedTime}ms`);
+    } catch (streamError) {
+        console.error(`创建录音流失败: ${streamError.message}`);
+        console.error(`错误堆栈: ${streamError.stack}`);
+        if (outputFile) outputFile.end();
+        console.log(JSON.stringify({
+            success: false,
+            error: `创建录音流失败: ${streamError.message}`
+        }));
+        process.exit(1);
+    }
+    
+    // 设置周期性检查停止命令文件的定时器
+    const stopFileCheckInterval = setInterval(() => {
+        try {
+            if (fs.existsSync(stopCommandFile)) {
+                console.error('检测到停止命令文件，停止录音');
+                clearInterval(stopFileCheckInterval);
                 finishRecording();
-            };
-            
-            // 完成录音的函数
-            const finishRecording = async () => {
+            }
+        } catch (error) {
+            console.error(`检查停止命令文件时出错: ${error.message}`);
+                }
+    }, 500); // 每500毫秒检查一次
+                
+    // 修改安全超时处理，确保清理定时器
+    const safetyTimeout = 3 * 60 * 1000; // 3分钟
+    const safetyTimeoutId = setTimeout(() => {
+        console.error('达到最大录音时长，自动停止');
+        clearInterval(stopFileCheckInterval);
+        finishRecording();
+    }, safetyTimeout);
+                
+    // 全局变量，用于在信号处理中访问
+    global.mic = mic;
+    global.audioChunks = audioChunks;
+    global.outputFile = outputFile;
+    global.recordingStartTime = recordingStartTime;
+    global.stopFileCheckInterval = stopFileCheckInterval;
+    global.safetyTimeoutId = safetyTimeoutId;
+    global.canSaveFiles = canSaveFiles;         // 添加这些变量到global
+    global.recordingsDir = recordingsDir;       // 添加这些变量到global
+    global.savedWavFile = savedWavFile;         // 添加这些变量到global
+    
+    // 完成录音的函数将在收到停止信号时调用
+    global.finishRecording = async () => {
+        console.error('finishRecording函数被调用');
+        
+        if (!recordingStartTime) {
+            console.error('录音尚未开始，取消操作');
+            process.exit(0);
+                    return;
+                }
+                
                 console.error('停止录音');
+        try {
                 mic.stopRecording();
+            console.error('麦克风录音已停止');
+        } catch (stopError) {
+            console.error(`停止麦克风录音失败: ${stopError.message}`);
+        }
                 
                 try {
+            // 这里可以保留原有的录音处理逻辑，确保与之前行为一致
                     // 合并所有音频段
+            console.error(`尝试合并 ${audioChunks.length} 个音频段...`);
                     const combinedAudio = Buffer.concat(audioChunks);
                     console.error(`收集到原始音频数据: ${combinedAudio.length} 字节`);
                     
                     // 应用音频增强
+            console.error('开始应用音频增强...');
                     const enhancedAudio = await enhanceAudioData(combinedAudio);
                     console.error(`音频增强处理完成，处理后大小: ${enhancedAudio.length} 字节`);
                     
@@ -748,196 +896,196 @@ async function recordAudio(seconds) {
                     // 应用校准 - 根据实际录制时长调整音频数据
                     const actualDuration = (Date.now() - recordingStartTime) / 1000; // 实际录制秒数
                     console.error(`实际录制时长: ${(actualDuration * 1000).toFixed(0)}ms (${actualDuration.toFixed(2)}秒)`);
+            
+            // 确保WAV头部信息正确
+            const header = createWavHeader();
+            // 更新头部信息
+            header.writeUInt32LE(enhancedAudio.length, 40); // 数据大小
+            header.writeUInt32LE(enhancedAudio.length + 36, 4); // 文件大小 - 8
+            // 创建完整的音频数据（头部+音频数据）
+            const completeAudio = Buffer.concat([header, enhancedAudio]);
+            // 转为base64
+            const base64Data = completeAudio.toString('base64');
+                        
+            // 保存文件处理
+            let audioBase64 = '';
+            let filesize = 0;
+            
+            if (outputFile && savedWavFile) {
+                try {
+                    // 写入WAV文件
+                    outputFile.write(completeAudio);
+                    outputFile.end();
+                    console.error('WAV文件写入完成');
                     
-                    // 获取用于写入WAV文件的音频数据
-                    let finalAudioData = enhancedAudio;
+                    // 更新WAV头
+                    updateWavHeader(savedWavFile, enhancedAudio.length);
                     
-                    // 如果理论时长与实际时长相差超过5%，尝试修正
-                    if (Math.abs(theoreticalDuration - actualDuration) / actualDuration > 0.05) {
-                        console.error(`检测到时长不匹配，尝试调整...`);
-                        
-                        // 方法1: 调整音频头部中的采样率，使得播放器正确解释音频时长
-                        // 这不会改变音频内容，只会影响播放器对时长的计算
-                        const adjustedSampleRate = Math.floor(audioSettings.sampleRate / audioSettings.calibrationFactor);
-                        console.error(`调整后的采样率: ${adjustedSampleRate}Hz (原始: ${audioSettings.sampleRate}Hz)`);
-                        
-                        // 如果可以保存文件，写入处理后的音频数据
-                        if (canSaveFiles && outputFile) {
-                            // 重要：关闭之前的输出流
-                            outputFile.end();
-                            
-                            // 创建完整的WAV文件（包括正确的头部）
-                            const wavHeader = createWavHeader(adjustedSampleRate);
-                            
-                            // 手动更新头部信息
-                            // 更新RIFF块大小 (文件大小 - 8)
-                            wavHeader.writeUInt32LE(finalAudioData.length + 36, 4);
-                            // 更新data块大小
-                            wavHeader.writeUInt32LE(finalAudioData.length, 40);
-                            
-                            // 写入完整文件（头部+音频数据）
-                            fs.writeFileSync(savedWavFile, Buffer.concat([wavHeader, finalAudioData]));
-                            
-                            // 重新计算理论时长（使用调整后的采样率）
-                            const adjustedBytesPerSecond = adjustedSampleRate * bytesPerSample;
-                            const adjustedDuration = finalAudioData.length / adjustedBytesPerSecond;
-                            console.error(`调整后的理论时长: ${(adjustedDuration * 1000).toFixed(0)}ms (${adjustedDuration.toFixed(2)}秒)`);
-                            
-                            console.error(`录音已完成，文件保存至: ${savedWavFile}`);
-                            
-                            // 提取文件名
-                            const filename = path.basename(savedWavFile);
-                            
-                            // 读取文件并转为base64
-                            fs.readFile(savedWavFile, (err, fileData) => {
-                                if (err) {
-                                    reject(err);
-                                    return;
-                                }
-                                
-                                const base64Data = fileData.toString('base64');
-                                resolve({
-                                    audioData: base64Data,
-                                    filename: filename,
-                                    enhanced: true,
-                                    durationMs: Math.round(actualDuration * 1000), // 使用实际录制时长
-                                    fileSizeBytes: fileData.length,
-                                    adjustedSampleRate: adjustedSampleRate
-                                });
-                            });
-                        } else {
-                            // 没有保存文件，直接处理内存中的音频数据
-                            console.error('没有保存到文件，直接处理内存中的音频数据');
-                            
-                            // 创建一个WAV文件结构的完整内存缓冲区（使用调整后的采样率）
-                            const header = createWavHeader(adjustedSampleRate);
-                            
-                            // 更新头部信息
-                            header.writeUInt32LE(finalAudioData.length, 40); // 数据大小
-                            header.writeUInt32LE(finalAudioData.length + 36, 4); // 文件大小 - 8
-                            
-                            const completeAudio = Buffer.concat([header, finalAudioData]);
-                            
-                            // 生成一个虚拟文件名以供识别
-                            const virtualFilename = `virtual_recording_${Date.now()}_${Math.random().toString(36).substring(2, 10)}.wav`;
-                            
-                            // 直接将缓冲区转换为base64
-                            const base64Data = completeAudio.toString('base64');
-                            
-                            resolve({
-                                audioData: base64Data,
-                                filename: virtualFilename,
-                                enhanced: true,
-                                virtual: true, // 标记为虚拟文件，未保存到磁盘
-                                durationMs: Math.round(actualDuration * 1000), // 使用实际录制时长
-                                fileSizeBytes: completeAudio.length,
-                                adjustedSampleRate: adjustedSampleRate
-                            });
-                        }
-                    } else {
-                        // 时长匹配正常，使用常规处理
-                        
-                        // 如果可以保存文件，写入处理后的音频数据
-                        if (canSaveFiles && outputFile) {
-                            // 重要：关闭之前的输出流
-                            outputFile.end();
-                            
-                            // 创建完整的WAV文件（包括正确的头部）
-                            const wavHeader = createWavHeader();
-                            
-                            // 手动更新头部信息
-                            // 更新RIFF块大小 (文件大小 - 8)
-                            wavHeader.writeUInt32LE(finalAudioData.length + 36, 4);
-                            // 更新data块大小
-                            wavHeader.writeUInt32LE(finalAudioData.length, 40);
-                            
-                            // 写入完整文件（头部+音频数据）
-                            fs.writeFileSync(savedWavFile, Buffer.concat([wavHeader, finalAudioData]));
-                            
-                            console.error(`录音已完成，文件保存至: ${savedWavFile}`);
-                            
-                            // 提取文件名
-                            const filename = path.basename(savedWavFile);
-                            
-                            // 读取文件并转为base64
-                            fs.readFile(savedWavFile, (err, fileData) => {
-                                if (err) {
-                                    reject(err);
-                                    return;
-                                }
-                                
-                                const base64Data = fileData.toString('base64');
-                                resolve({
-                                    audioData: base64Data,
-                                    filename: filename,
-                                    enhanced: true,
-                                    durationMs: Math.round(theoreticalDuration * 1000),
-                                    fileSizeBytes: fileData.length
-                                });
-                            });
-                        } else {
-                            // 没有保存文件，直接处理内存中的音频数据
-                            console.error('没有保存到文件，直接处理内存中的音频数据');
-                            
-                            // 创建一个WAV文件结构的完整内存缓冲区
-                            const header = createWavHeader();
-                            
-                            // 更新头部信息
-                            header.writeUInt32LE(finalAudioData.length, 40); // 数据大小
-                            header.writeUInt32LE(finalAudioData.length + 36, 4); // 文件大小 - 8
-                            
-                            const completeAudio = Buffer.concat([header, finalAudioData]);
-                            
-                            // 生成一个虚拟文件名以供识别
-                            // 获取当前日期时间并格式化为YYYY-MM-DD_HH-MM-SS
-                            const now = new Date();
-                            const year = now.getFullYear();
-                            const month = String(now.getMonth() + 1).padStart(2, '0');
-                            const day = String(now.getDate()).padStart(2, '0');
-                            const hours = String(now.getHours()).padStart(2, '0');
-                            const minutes = String(now.getMinutes()).padStart(2, '0');
-                            const seconds = String(now.getSeconds()).padStart(2, '0');
-                            const formattedTimestamp = `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
-                            
-                            const uniqueId = Math.random().toString(36).substring(2, 10);
-                            const virtualFilename = `virtual_conference_${uniqueId}_${formattedTimestamp}.wav`;
-                            
-                            // 直接将缓冲区转换为base64
-                            const base64Data = completeAudio.toString('base64');
-                            
-                            resolve({
-                                audioData: base64Data,
-                                filename: virtualFilename,
-                                enhanced: true,
-                                virtual: true, // 标记为虚拟文件，未保存到磁盘
-                                durationMs: Math.round(theoreticalDuration * 1000),
-                                fileSizeBytes: completeAudio.length
-                            });
-                        }
-                    }
-                } catch (error) {
-                    console.error('处理音频数据失败:', error);
-                    reject(error);
+                    // 保存文件成功
+                    const filename = path.basename(savedWavFile);
+                    filesize = enhancedAudio.length + 44; // 数据大小加上头部大小
+                    
+                    // 将文件内容转为base64供直接使用
+                    audioBase64 = base64Data;
+                    
+                    console.error(`录音已完成，文件保存至: ${savedWavFile}`);
+                    
+                    // 关键改进: 使用纯stdout输出JSON结果
+                    // 确保JSON输出是完整的一条单独的记录
+                    const result = {
+                        success: true,
+                        filename: filename,
+                        filepath: savedWavFile,
+                        filesize: filesize,
+                        duration: actualDuration,
+                        audioData: audioBase64
+                    };
+                    
+                    // 确保在输出JSON之前没有其他stdout输出
+                    // 使用process.stdout.write确保一次性完整输出
+                    process.stdout.write(JSON.stringify(result));
+                } catch (fileWriteError) {
+                    console.error(`写入WAV文件失败: ${fileWriteError.message}`);
+                    
+                    // 输出错误JSON
+                    process.stdout.write(JSON.stringify({
+                        success: false,
+                        error: `写入WAV文件失败: ${fileWriteError.message}`
+                    }));
                 }
-            };
+            } else {
+                // 处理无文件输出的情况
+                console.error('未保存到文件，创建内存中的WAV结构');
+                
+                // 创建一个完整的WAV文件结构（头部+数据）
+                const header = createWavHeader();
+                header.writeUInt32LE(enhancedAudio.length, 40); // 数据大小
+                header.writeUInt32LE(enhancedAudio.length + 36, 4); // 文件大小 - 8
+                
+                // 合并头部和音频数据
+                const completeAudio = Buffer.concat([header, enhancedAudio]);
+                
+                // 生成虚拟文件名
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const uniqueId = Math.random().toString(36).substring(2, 10);
+                const virtualFilename = `recording_${timestamp}_${uniqueId}.wav`;
+                
+                // 将完整WAV转为base64
+                const audioBase64 = completeAudio.toString('base64');
+                
+                // 保持与原始响应格式一致
+                const result = {
+                    success: true,
+                    duration: actualDuration,
+                    filename: virtualFilename,
+                    audioData: audioBase64
+                };
+                
+                // 输出结果
+                console.error(`创建虚拟音频文件: ${virtualFilename}`);
+                process.stdout.write(JSON.stringify(result));
+            }
             
-            // 启动录音持续时间检查 - 使用递归检查代替简单的setTimeout
-            checkRecordingDuration();
+            // 删除状态文件
+            try {
+                if (fs.existsSync(recordingStatusFile)) {
+                    fs.unlinkSync(recordingStatusFile);
+                    console.error('已删除录音状态文件');
+                }
+            } catch (unlinkError) {
+                console.error(`删除状态文件失败: ${unlinkError.message}`);
+            }
             
-            // 设置一个最大录制时长限制，防止出现问题时永远不结束
+            // 清理停止检查定时器
+            if (global.stopFileCheckInterval) {
+                clearInterval(global.stopFileCheckInterval);
+            }
+            
+            // 清理安全超时定时器
+            if (global.safetyTimeoutId) {
+                clearTimeout(global.safetyTimeoutId);
+            }
+            
+            // 添加一个小延迟确保所有数据都已处理
             setTimeout(() => {
-                if (recordingStartTime === null) {
-                    console.error('警告: 在规定时间内未检测到麦克风输入，强制结束录音');
-                    mic.stopRecording();
-                    reject(new Error('麦克风未检测到输入'));
-                }
-            }, (seconds + 5) * 1000); // 给予额外5秒的缓冲时间
+                console.error('录音处理完成，程序退出');
+                process.exit(0);
+            }, 500);
+        } catch (error) {
+            console.error(`处理录音数据时出错: ${error.message}`);
+            console.error(`错误堆栈: ${error.stack || '无堆栈信息'}`);
             
-        } catch (err) {
-            console.error('初始化录音设备时出错:', err);
-            reject(err);
+            // 错误输出也使用stdout，但确保格式正确
+            process.stdout.write(JSON.stringify({
+                success: false,
+                error: `处理录音数据时出错: ${error.message}`
+            }));
+            
+            process.exit(1);
         }
-    });
+    };
+}
+
+/**
+ * 停止录音函数 - 创建停止命令文件通知正在运行的录音进程
+ */
+function stopRecording() {
+    console.error('尝试停止录音...');
+    
+    try {
+        // 检查状态文件是否存在
+        if (!fs.existsSync(recordingStatusFile)) {
+            console.error('找不到录音状态文件，可能没有正在进行的录音');
+            // 使用stdout输出JSON
+            process.stdout.write(JSON.stringify({
+                success: false, 
+                error: '找不到录音状态文件，可能没有正在进行的录音'
+            }));
+            process.exit(0);
+        }
+        
+        // 读取状态文件
+        const statusContent = fs.readFileSync(recordingStatusFile, 'utf8');
+        const statusData = JSON.parse(statusContent);
+        
+        if (!statusData.pid) {
+            console.error('状态文件中没有进程ID信息');
+            process.exit(1);
+        }
+        
+        // 创建停止命令文件
+        fs.writeFileSync(stopCommandFile, `stop_command_${Date.now()}`);
+        console.error(`已创建停止命令文件: ${stopCommandFile}`);
+        
+        console.error(`已向进程 ${statusData.pid} 发送停止信号`);
+        
+        // 仍然尝试使用process.kill向进程发送SIGTERM信号作为备用
+        try {
+            process.kill(statusData.pid, 'SIGTERM');
+            console.error('已发送SIGTERM信号');
+        } catch (killError) {
+            console.error(`发送SIGTERM信号失败: ${killError.message}，将依赖停止命令文件`);
+        }
+        
+        // 使用stdout输出JSON
+        process.stdout.write(JSON.stringify({
+            success: true,
+            message: '已发送录音停止命令'
+        }));
+        
+        process.exit(0);
+    } catch (error) {
+        console.error(`处理停止录音时出错: ${error.message}`);
+        console.error(`错误堆栈: ${error.stack}`);
+        
+        // 使用stdout输出JSON
+        process.stdout.write(JSON.stringify({
+            success: false,
+            error: `处理停止录音时出错: ${error.message}`
+        }));
+        
+        process.exit(1);
+    }
 }
 
 /**
@@ -1037,56 +1185,3 @@ function updateWavHeader(filePath, dataSize, overrideSampleRate) {
     }
 }
 
-// 根据模式执行不同的功能
-if (streamMode) {
-    // 执行音频流传输
-    streamAudio()
-        .then(() => {
-            console.error('音频流传输已完成');
-            process.exit(0);
-        })
-        .catch(error => {
-            console.error('音频流传输失败:', error);
-            process.exit(1);
-        });
-} else {
-    // 执行普通录音
-    recordAudio(duration)
-        .then(result => {
-            try {
-                // 一定要在命令行输出内容前清空所有可能的日志
-                // 将所有调试信息输出到标准错误流
-                process.stderr.write('\n准备输出录音结果...\n');
-                
-                // 确保结果对象结构正确
-                if (!result || !result.audioData || !result.filename) {
-                    process.stderr.write('警告: 录音结果对象结构不完整\n');
-                    if (!result) result = {};
-                    if (!result.audioData) result.audioData = '';
-                    if (!result.filename) result.filename = `recording_empty_${Date.now()}.wav`;
-                }
-                
-                // 检查base64数据的有效性
-                if (result.audioData) {
-                    // 移除可能的前缀
-                    const base64Data = result.audioData.replace(/^data:audio\/\w+;base64,/, '');
-                    // 替换为清理后的数据
-                    result.audioData = base64Data;
-                }
-                
-                // 使用JSON.stringify确保数据格式正确
-                const output = JSON.stringify(result);
-                
-                // 仅将JSON输出到标准输出，确保没有其他文本
-                process.stdout.write(output);
-                process.exit(0);
-            } catch (error) {
-                process.stderr.write(`JSON序列化失败: ${error.message}\n`);
-                process.exit(1);
-            }
-        })
-        .catch(error => {
-            console.error('录音失败:', error);
-            process.exit(1);
-        }); 
-} 

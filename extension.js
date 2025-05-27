@@ -9,6 +9,7 @@ const { createAndOpenDrawio } = require('./createDrawio');
 const { setExcalidrawDir } = require('./agent/server.js');
 const { spawn } = require('child_process');
 const { runASR } = require('./pyyuyin/ifasr-nodejs');
+const os = require('os');
 
 // 创建全局变量以便在其他模块中访问sidebarProvider
 global.sidebarProvider = null;
@@ -32,10 +33,9 @@ async function createAndOpenDrawioCommand(filePath) {
 /**
  * 处理外部录音命令
  * 使用Node.js子进程调用外部录音脚本
- * @param {number} duration 录音时长（秒）
  * @returns {Promise<Object>} 返回包含base64编码音频数据和文件名的对象
  */
-async function handleExternalAudioRecord(duration = 5) {
+async function handleExternalAudioRecord() {
     return new Promise((resolve, reject) => {
         try {
             // 检查录音脚本是否存在
@@ -75,27 +75,94 @@ async function handleExternalAudioRecord(duration = 5) {
             
             // 显示录音中状态栏
             const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);
-            statusBar.text = `$(record) 正在录音 (${duration}秒)...`;
-            statusBar.tooltip = '正在录制语音消息';
+            statusBar.text = `$(record) 正在录音...`;
+            statusBar.tooltip = '正在录制语音消息，点击结束录音';
+            statusBar.command = 'lingxixiezuo.stopRecordAudio';
             statusBar.show();
             
-            // 执行录音脚本，传递工作区路径
+            // 执行录音脚本，使用start模式
             const node = process.platform === 'win32' ? 'node.exe' : 'node';
-            const recordProcess = spawn(node, [scriptPath, duration.toString(), workspacePath]);
+            
+            // 获取当前工作区路径，确保路径正确
+            const currentWorkspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+            
+            console.log('当前工作区路径:', currentWorkspacePath);
+            
+            // 检查是否已存在录音状态文件
+            const statusFilePath = path.join(os.tmpdir(), 'audio_recording_status.json');
+            if (fs.existsSync(statusFilePath)) {
+                try {
+                    const statusData = JSON.parse(fs.readFileSync(statusFilePath, 'utf8'));
+                    if (statusData.pid) {
+                        // 尝试检查进程是否仍在运行
+                        try {
+                            process.kill(statusData.pid, 0); // 测试进程是否存在
+                            throw new Error(`有正在进行的录音进程(PID: ${statusData.pid})，请先停止它`);
+                        } catch (e) {
+                            if (e.code !== 'ESRCH') {
+                                throw new Error(`有正在进行的录音进程，但无法访问: ${e.message}`);
+                            }
+                            // 如果进程不存在，则可以继续启动新的录音
+                            console.log(`旧录音进程 ${statusData.pid} 已不存在，将删除状态文件`);
+                            fs.unlinkSync(statusFilePath);
+                        }
+                    }
+                } catch (e) {
+                    if (e.message.startsWith('有正在进行的录音进程')) {
+                        throw e; // 重新抛出验证错误
+                    }
+                    // 其他错误，如文件读取或解析错误，则删除文件
+                    console.error('读取录音状态文件失败，将删除并重新开始:', e);
+                    try {
+                        fs.unlinkSync(statusFilePath);
+                    } catch (unlinkErr) {
+                        console.error('删除状态文件失败:', unlinkErr);
+                    }
+                }
+            }
+            
+            // 使用数组传递参数，正确处理路径中的空格
+            const recordProcess = spawn(node, [
+                scriptPath, 
+                'start', 
+                currentWorkspacePath,
+                '-workspace', // 添加-workspace参数
+                currentWorkspacePath  // 同时通过参数和命令行选项传递工作区路径
+            ]);
+            
+            console.log(`启动录音进程，命令: ${node} ${scriptPath} start "${currentWorkspacePath}", PID: ${recordProcess.pid}`);
+            
+            // 将进程ID保存在全局变量中，以便停止录音时使用
+            global.currentRecordingProcess = {
+                process: recordProcess,
+                statusBar: statusBar,
+                startTime: Date.now(),
+                resolve: resolve,
+                reject: reject
+            };
             
             let outputData = '';
             let errorData = '';
             
             recordProcess.stdout.on('data', (data) => {
                 outputData += data.toString();
+                console.log('录音脚本标准输出:', data.toString().trim());
             });
             
             recordProcess.stderr.on('data', (data) => {
                 errorData += data.toString();
-                console.log('录音脚本输出:', data.toString());
+                console.log('录音脚本错误输出:', data.toString().trim());
             });
             
             recordProcess.on('close', (code) => {
+                console.log(`录音进程已关闭，退出码: ${code}`);
+                
+                // 进程关闭时，清除全局变量
+                if (global.currentRecordingProcess && 
+                    global.currentRecordingProcess.process === recordProcess) {
+                    global.currentRecordingProcess = null;
+                }
+                
                 statusBar.dispose(); // 隐藏状态栏
                 
                 if (code !== 0) {
@@ -109,107 +176,462 @@ async function handleExternalAudioRecord(duration = 5) {
                 }
                 
                 try {
-                    // 首先尝试识别是否有JSON输出
-                    // 查找JSON开始的花括号位置
-                    const jsonStartIndex = outputData.indexOf('{');
-                    if (jsonStartIndex >= 0) {
-                        // 提取JSON部分
-                        const jsonPart = outputData.substring(jsonStartIndex);
-                        // 尝试解析JSON输出
-                        const resultObject = JSON.parse(jsonPart);
+                    // 改进的JSON解析逻辑
+                    // 1. 尝试直接解析整个输出
+                    // 2. 如果失败，尝试提取JSON部分
+                    // 3. 确保错误处理更完善
+
+                    let resultObject = null;
+                    try {
+                        // 直接尝试解析整个输出
+                        resultObject = JSON.parse(outputData.trim());
+                        console.log('成功解析录音结果(直接解析)');
+                    } catch (directParseError) {
+                        console.log('直接解析JSON失败，尝试提取JSON部分:', directParseError);
                         
-                        // 录音数据已经在recordAudio.js中直接保存到recordings文件夹
-                        console.log('录音完成, 文件名:', resultObject.filename);
+                        // 查找JSON开始的花括号位置
+                        const jsonStartIndex = outputData.indexOf('{');
+                        const jsonEndIndex = outputData.lastIndexOf('}') + 1;
                         
-                        // 显示保存成功的通知
-                        vscode.window.showInformationMessage(`录音已保存: ${resultObject.filename}`);
-                        
-                        // 返回包含音频数据和文件名的对象
-                        resolve(resultObject);
-                    } else {
-                        // 没有找到JSON部分，记录错误
-                        console.error('录音脚本输出格式不正确，找不到JSON数据:', outputData);
-                        // 尝试从错误信息中提取文件名
-                        let filename = null;
-                        const filenameMatch = errorData.match(/将保存录音文件: (.+\.wav)/);
-                        if (filenameMatch && filenameMatch[1]) {
-                            filename = path.basename(filenameMatch[1]);
-                            console.log('从错误输出中提取到文件名:', filename);
-                        }
-                        
-                        // 检查录音是否完成的消息
-                        if (errorData.includes('录音已完成') && filename) {
-                            // 尝试读取保存的文件
+                        if (jsonStartIndex >= 0 && jsonEndIndex > jsonStartIndex) {
+                            // 提取可能的JSON部分
+                            const jsonPart = outputData.substring(jsonStartIndex, jsonEndIndex);
                             try {
-                                // 构建可能的文件路径
-                                const possibleFilePaths = [];
-                                if (workspacePath) {
-                                    possibleFilePaths.push(path.join(workspacePath, 'recordings', filename));
-                                }
-                                possibleFilePaths.push(path.join(__dirname, 'recordings', filename));
-                                possibleFilePaths.push(path.join(__dirname, '..', 'recordings', filename));
-                                
-                                // 尝试读取文件
-                                for (const filePath of possibleFilePaths) {
-                                    if (fs.existsSync(filePath)) {
-                                        const audioData = fs.readFileSync(filePath).toString('base64');
-                                        vscode.window.showInformationMessage(`录音已保存: ${filename}`);
-                                        resolve({ audioData, filename });
-                                        return;
-                                    }
-                                }
-                            } catch (readError) {
-                                console.error('读取录音文件失败:', readError);
+                                // 尝试解析提取的JSON部分
+                                resultObject = JSON.parse(jsonPart);
+                                console.log('成功解析录音结果(提取JSON部分)');
+                            } catch (extractParseError) {
+                                throw new Error(`解析录音输出JSON失败: ${extractParseError.message}, JSON片段: ${jsonPart.substring(0, 100)}...`);
                             }
+                        } else {
+                            throw new Error(`录音输出中未找到有效的JSON数据，输出内容: ${outputData.substring(0, 100)}...`);
+                        }
+                    }
+                    
+                    // 确认resultObject不为空并且包含必要字段
+                    if (!resultObject || (typeof resultObject !== 'object')) {
+                        throw new Error('解析后的录音结果格式无效');
+                    }
+                    
+                    // 检查录音是否成功
+                    if (resultObject.success === false) {
+                        throw new Error(`录音脚本返回错误: ${resultObject.error || '未知错误'}`);
+                    }
+                    
+                    // 录音数据已经在recordAudio.js中直接保存到recordings文件夹
+                    console.log('录音完成, 文件名:', resultObject.filename);
+                    
+                    // 显示保存成功的通知
+                    vscode.window.showInformationMessage(`录音已保存: ${resultObject.filename}`);
+                    
+                    // 确保结果中包含必要的字段
+                    const finalResult = {
+                        success: true,
+                        filename: resultObject.filename || `recording_${Date.now()}.wav`,
+                        audioData: resultObject.audioData || '',
+                        duration: resultObject.duration || resultObject.durationMs / 1000 || 0
+                    };
+                    
+                    // 在发送消息前检查是否已发送
+                    let audioMessageSent = false;
+                    
+                    if (!audioMessageSent && finalResult.audioData && global.chatWebSocketServer) {
+                        try {
+                            // 获取用户ID和名称
+                            const userId = global.chatSettings?.userId || 'unknown_user';
+                            const userName = global.chatSettings?.userName || '未知用户';
+                            
+                            // 创建语音消息对象
+                            const audioMessage = {
+                                type: 'audio',
+                                userId: userId,
+                                sender: {
+                                    id: userId,
+                                    name: userName
+                                },
+                                timestamp: Date.now(),
+                                audioData: finalResult.audioData,
+                                audioFilename: finalResult.filename,
+                                duration: finalResult.duration,
+                                mimeType: 'audio/wav'
+                            };
+                            
+                            // 发送消息到所有连接的客户端
+                            global.chatWebSocketServer.clients.forEach(client => {
+                                if (client.readyState === WebSocket.OPEN) {
+                                    client.send(JSON.stringify(audioMessage));
+                                }
+                            });
+                            
+                            console.log('已向聊天服务器发送语音消息');
+                        } catch (sendError) {
+                            console.error('发送语音消息到服务器失败:', sendError);
+                            // 这里不抛出异常，因为录音功能本身已经成功了
                         }
                         
-                        // 如果所有尝试都失败，则返回错误
-                        reject(new Error('录音脚本输出格式不正确，无法解析'));
+                        audioMessageSent = true; // 设置标志
                     }
+                    
+                    // 返回处理后的结果对象
+                    resolve(finalResult);
+                    
                 } catch (parseError) {
                     console.error('解析录音脚本输出失败:', parseError, '原始输出:', outputData);
+                    
+                    // 尝试从错误输出中提取文件名和路径信息
+                    let audioFile = null;
+                    let filename = null;
                     
                     // 检查是否包含文件保存信息
                     const filenameMatch = errorData.match(/将保存录音文件: (.+\.wav)/);
                     const completedMatch = errorData.match(/录音已完成，文件保存至: (.+\.wav)/);
                     
-                    let audioFile = null;
                     if (completedMatch && completedMatch[1]) {
                         audioFile = completedMatch[1];
+                        filename = path.basename(audioFile);
                     } else if (filenameMatch && filenameMatch[1]) {
                         audioFile = filenameMatch[1];
+                        filename = path.basename(audioFile);
                     }
                     
-                    if (audioFile) {
-                        const filename = path.basename(audioFile);
-                        console.log('尝试读取录音文件:', audioFile);
-                        
-                        // 检查文件是否存在
-                        if (fs.existsSync(audioFile)) {
-                            try {
-                                // 读取文件并转换为base64
-                                const audioData = fs.readFileSync(audioFile).toString('base64');
-                                vscode.window.showInformationMessage(`录音已保存: ${filename}`);
-                                resolve({ audioData, filename });
-                                return;
-                            } catch (readError) {
-                                console.error('读取录音文件失败:', readError);
+                    // 尝试读取文件作为最后的恢复手段
+                    if (filename && audioFile && fs.existsSync(audioFile)) {
+                        try {
+                            const audioData = fs.readFileSync(audioFile).toString('base64');
+                            console.log('成功从文件读取音频数据:', filename);
+                            vscode.window.showInformationMessage(`录音已保存: ${filename}`);
+                            
+                            // 新增: 如果通过文件恢复了音频数据，同样发送到服务器
+                            if (audioData && global.chatWebSocketServer) {
+                                try {
+                                    // 获取用户ID和名称
+                                    const userId = global.chatSettings?.userId || 'unknown_user';
+                                    const userName = global.chatSettings?.userName || '未知用户';
+                                    
+                                    // 创建语音消息对象
+                                    const audioMessage = {
+                                        type: 'audio',
+                                        userId: userId,
+                                        sender: {
+                                            id: userId,
+                                            name: userName
+                                        },
+                                        timestamp: Date.now(),
+                                        audioData: audioData,
+                                        audioFilename: filename,
+                                        duration: 0, // 从文件恢复时无法获取准确时长
+                                        mimeType: 'audio/wav'
+                                    };
+                                    
+                                    // 发送消息到所有连接的客户端
+                                    global.chatWebSocketServer.clients.forEach(client => {
+                                        if (client.readyState === WebSocket.OPEN) {
+                                            client.send(JSON.stringify(audioMessage));
+                                        }
+                                    });
+                                    
+                                    console.log('已从文件中恢复并发送语音消息到服务器');
+                                } catch (sendError) {
+                                    console.error('从文件恢复后发送语音消息到服务器失败:', sendError);
+                                }
                             }
-                        } else {
-                            console.error('录音文件不存在:', audioFile);
+                            
+                            resolve({ audioData, filename, success: true });
+                            return;
+                        } catch (readError) {
+                            console.error('读取音频文件失败:', readError);
                         }
                     }
                     
                     // 如果所有尝试都失败，则返回错误
-                    reject(new Error(`解析录音脚本输出失败: ${parseError.message}`));
+                    reject(new Error(`解析录音结果失败: ${parseError.message}`));
                 }
             });
             
             recordProcess.on('error', (err) => {
+                // 发生错误时，清除全局变量
+                if (global.currentRecordingProcess && 
+                    global.currentRecordingProcess.process === recordProcess) {
+                    global.currentRecordingProcess = null;
+                }
+                
                 statusBar.dispose();
                 reject(err);
             });
         } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+/**
+ * 处理停止录音的函数
+ * @returns {Promise<Object>} 包含录音结果的Promise
+ */
+async function handleStopAudioRecording() {
+    return new Promise((resolve, reject) => {
+        try {
+            // 检查是否有正在进行的录音
+            let processToStop = null;
+            let statusBar = null;
+            let startTime = null;
+            let resolveCallback = null;
+            
+            // 录音状态文件路径
+            const statusFilePath = path.join(os.tmpdir(), 'audio_recording_status.json');
+            // 停止命令文件路径
+            const stopCommandFile = path.join(os.tmpdir(), 'audio_recording_stop_command');
+            
+            // 1. 首先检查全局变量中是否有正在进行的录音进程
+            if (global.currentRecordingProcess) {
+                processToStop = global.currentRecordingProcess.process;
+                statusBar = global.currentRecordingProcess.statusBar;
+                startTime = global.currentRecordingProcess.startTime;
+                resolveCallback = global.currentRecordingProcess.resolve; // 保存原始Promise的resolve回调
+                console.log('从全局变量获取到录音进程:', processToStop.pid);
+            } else {
+                // 2. 如果全局变量中没有，则尝试从状态文件中读取
+                try {
+                    const statusData = JSON.parse(fs.readFileSync(statusFilePath, 'utf8'));
+                    if (statusData.pid) {
+                        console.log('从状态文件获取到录音进程PID:', statusData.pid);
+                        // 创建状态栏
+                        statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right);
+                        statusBar.text = `$(sync~spin) 正在结束录音...`;
+                        statusBar.show();
+                        startTime = statusData.startTime;
+                    } else {
+                        throw new Error('状态文件中没有有效的进程ID');
+                    }
+                } catch (parseErr) {
+                    console.error('读取状态文件失败:', parseErr);
+                    throw new Error(`读取状态文件失败: ${parseErr.message}`);
+                }
+            }
+            
+            // 录音时长（毫秒）
+            const recordDuration = startTime ? (Date.now() - startTime) : 0;
+            
+            // 更新状态栏显示
+            if (statusBar) {
+                statusBar.text = `$(sync~spin) 正在结束录音...`;
+                statusBar.tooltip = '正在处理录音数据';
+                statusBar.command = undefined;
+            }
+            
+            console.log('正在结束录音...');
+            
+            // 记录录音输出数据
+            let recordingOutputData = '';
+            let recordingErrorData = '';
+            
+            if (processToStop) {
+                // 如果有进程句柄，添加数据收集
+                processToStop.stdout.on('data', (data) => {
+                    recordingOutputData += data.toString();
+                    console.log('录音脚本输出:', data.toString().trim());
+                });
+                
+                processToStop.stderr.on('data', (data) => {
+                    recordingErrorData += data.toString();
+                    console.log('录音脚本错误:', data.toString().trim());
+                });
+            }
+            
+            // 创建停止命令文件
+            try {
+                fs.writeFileSync(stopCommandFile, `stop_command_${Date.now()}`);
+                console.log(`已创建停止命令文件: ${stopCommandFile}`);
+                
+                // 设置超时检查，确保录音确实停止
+                let attempts = 0;
+                const maxAttempts = 10; // 最多等待5秒(10次 * 500ms)
+                
+                const checkRecordingStopped = () => {
+                    attempts++;
+                    try {
+                        // 检查状态文件是否已被删除（录音进程正常退出时会删除该文件）
+                        if (!fs.existsSync(statusFilePath)) {
+                            console.log('录音已成功停止（状态文件已删除）');
+                            
+                            // 解析录音结果
+                            let recordingResult = null;
+                            try {
+                                // 查找JSON输出
+                                const jsonStartIndex = recordingOutputData.indexOf('{');
+                                if (jsonStartIndex >= 0) {
+                                    // 提取JSON部分
+                                    const jsonPart = recordingOutputData.substring(jsonStartIndex);
+                                    recordingResult = JSON.parse(jsonPart);
+                                    console.log('成功解析录音结果:', recordingResult);
+                                    
+                                    // 新增: 如果有音频数据，发送到聊天服务器
+                                    if (recordingResult && recordingResult.audioData && global.chatWebSocketServer) {
+                                        try {
+                                            // 获取用户ID和名称
+                                            const userId = global.chatSettings?.userId || 'unknown_user';
+                                            const userName = global.chatSettings?.userName || '未知用户';
+                                            
+                                            // 创建语音消息对象
+                                            const audioMessage = {
+                                                type: 'audio',
+                                                userId: userId,
+                                                sender: {
+                                                    id: userId,
+                                                    name: userName
+                                                },
+                                                timestamp: Date.now(),
+                                                audioData: recordingResult.audioData,
+                                                audioFilename: recordingResult.filename,
+                                                duration: recordingResult.duration || 0,
+                                                mimeType: 'audio/wav'
+                                            };
+                                            
+                                            // 发送消息到所有连接的客户端
+                                            global.chatWebSocketServer.clients.forEach(client => {
+                                                if (client.readyState === WebSocket.OPEN) {
+                                                    client.send(JSON.stringify(audioMessage));
+                                                }
+                                            });
+                                            
+                                            console.log('已向聊天服务器发送语音消息');
+                                        } catch (sendError) {
+                                            console.error('发送语音消息到服务器失败:', sendError);
+                                        }
+                                    }
+                                }
+                            } catch (parseErr) {
+                                console.error('解析录音结果失败:', parseErr);
+                            }
+                            
+                            // 清理状态
+                            if (statusBar) statusBar.dispose();
+                            
+                            // 清理停止命令文件
+                            if (fs.existsSync(stopCommandFile)) {
+                                fs.unlinkSync(stopCommandFile);
+                                console.log('已删除停止命令文件');
+                            }
+                            
+                            // 如果有原始Promise的resolve回调，传递结果
+                            if (resolveCallback && recordingResult) {
+                                resolveCallback(recordingResult);
+                            }
+                            
+                            // 清理全局变量
+                            global.currentRecordingProcess = null;
+                            
+                            // 返回结果
+                            resolve(recordingResult || { success: true, message: '录音已成功结束' });
+                            return;
+                        }
+                        
+                        // 如果状态文件仍然存在，可能录音进程没有正确响应停止命令
+                        if (attempts < maxAttempts) {
+                            console.log(`等待录音停止中... (${attempts}/${maxAttempts})`);
+                            setTimeout(checkRecordingStopped, 500);
+                        } else {
+                            console.log('等待录音停止超时，尝试备用方法');
+                            
+                            // 尝试通过命令行直接调用stop命令
+                            try {
+                                const scriptPath = path.join(__dirname, 'chatroom', 'recordAudio.js');
+                                const node = process.platform === 'win32' ? 'node.exe' : 'node';
+                                
+                                // 执行脚本stop命令
+                                const stopProcess = spawn(node, [scriptPath, 'stop']);
+                                
+                                console.log('已执行stop命令脚本');
+                                
+                                stopProcess.on('close', (code) => {
+                                    console.log(`停止命令脚本执行完成，退出码: ${code}`);
+                                    
+                                    // 清理状态
+                                    if (statusBar) statusBar.dispose();
+                                    global.currentRecordingProcess = null;
+                                    
+                                    // 尝试删除状态文件和停止命令文件
+                                    try {
+                                        if (fs.existsSync(statusFilePath)) fs.unlinkSync(statusFilePath);
+                                        if (fs.existsSync(stopCommandFile)) fs.unlinkSync(stopCommandFile);
+                                    } catch (unlinkErr) {
+                                        console.error('删除状态文件失败:', unlinkErr);
+                                    }
+                                    
+                                    resolve({ success: true, message: '录音已结束（通过stop命令）' });
+                                });
+                            } catch (stopCommandError) {
+                                console.error('执行stop命令失败:', stopCommandError);
+                                
+                                // 最后尝试强制结束进程
+                                try {
+                                    const statusData = JSON.parse(fs.readFileSync(statusFilePath, 'utf8'));
+                                    if (statusData.pid) {
+                                        process.kill(statusData.pid, 'SIGKILL');
+                                        console.log('已发送SIGKILL信号');
+                                    }
+                                } catch (killError) {
+                                    console.error('强制终止进程失败:', killError);
+                                }
+                                
+                                // 清理状态
+                                if (statusBar) statusBar.dispose();
+                                global.currentRecordingProcess = null;
+                                
+                                // 尝试删除状态文件和停止命令文件
+                                try {
+                                    if (fs.existsSync(statusFilePath)) fs.unlinkSync(statusFilePath);
+                                    if (fs.existsSync(stopCommandFile)) fs.unlinkSync(stopCommandFile);
+                                } catch (unlinkErr) {
+                                    console.error('删除状态文件失败:', unlinkErr);
+                                }
+                                
+                                resolve({ success: true, message: '录音已结束（强制终止）' });
+                            }
+                        }
+                    } catch (err) {
+                        console.error('检查录音状态时出错:', err);
+                        
+                        // 清理状态
+                        if (statusBar) statusBar.dispose();
+                        global.currentRecordingProcess = null;
+                        
+                        // 尝试删除状态文件和停止命令文件
+                        try {
+                            if (fs.existsSync(statusFilePath)) fs.unlinkSync(statusFilePath);
+                            if (fs.existsSync(stopCommandFile)) fs.unlinkSync(stopCommandFile);
+                        } catch (unlinkErr) {
+                            console.error('删除状态文件失败:', unlinkErr);
+                        }
+                        
+                        reject(err);
+                    }
+                };
+                
+                // 启动检查
+                checkRecordingStopped();
+                
+            } catch (error) {
+                console.error('创建停止命令文件失败:', error);
+                
+                // 尝试使用进程信号终止
+                if (processToStop) {
+                    try {
+                        processToStop.kill('SIGTERM');
+                        console.log('已发送SIGTERM信号');
+                    } catch (killError) {
+                        console.error('发送SIGTERM信号失败:', killError);
+                    }
+                }
+                
+                // 清理状态
+                if (statusBar) statusBar.dispose();
+                global.currentRecordingProcess = null;
+                
+                reject(error);
+            }
+        } catch (error) {
+            console.error('停止录音时出错:', error);
             reject(error);
         }
     });
@@ -221,7 +643,44 @@ async function handleExternalAudioRecord(duration = 5) {
  */
 async function activate(context) {
     console.log('灵犀协作插件已激活');
-    
+    const appName = vscode.env.appName;
+    if(appName === 'Visual Studio Code'){
+        // 检查是否安装了 Excalidraw 编辑器插件
+        try {
+            const extensionsJsonPath = path.join(process.env.USERPROFILE, '.vscode', 'extensions', 'extensions.json');
+            console.log('检查插件配置文件:', extensionsJsonPath);
+
+            if (fs.existsSync(extensionsJsonPath)) {
+                const extensionsJson = JSON.parse(fs.readFileSync(extensionsJsonPath, 'utf8'));
+                console.log('已安装的插件列表:', extensionsJson);
+
+                // 检查是否包含 Excalidraw 插件
+                const hasExcalidraw = extensionsJson.some(ext => 
+                    ext.identifier && (
+                        ext.identifier.id === 'pomdtr.excalidraw-editor' ||
+                        ext.identifier.id.includes('excalidraw-editor')
+                    )
+                );
+
+                if (!hasExcalidraw) {
+                    vscode.window.showWarningMessage(
+                        '未检测到 Excalidraw 编辑器插件，部分功能可能无法正常使用。请安装 pomdtr.excalidraw-editor 插件。',
+                        '打开插件市场'
+                    ).then(selection => {
+                        if (selection === '打开插件市场') {
+                            vscode.commands.executeCommand('workbench.extensions.search', 'pomdtr.excalidraw-editor');
+                        }
+                    });
+                } else {
+                    console.log('已找到 Excalidraw 插件');
+                }
+            } else {
+                console.error('插件配置文件不存在:', extensionsJsonPath);
+            }
+        } catch (error) {
+            console.error('检查 Excalidraw 插件时出错:', error);
+        }
+    }
     // 不再从secrets加载API Key
     console.log('注意: 此版本需要在每次启动后手动配置API Keys');
     
@@ -447,35 +906,11 @@ async function activate(context) {
     console.log('注册命令: lingxixiezuo.recordAudio');
     let recordAudioDisposable = vscode.commands.registerCommand('lingxixiezuo.recordAudio', async (duration) => {
         try {
-            // 弹出询问录音时长的输入框
-            let recordDuration = duration;
-            if (!recordDuration) {
-                const durationInput = await vscode.window.showInputBox({
-                    prompt: '请输入录音时长(秒)',
-                    placeHolder: '5',
-                    value: '5',
-                    validateInput: (value) => {
-                        // 验证输入是否为有效数字
-                        if (!/^\d+$/.test(value) || parseInt(value) <= 0 || parseInt(value) > 60) {
-                            return '请输入1-60之间的整数';
-                        }
-                        return null; // 返回null表示验证通过
-                    }
-                });
-                
-                if (!durationInput) {
-                    // 用户取消了操作
-                    return null;
-                }
-                
-                recordDuration = parseInt(durationInput);
-            }
-            
             // 显示开始录音的通知
-            vscode.window.showInformationMessage(`开始录音，时长${recordDuration}秒...`);
+            vscode.window.showInformationMessage('正在录音...');
             
             // 调用外部录音脚本
-            const result = await handleExternalAudioRecord(recordDuration);
+            const result = await handleExternalAudioRecord();
             
             // 录音完成通知
             vscode.window.showInformationMessage('录音完成');
@@ -483,6 +918,30 @@ async function activate(context) {
             return result;
         } catch (error) {
             vscode.window.showErrorMessage(`录音失败: ${error.message}`);
+            return null;
+        }
+    });
+
+    // 注册停止录音命令
+    console.log('注册命令: lingxixiezuo.stopRecordAudio');
+    let stopRecordAudioDisposable = vscode.commands.registerCommand('lingxixiezuo.stopRecordAudio', async () => {
+        try {
+            // 显示停止录音的通知
+            vscode.window.showInformationMessage('正在停止录音...');
+            
+            // 调用停止录音函数
+            const result = await handleStopAudioRecording();
+            
+            // 显示结果通知
+            if (result && result.success) {
+                vscode.window.showInformationMessage('录音已停止');
+            } else {
+                vscode.window.showErrorMessage(`停止录音失败: ${result?.error || '未知错误'}`);
+            }
+            
+            return result;
+        } catch (error) {
+            vscode.window.showErrorMessage(`停止录音失败: ${error.message}`);
             return null;
         }
     });
@@ -570,6 +1029,7 @@ async function activate(context) {
         stopChatServerDisposable,
         createDrawioDisposable,
         recordAudioDisposable,
+        stopRecordAudioDisposable,
         createExcalidrawDisposable,
         runAsrTestDisposable
     );

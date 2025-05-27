@@ -1,4 +1,5 @@
-# 灵犀协作 VS Code 插件
+# 灵犀协作 VS Code 插件  
+——————BUPT程序设计课设（by 潘星宇、杨天翊、刘弈轩）
 
 本插件将灵犀协作的强大功能集成到主流代码编辑器中，为开发者提供了一个集协同编程、语音会议、实时聊天、画布agent、画布同步等多种功能于一体的高效开发环境。支持 VS Code、Trae、Cursor 等多种编辑器，使用前请确保您的编辑器版本符合要求。
 
@@ -40,6 +41,7 @@
 通过自然语言生成图形（如描述文字自动转为流程图）。
 
 
+
 ## 使用说明
 1. **安装**：确保 VS Code 版本为 1.85.0 或更高，然后安装本插件。
 2. **激活**：启动 VS Code 后，插件将自动激活。
@@ -60,27 +62,37 @@
      + 语音会议需要通过会议室id加入
    * 语音会议的音频保存
      + 会议结束后可以选择是否保存会议音频
-5. **整理流程教程**：
+5. **Agent辅助功能**：
+   * 基础配置
+     + 启动MCP服务器：点击启动MCP按钮，连接到AI服务
+     + 设置API密钥：在设置中配置DeepSeek API密钥
+   * AI绘图功能
+     + 自然语言生成图形：输入描述文字（如"创建一个简单的系统架构图"），AI会自动转换为相应图形
+     + 编辑生成内容：可对AI生成的图形进行修改和调整
+   * 会议助手功能
+     + AI总结纪要：会议结束后可使用AI自动提取会议重点，生成结构化摘要
+     + 智能问答：在画布中可直接向AI提问，获取相关建议和解答
+6. **整理流程教程**：
    * 主机启动聊天室
-   ![主机启动聊天室](tutorial\主机启动聊天室.gif)
-   * 从机加入聊天室
-   ![从机加入聊天室](tutorial\从机加入聊天室.gif)
-   * 创建&加入会议
-   ![创建&加入会议](tutorial\创建&加入会议.gif)
-   * 生成纪要
-   ![生成纪要](tutorial\生成纪要.gif)
-   * 合并画布_提交者
-   ![合并画布_提交者](tutorial\合并画布_提交者.gif)
-   * 合并画布_拉取者
-   ![合并画布_拉取者](tutorial\合并画布_拉取者.gif)
-   * 合并画布_冲突处理
-   ![合并画布_冲突处理](tutorial\合并画布_冲突处理.gif)
-   * 添加纪要&冲突处理
-   ![添加纪要&冲突处理](tutorial\添加纪要_冲突处理.gif)
-   * 启动MCP&AI绘图
-   ![启动MCP&AI绘图](tutorial\启动MCP&AI绘图.gif)
-   * AI总结纪要
-   ![AI总结纪要](tutorial\AI总结纪要.gif)
+      ![主机启动聊天室](./tutorial/HostStartsChatRoom.gif)
+   * 从机加入聊天室
+   ![从机加入聊天室](./tutorial/SlaveJoinsChatRoom.gif)
+   * 创建&加入会议
+   ![创建&加入会议](./tutorial/CreateAndJoinMeeting.gif)
+   * 生成纪要
+   ![生成纪要](./tutorial/GenerateMinutes.gif)
+   * 合并画布_提交者
+   ![合并画布_提交者](./tutorial/MergeCanvas_Submitter.gif)
+   * 合并画布_拉取者
+   ![合并画布_拉取者](./tutorial/MergeCanvas_Puller.gif)
+   * 合并画布_冲突处理
+   ![合并画布_冲突处理](./tutorial/MergeCanvas_ConflictResolution.gif)
+   * 添加纪要&冲突处理
+   ![添加纪要&冲突处理](./tutorial/AddMinutesAndConflictResolution.gif)
+   * 启动MCP&AI绘图
+   ![启动MCP&AI绘图](./tutorial/StartMCPAndA1Drawing.gif)
+   * AI总结纪要
+   ![AI总结纪要](./tutorial/AISummarizeMinutes.gif)
 
 
 ## 依赖信息

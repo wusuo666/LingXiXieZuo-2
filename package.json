@@ -3,7 +3,7 @@
   "displayName": "灵犀协作",
   "description": "灵犀协作 - VS Code 协同编程插件",
   "publisher": "BUPT-ProgrammingDesigner-LingXiXieZuo",
-  "version": "0.0.4",
+  "version": "1.0.0",
   "icon": "LingXiXieZuo.png",
   "repository": {
     "type": "git",

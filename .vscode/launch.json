@@ -1,0 +1,12 @@
+{
+    "configurations": [
+    {
+        "args": [
+            "--extensionDevelopmentPath=${workspaceFolder}"
+        ],
+        "name": "启动扩展",
+        "request": "launch",
+        "type": "extensionHost"
+    }
+    ]
+}

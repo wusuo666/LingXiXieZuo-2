@@ -140,17 +140,47 @@ if (qualityIndex !== -1 && args.length > qualityIndex + 1) {
 // 根据模式执行不同的功能
 if (streamMode) {
     // 初始化所有必要的变量，再调用startRecording
-    // 确保recordings文件夹存在
-    // 尝试获取工作区根目录
-    let recordingsDir = null;
-    let canSaveFiles = false;
+        // 确保recordings文件夹存在
+        // 尝试获取工作区根目录
+        let recordingsDir = null;
+        let canSaveFiles = false;
 
-    // 打印接收到的命令行参数，用于调试
-    console.error('接收到的命令行参数:', process.argv);
-    console.error('处理后的args:', args);
+        // 打印接收到的命令行参数，用于调试
+        console.error('接收到的命令行参数:', process.argv);
+        console.error('处理后的args:', args);
 
-    // 多种方式尝试获取工作区路径
-    const workspacePath = getWorkspacePath(args);
+        // 多种方式尝试获取工作区路径
+        const workspacePath = getWorkspacePath(args);
+    
+        if (workspacePath) {
+            recordingsDir = path.join(workspacePath, 'recordings');
+            canSaveFiles = true;
+            console.error(`使用工作区路径: ${workspacePath}`);
+            
+            // 确保recordings文件夹存在
+            if (!fs.existsSync(recordingsDir)) {
+                fs.mkdirSync(recordingsDir, { recursive: true });
+                console.error(`创建recordings文件夹: ${recordingsDir}`);
+            }
+            
+            // 测试文件夹写入权限
+            try {
+                const testFilePath = path.join(recordingsDir, 'test.txt');
+                fs.writeFileSync(testFilePath, 'test', { flag: 'w' });
+                console.error(`测试文件写入成功: ${testFilePath}`);
+                // 成功创建测试文件后删除它
+                fs.unlinkSync(testFilePath);
+                console.error('测试文件已删除');
+                // 确认可以写入
+                canSaveFiles = true;
+            } catch (writeErr) {
+                console.error(`测试文件写入失败，没有写入权限: ${writeErr}`);
+                canSaveFiles = false;
+            }
+        } else {
+            console.error('未提供有效的工作区路径，音频将不会被保存到文件');
+        canSaveFiles = false;
+    }
     
     // 执行音频流传输
     streamAudio(canSaveFiles, recordingsDir)
@@ -333,6 +363,7 @@ async function streamAudio(canSaveFiles, recordingsDir) {
         // 按照要求的格式创建文件名：stream_conference_会议ID_时间戳.wav
         if (conferenceId) {
             streamRecordingFile = path.join(recordingsDir, `stream_conference_${conferenceId}_${formattedTimestamp}.wav`);
+            console.error(`将保存流音频到: ${streamRecordingFile}`,`stream_conference_${conferenceId}_${formattedTimestamp}.wav`);
         } else {
             // 如果没有会议ID，则使用随机ID
             const uniqueId = Math.random().toString(36).substring(2, 10);

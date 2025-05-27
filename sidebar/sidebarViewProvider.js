@@ -2598,6 +2598,7 @@ class LingxiSidebarProvider {
             // 首先检查相对于工作区的路径
             let scriptPath = '';
             const workspaceFolders = vscode.workspace.workspaceFolders;
+            console.log('workspaceFolders', workspaceFolders);
             let workspacePath = '';
             
             if (workspaceFolders && workspaceFolders.length > 0) {
